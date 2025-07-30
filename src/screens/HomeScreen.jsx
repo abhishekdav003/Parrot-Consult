@@ -1,30 +1,42 @@
 import React from 'react';
-import { ScrollView, StyleSheet } from 'react-native';
-
+import { View, ScrollView, StyleSheet } from 'react-native';
 // Import custom components
 import HeroSection from '../components/HeroSection/HeroSection';
-import Navbar from '../components/Navbar/Navbar';
 import ExpertsSection from '../components/ExpertsSection/ExpertsSection';
 import UserReviews from '../components/UserReviews/UserReviews';
 import GetStartedSection from '../components/GetStartedSection/GetStartedSection';
+import BottomNavigation from '../components/Navbar/Navbar'; // Updated import name
 
 const HomeScreen = () => (
-  <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
-    <Navbar />
-    <HeroSection />
-    <ExpertsSection />
-    <UserReviews />
-    <GetStartedSection />
-  </ScrollView>
+  <View style={styles.container}>
+    <ScrollView 
+      style={styles.scrollContainer} 
+      contentContainerStyle={styles.scrollContent}
+      showsVerticalScrollIndicator={false}
+    >
+      <HeroSection />
+      <ExpertsSection />
+      <UserReviews />
+      <GetStartedSection />
+      <View style={styles.bottomPadding} />
+    </ScrollView>
+  </View>
 );
+
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
   },
+  scrollContainer: {
+    flex: 1,
+  },
   scrollContent: {
     paddingVertical: 20,
+  },
+  bottomPadding: {
+    height: 80, // Space for bottom navigation
   },
 });
 

@@ -5,7 +5,7 @@ import { View, Image, StyleSheet, Dimensions, Text, StatusBar } from 'react-nati
 const SplashScreen = ({ navigation }) => {
   useEffect(() => {
     const timeout = setTimeout(() => {
-      navigation.replace('Home');
+      navigation.replace('Main');
     }, 2000); // 2 seconds
 
     return () => clearTimeout(timeout);
