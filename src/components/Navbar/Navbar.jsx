@@ -6,13 +6,16 @@ import {
   StyleSheet,
   Dimensions,
   SafeAreaView,
+  Image,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import { useAuth } from '../../context/AuthContext';
 
 const { width } = Dimensions.get('window');
 
 const Navbar = ({ state, descriptors, navigation }) => {
   const [hasNotifications, setHasNotifications] = useState(true);
+  const { isAuthenticated, user } = useAuth();
 
   const navItems = [
     { 
@@ -44,7 +47,15 @@ const Navbar = ({ state, descriptors, navigation }) => {
       inactiveColor: '#666',
       hasNotification: hasNotifications
     },
-    { 
+    // Conditionally show Login or Dashboard
+    isAuthenticated ? {
+      name: 'Dashboard', 
+      icon: 'dashboard', 
+      route: 'Dashboard',
+      activeColor: '#4A7C59',
+      inactiveColor: '#666',
+      isProfile: true
+    } : {
       name: 'Login', 
       icon: 'person', 
       route: 'Login',
@@ -75,11 +86,18 @@ const Navbar = ({ state, descriptors, navigation }) => {
       activeOpacity={0.7}
     >
       <View style={styles.iconContainer}>
-        <Icon
-          name={item.icon}
-          size={24}
-          color={isActive ? item.activeColor : item.inactiveColor}
-        />
+        {item.isProfile && user?.profileImage ? (
+          <Image 
+            source={{ uri: user.profileImage }} 
+            style={styles.profileImage}
+          />
+        ) : (
+          <Icon
+            name={item.icon}
+            size={24}
+            color={isActive ? item.activeColor : item.inactiveColor}
+          />
+        )}
         {item.hasNotification && (
           <View style={styles.notificationDot} />
         )}
@@ -159,6 +177,13 @@ const styles = StyleSheet.create({
   iconContainer: {
     position: 'relative',
     marginBottom: 4,
+  },
+  profileImage: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#4A7C59',
   },
   notificationDot: {
     position: 'absolute',

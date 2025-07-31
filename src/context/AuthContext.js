@@ -55,6 +55,8 @@ export const AuthProvider = ({ children }) => {
       const token = await ApiService.getAuthToken();
       
       if (token) {
+        // You can fetch user profile here if needed
+        // const userProfile = await ApiService.getUserProfile();
         dispatch({ type: 'SET_USER', payload: { verified: true } });
       } else {
         dispatch({ type: 'LOGOUT' });
@@ -123,8 +125,10 @@ export const AuthProvider = ({ children }) => {
 
       const result = await ApiService.verifyOTP(state.sessionId, otp);
       
+      dispatch({ type: 'SET_LOADING', payload: false });
+      
       if (result.success) {
-        dispatch({ type: 'SET_USER', payload: { verified: true } });
+        // Don't set user as authenticated here, wait for password verification
         return { success: true, data: result.data };
       } else {
         dispatch({ type: 'SET_ERROR', payload: result.error });
@@ -137,29 +141,36 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const login = async (phone, password) => {
-    try {
-      dispatch({ type: 'SET_LOADING', payload: true });
-      dispatch({ type: 'CLEAR_ERROR' });
+ const login = async (phone, password) => {
+  try {
+    dispatch({ type: 'SET_LOADING', payload: true });
+    dispatch({ type: 'CLEAR_ERROR' });
 
-      const result = await ApiService.login(phone, password);
-      
-      if (result.success) {
-        if (result.data.token) {
-          await ApiService.setAuthToken(result.data.token);
-        }
-        dispatch({ type: 'SET_USER', payload: result.data.user || { phone } });
-        return { success: true, data: result.data };
-      } else {
-        dispatch({ type: 'SET_ERROR', payload: result.error });
-        return { success: false, error: result.error };
-      }
-    } catch (error) {
-      const errorMsg = error.message || 'Login failed';
-      dispatch({ type: 'SET_ERROR', payload: errorMsg });
-      return { success: false, error: errorMsg };
+    const result = await ApiService.login(phone, password);
+    console.log('[AUTH CONTEXT] login result:', result);
+
+    if (result.success) {
+      const userData = result.data; // full user object
+      // No token from server → skip storing token unless server provides it
+      dispatch({ type: 'SET_USER', payload: {
+        phone: userData.phone,
+        fullName: userData.fullName || 'User',
+        email: userData.email || '',
+        profileImage: userData.profileImage || '',
+        ...userData
+      }});
+      return { success: true, data: userData };
+    } else {
+      dispatch({ type: 'SET_ERROR', payload: result.error });
+      return { success: false, error: result.error };
     }
-  };
+  } catch (error) {
+    const errorMsg = error.message || 'Login failed';
+    dispatch({ type: 'SET_ERROR', payload: errorMsg });
+    return { success: false, error: errorMsg };
+  }
+};
+
 
   const logout = async () => {
     try {

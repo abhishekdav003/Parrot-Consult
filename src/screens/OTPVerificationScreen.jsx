@@ -22,16 +22,7 @@ const OTPVerificationScreen = ({ navigation, route }) => {
   const [resendTimer, setResendTimer] = useState(30);
   const [canResend, setCanResend] = useState(false);
   
-  const { verifyOTP, sendOTP, loading, isAuthenticated } = useAuth();
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'Main' }],
-      });
-    }
-  }, [isAuthenticated, navigation]);
+  const { verifyOTP, sendOTP, loading } = useAuth();
 
   useEffect(() => {
     let timer;
@@ -64,18 +55,37 @@ const OTPVerificationScreen = ({ navigation, route }) => {
     const result = await verifyOTP(otp);
     
     if (result.success) {
-      Alert.alert(
-        'Success',
-        type === 'signup' ? 'Account verified successfully!' : 'Login successful!',
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              // Navigation handled by useEffect
+      if (type === 'signup') {
+        Alert.alert(
+          'Success',
+          'Account verified successfully!',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                navigation.reset({
+                  index: 0,
+                  routes: [{ name: 'Login' }],
+                });
+              }
             }
-          }
-        ]
-      );
+          ]
+        );
+      } else {
+        // For login, navigate to password verification
+        Alert.alert(
+          'OTP Verified',
+          'Please enter your password to continue',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                navigation.navigate('PasswordVerification', { phone });
+              }
+            }
+          ]
+        );
+      }
     } else {
       Alert.alert('Error', result.error || 'Invalid OTP. Please try again.');
     }

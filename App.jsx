@@ -10,6 +10,8 @@ import HomeScreen from './src/screens/HomeScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import SignUpScreen from './src/screens/SignUpScreen';
 import OTPVerificationScreen from './src/screens/OTPVerificationScreen';
+import PasswordVerificationScreen from './src/screens/PasswordVerificationScreen';
+import DashboardScreen from './src/screens/DashboardScreen';
 import SearchScreen from './src/screens/SearchScreen';
 import ReelsScreen from './src/screens/ReelsScreen';
 import NotificationsScreen from './src/screens/NotificationsScreen';
@@ -35,6 +37,7 @@ const MainTabNavigator = () => {
       <Tab.Screen name="Reels" component={ReelsScreen} />
       <Tab.Screen name="Notifications" component={NotificationsScreen} />
       <Tab.Screen name="Login" component={LoginScreen} />
+      <Tab.Screen name="Dashboard" component={DashboardScreen} />
     </Tab.Navigator>
   );
 };
@@ -52,6 +55,7 @@ const App = () => {
             <Stack.Screen name="Main" component={MainTabNavigator} />
             <Stack.Screen name="SignUp" component={SignUpScreen} />
             <Stack.Screen name="OTPVerification" component={OTPVerificationScreen} />
+            <Stack.Screen name="PasswordVerification" component={PasswordVerificationScreen} />
           </Stack.Navigator>
         </NavigationContainer>
       </AuthProvider>
