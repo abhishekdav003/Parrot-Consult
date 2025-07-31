@@ -1,4 +1,4 @@
-// App.jsx - Updated with Tab Navigation
+// App.jsx
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -9,22 +9,21 @@ import SplashScreen from './src/screens/SplashScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import SignUpScreen from './src/screens/SignUpScreen';
+import OTPVerificationScreen from './src/screens/OTPVerificationScreen';
 import SearchScreen from './src/screens/SearchScreen';
 import ReelsScreen from './src/screens/ReelsScreen';
 import NotificationsScreen from './src/screens/NotificationsScreen';
 
-import Navbar from './src/components/Navbar/Navbar'; // ✅ Corrected path
+import Navbar from './src/components/Navbar/Navbar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
-// Custom Tab Bar Component
 const CustomTabBar = (props) => {
   return <Navbar {...props} />;
 };
 
-// Main Tab Navigator
 const MainTabNavigator = () => {
   return (
     <Tab.Navigator
@@ -52,6 +51,7 @@ const App = () => {
             <Stack.Screen name="Splash" component={SplashScreen} />
             <Stack.Screen name="Main" component={MainTabNavigator} />
             <Stack.Screen name="SignUp" component={SignUpScreen} />
+            <Stack.Screen name="OTPVerification" component={OTPVerificationScreen} />
           </Stack.Navigator>
         </NavigationContainer>
       </AuthProvider>

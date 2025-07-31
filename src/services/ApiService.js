@@ -1,25 +1,22 @@
 // src/services/ApiService.js
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const BASE_URL = 'YOUR_API_BASE_URL'; // Replace with your actual API URL
+const BASE_URL = 'http://192.168.0.177:8011/api/v1';
 
 class ApiService {
   constructor() {
     this.baseURL = BASE_URL;
   }
 
-  // Get stored auth token
   async getAuthToken() {
     try {
-      const token = await AsyncStorage.getItem('authToken');
-      return token;
+      return await AsyncStorage.getItem('authToken');
     } catch (error) {
       console.error('Error getting auth token:', error);
       return null;
     }
   }
 
-  // Store auth token
   async setAuthToken(token) {
     try {
       await AsyncStorage.setItem('authToken', token);
@@ -28,7 +25,6 @@ class ApiService {
     }
   }
 
-  // Remove auth token
   async removeAuthToken() {
     try {
       await AsyncStorage.removeItem('authToken');
@@ -37,11 +33,9 @@ class ApiService {
     }
   }
 
-  // Generic API call method
   async apiCall(endpoint, options = {}) {
     try {
       const token = await this.getAuthToken();
-      
       const defaultHeaders = {
         'Content-Type': 'application/json',
       };
@@ -59,7 +53,29 @@ class ApiService {
       };
 
       const response = await fetch(`${this.baseURL}${endpoint}`, config);
-      const data = await response.json();
+      
+      let data;
+try {
+  const text = await response.text();
+
+  // Try to parse only if it starts with `{` or `[`
+  if (text.startsWith('{') || text.startsWith('[')) {
+    data = JSON.parse(text);
+  } else {
+    // Response is plain text or HTML
+    return {
+      success: false,
+      error: 'Server returned invalid format. Please contact support.',
+    };
+  }
+} catch (parseError) {
+  console.error("Failed to parse server response:", parseError);
+  return {
+    success: false,
+    error: 'Invalid response from server (not JSON)',
+  };
+}
+
 
       if (!response.ok) {
         throw new Error(data.message || `HTTP error! status: ${response.status}`);
@@ -68,101 +84,51 @@ class ApiService {
       return { success: true, data };
     } catch (error) {
       console.error(`API call failed for ${endpoint}:`, error);
-      return { 
-        success: false, 
-        error: error.message || 'Network error occurred' 
+      return {
+        success: false,
+        error: error.message || 'Network error occurred',
       };
     }
   }
 
-  // Authentication APIs
+  // Auth APIs
   async signUp(userData) {
-    return await this.apiCall('/auth/signup', {
+    return await this.apiCall('/user/registeruser', {
       method: 'POST',
-      body: JSON.stringify({
-        fullName: userData.fullName,
-        phoneNumber: userData.phoneNumber,
-        password: userData.password,
-      }),
+      body: JSON.stringify(userData),
     });
   }
 
-  async sendOTP(phoneNumber, type = 'login') {
+  async sendOTP(phone) {
     return await this.apiCall('/auth/send-otp', {
       method: 'POST',
-      body: JSON.stringify({
-        phoneNumber,
-        type, // 'login' or 'signup'
-      }),
+      body: JSON.stringify({ phone: phone }),
     });
   }
 
-  async verifyOTP(phoneNumber, otp, type = 'login') {
+  async verifyOTP(sessionId, otp) {
     return await this.apiCall('/auth/verify-otp', {
       method: 'POST',
-      body: JSON.stringify({
-        phoneNumber,
-        otp,
-        type,
-      }),
+      body: JSON.stringify({ sessionId, otp }),
     });
   }
 
-  async login(phoneNumber, password) {
-    return await this.apiCall('/auth/login', {
+  async login(phone, password) {
+    return await this.apiCall('/user/loginuser', {
       method: 'POST',
-      body: JSON.stringify({
-        phoneNumber,
-        password,
-      }),
+      body: JSON.stringify({ phone, password }),
     });
   }
 
   async logout() {
-    const result = await this.apiCall('/auth/logout', {
+    const result = await this.apiCall('/logoutuser', {
       method: 'POST',
     });
-    
     if (result.success) {
       await this.removeAuthToken();
     }
-    
     return result;
-  }
-
-  async refreshToken() {
-    return await this.apiCall('/auth/refresh-token', {
-      method: 'POST',
-    });
-  }
-
-  // User profile APIs
-  async getProfile() {
-    return await this.apiCall('/user/profile', {
-      method: 'GET',
-    });
-  }
-
-  async updateProfile(profileData) {
-    return await this.apiCall('/user/profile', {
-      method: 'PUT',
-      body: JSON.stringify(profileData),
-    });
-  }
-
-  // Check if user is authenticated
-  async isAuthenticated() {
-    const token = await this.getAuthToken();
-    if (!token) return false;
-
-    // Verify token with server
-    const result = await this.apiCall('/auth/verify-token', {
-      method: 'GET',
-    });
-
-    return result.success;
   }
 }
 
-// Export singleton instance
 export default new ApiService();

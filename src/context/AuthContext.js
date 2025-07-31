@@ -4,7 +4,6 @@ import ApiService from '../services/ApiService';
 
 const AuthContext = createContext();
 
-// Auth reducer
 const authReducer = (state, action) => {
   switch (action.type) {
     case 'SET_LOADING':
@@ -23,10 +22,13 @@ const authReducer = (state, action) => {
         ...state, 
         user: null, 
         isAuthenticated: false, 
-        loading: false 
+        loading: false,
+        sessionId: null
       };
     case 'CLEAR_ERROR':
       return { ...state, error: null };
+    case 'SET_SESSION_ID':
+      return { ...state, sessionId: action.payload };
     default:
       return state;
   }
@@ -37,12 +39,12 @@ const initialState = {
   isAuthenticated: false,
   loading: true,
   error: null,
+  sessionId: null,
 };
 
 export const AuthProvider = ({ children }) => {
   const [state, dispatch] = useReducer(authReducer, initialState);
 
-  // Check authentication status on app load
   useEffect(() => {
     checkAuthStatus();
   }, []);
@@ -50,21 +52,14 @@ export const AuthProvider = ({ children }) => {
   const checkAuthStatus = async () => {
     try {
       dispatch({ type: 'SET_LOADING', payload: true });
+      const token = await ApiService.getAuthToken();
       
-      const isAuth = await ApiService.isAuthenticated();
-      
-      if (isAuth) {
-        const profileResult = await ApiService.getProfile();
-        if (profileResult.success) {
-          dispatch({ type: 'SET_USER', payload: profileResult.data });
-        } else {
-          dispatch({ type: 'LOGOUT' });
-        }
+      if (token) {
+        dispatch({ type: 'SET_USER', payload: { verified: true } });
       } else {
         dispatch({ type: 'LOGOUT' });
       }
     } catch (error) {
-      console.error('Auth check failed:', error);
       dispatch({ type: 'LOGOUT' });
     }
   };
@@ -76,9 +71,9 @@ export const AuthProvider = ({ children }) => {
 
       const result = await ApiService.signUp(userData);
       
+      dispatch({ type: 'SET_LOADING', payload: false });
+      
       if (result.success) {
-        // Don't set user yet, wait for OTP verification
-        dispatch({ type: 'SET_LOADING', payload: false });
         return { success: true, data: result.data };
       } else {
         dispatch({ type: 'SET_ERROR', payload: result.error });
@@ -91,16 +86,19 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const sendOTP = async (phoneNumber, type = 'login') => {
+  const sendOTP = async (phone) => {
     try {
       dispatch({ type: 'SET_LOADING', payload: true });
       dispatch({ type: 'CLEAR_ERROR' });
 
-      const result = await ApiService.sendOTP(phoneNumber, type);
+      const result = await ApiService.sendOTP(phone);
       
       dispatch({ type: 'SET_LOADING', payload: false });
       
       if (result.success) {
+        if (result.data.sessionID) {
+          dispatch({ type: 'SET_SESSION_ID', payload: result.data.sessionID });
+        }
         return { success: true, data: result.data };
       } else {
         dispatch({ type: 'SET_ERROR', payload: result.error });
@@ -113,29 +111,25 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const verifyOTP = async (phoneNumber, otp, type = 'login') => {
+  const verifyOTP = async (otp) => {
     try {
       dispatch({ type: 'SET_LOADING', payload: true });
       dispatch({ type: 'CLEAR_ERROR' });
 
-      const result = await ApiService.verifyOTP(phoneNumber, otp, type);
+      if (!state.sessionId) {
+        dispatch({ type: 'SET_ERROR', payload: 'Session expired. Please request OTP again.' });
+        return { success: false, error: 'Session expired. Please request OTP again.' };
+      }
+
+      const result = await ApiService.verifyOTP(state.sessionId, otp);
       
       if (result.success) {
-        // Store token if provided
-        if (result.data.token) {
-          await ApiService.setAuthToken(result.data.token);
-        }
-        
-        // Get user profile
-        const profileResult = await ApiService.getProfile();
-        if (profileResult.success) {
-          dispatch({ type: 'SET_USER', payload: profileResult.data });
-          return { success: true, data: result.data };
-        }
+        dispatch({ type: 'SET_USER', payload: { verified: true } });
+        return { success: true, data: result.data };
+      } else {
+        dispatch({ type: 'SET_ERROR', payload: result.error });
+        return { success: false, error: result.error };
       }
-      
-      dispatch({ type: 'SET_ERROR', payload: result.error });
-      return { success: false, error: result.error };
     } catch (error) {
       const errorMsg = error.message || 'OTP verification failed';
       dispatch({ type: 'SET_ERROR', payload: errorMsg });
@@ -143,29 +137,23 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const login = async (phoneNumber, password) => {
+  const login = async (phone, password) => {
     try {
       dispatch({ type: 'SET_LOADING', payload: true });
       dispatch({ type: 'CLEAR_ERROR' });
 
-      const result = await ApiService.login(phoneNumber, password);
+      const result = await ApiService.login(phone, password);
       
       if (result.success) {
-        // Store token
         if (result.data.token) {
           await ApiService.setAuthToken(result.data.token);
         }
-        
-        // Get user profile
-        const profileResult = await ApiService.getProfile();
-        if (profileResult.success) {
-          dispatch({ type: 'SET_USER', payload: profileResult.data });
-          return { success: true, data: result.data };
-        }
+        dispatch({ type: 'SET_USER', payload: result.data.user || { phone } });
+        return { success: true, data: result.data };
+      } else {
+        dispatch({ type: 'SET_ERROR', payload: result.error });
+        return { success: false, error: result.error };
       }
-      
-      dispatch({ type: 'SET_ERROR', payload: result.error });
-      return { success: false, error: result.error };
     } catch (error) {
       const errorMsg = error.message || 'Login failed';
       dispatch({ type: 'SET_ERROR', payload: errorMsg });
@@ -175,37 +163,12 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     try {
-      dispatch({ type: 'SET_LOADING', payload: true });
-      
       await ApiService.logout();
       dispatch({ type: 'LOGOUT' });
-      
       return { success: true };
     } catch (error) {
-      console.error('Logout error:', error);
-      dispatch({ type: 'LOGOUT' }); // Force logout even if API call fails
+      dispatch({ type: 'LOGOUT' });
       return { success: true };
-    }
-  };
-
-  const updateProfile = async (profileData) => {
-    try {
-      dispatch({ type: 'SET_LOADING', payload: true });
-      dispatch({ type: 'CLEAR_ERROR' });
-
-      const result = await ApiService.updateProfile(profileData);
-      
-      if (result.success) {
-        dispatch({ type: 'SET_USER', payload: result.data });
-        return { success: true, data: result.data };
-      } else {
-        dispatch({ type: 'SET_ERROR', payload: result.error });
-        return { success: false, error: result.error };
-      }
-    } catch (error) {
-      const errorMsg = error.message || 'Profile update failed';
-      dispatch({ type: 'SET_ERROR', payload: errorMsg });
-      return { success: false, error: errorMsg };
     }
   };
 
@@ -220,7 +183,6 @@ export const AuthProvider = ({ children }) => {
     verifyOTP,
     login,
     logout,
-    updateProfile,
     clearError,
     checkAuthStatus,
   };
