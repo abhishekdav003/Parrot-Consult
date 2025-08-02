@@ -1,55 +1,183 @@
 // src/screens/DashboardScreen.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
   SafeAreaView,
-  ScrollView,
   Alert,
   ActivityIndicator,
-  Image,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useAuth } from '../context/AuthContext';
+import { useFocusEffect } from '@react-navigation/native';
 import ApiService from '../services/ApiService';
 
-const DashboardScreen = ({ navigation }) => {
-  const { user, logout } = useAuth();
-  const [dashboardData, setDashboardData] = useState(null);
-  const [loading, setLoading] = useState(true);
+// Import modular components
+import DashboardSection from '../components/Dashboard/DashboardSection';
+import ProfileSection from '../components/Dashboard/ProfileSection';
+import MySessionsSection from '../components/Dashboard/MySessionsSection';
+import ProfileUpgradeSection from '../components/Dashboard/ProfileUpgradeSection';
+import BookedSessionsSection from '../components/Dashboard/BookedSessionsSection';
+import WalletSection from '../components/Dashboard/WalletSection';
+import ToggleMenu from '../components/Dashboard/ToggleMenu';
 
-  useEffect(() => {
-    fetchDashboardData();
+const DashboardScreen = ({ navigation }) => {
+  const { user, logout, refreshUserData } = useAuth();
+  const [activeSection, setActiveSection] = useState('dashboard');
+  const [menuVisible, setMenuVisible] = useState(false);
+  const [dashboardData, setDashboardData] = useState({
+    profileCompletion: 0,
+    scheduledSessions: 0,
+    totalSessions: 0,
+    completedSessions: 0,
+    upcomingBookings: [],
+    allBookings: []
+  });
+  const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [initialLoad, setInitialLoad] = useState(true);
+
+  console.log('[DASHBOARD] Component mounted, user:', user?.fullName);
+
+  // Memoize profile completion calculation
+  const calculateProfileCompletion = useCallback((userData) => {
+    if (!userData) return 0;
+    
+    const fields = ['fullName', 'phone', 'email', 'location'];
+    const filledFields = fields.filter(field => 
+      userData[field] && 
+      userData[field].toString().trim() !== ''
+    ).length;
+    
+    const completion = Math.round((filledFields / fields.length) * 100);
+    console.log('[DASHBOARD] Profile completion calculated:', completion);
+    return completion;
   }, []);
 
-  const fetchDashboardData = async () => {
+  // Memoize dashboard data calculation
+  const calculateDashboardData = useCallback((bookings, userData) => {
+    const bookingList = Array.isArray(bookings) ? bookings : [];
+    const scheduledSessions = bookingList.filter(b => b.status === 'scheduled').length;
+    const completedSessions = bookingList.filter(b => b.status === 'completed').length;
+    
+    return {
+      profileCompletion: calculateProfileCompletion(userData),
+      scheduledSessions,
+      totalSessions: bookingList.length,
+      completedSessions,
+      upcomingBookings: bookingList.filter(b => b.status === 'scheduled').slice(0, 5),
+      allBookings: bookingList
+    };
+  }, [calculateProfileCompletion]);
+
+  // Fetch dashboard data function
+  const fetchDashboardData = useCallback(async (showLoading = true) => {
+    if (!user) {
+      console.log('[DASHBOARD] No user found, skipping fetch');
+      return;
+    }
+
     try {
-      setLoading(true);
-      // You can add API calls here to fetch user profile, bookings, etc.
-      // const profileResult = await ApiService.getUserProfile();
-      // const bookingsResult = await ApiService.getBookings();
+      console.log('[DASHBOARD] Fetching dashboard data...');
+      if (showLoading) {
+        setLoading(true);
+      }
       
-      // For now, using mock data structure
-      setDashboardData({
-        profileCompletion: 80,
-        scheduledSessions: 5,
-        totalSessions: 12,
-        upcomingSessions: [
-          { id: 1, title: 'Career Counseling', time: '2:00 PM', date: 'Today' },
-          { id: 2, title: 'Resume Review', time: '4:30 PM', date: 'Tomorrow' }
-        ]
-      });
+      // Fetch user bookings
+      const bookingsResult = await ApiService.getUserBookings();
+      console.log('[DASHBOARD] Bookings result:', bookingsResult);
+      
+      if (bookingsResult.success) {
+        const calculatedData = calculateDashboardData(bookingsResult.data, user);
+        setDashboardData(calculatedData);
+        console.log('[DASHBOARD] Dashboard data updated:', calculatedData);
+      } else {
+        console.warn('[DASHBOARD] Failed to fetch bookings:', bookingsResult.error);
+        
+        // Handle session expiry
+        if (bookingsResult.needsLogin) {
+          Alert.alert(
+            'Session Expired',
+            'Your session has expired. Please login again.',
+            [
+              {
+                text: 'OK',
+                onPress: () => {
+                  logout();
+                  navigation.reset({
+                    index: 0,
+                    routes: [{ name: 'Main' }],
+                  });
+                }
+              }
+            ]
+          );
+          return;
+        }
+        
+        // Set default data with calculated profile completion
+        setDashboardData(prev => ({
+          ...prev,
+          profileCompletion: calculateProfileCompletion(user),
+        }));
+      }
     } catch (error) {
-      console.error('Error fetching dashboard data:', error);
-      Alert.alert('Error', 'Failed to load dashboard data');
+      console.error('[DASHBOARD] Error fetching dashboard data:', error);
+      // Don't show alert for initial load failures
+      if (!initialLoad) {
+        Alert.alert('Error', 'Failed to load dashboard data');
+      }
+      setDashboardData(prev => ({
+        ...prev,
+        profileCompletion: calculateProfileCompletion(user),
+      }));
     } finally {
       setLoading(false);
+      setRefreshing(false);
+      setInitialLoad(false);
     }
-  };
+  }, [user, calculateDashboardData, calculateProfileCompletion, initialLoad, logout, navigation]);
 
-  const handleLogout = () => {
+  // Initial data fetch when user changes
+  useEffect(() => {
+    if (user) {
+      fetchDashboardData(true);
+    } else {
+      setDashboardData({
+        profileCompletion: 0,
+        scheduledSessions: 0,
+        totalSessions: 0,
+        completedSessions: 0,
+        upcomingBookings: [],
+        allBookings: []
+      });
+      setLoading(false);
+      setInitialLoad(false);
+    }
+  }, [user?.phone]); // Only depend on user phone to avoid excessive re-renders
+
+  // Refresh data when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      if (user && !initialLoad) {
+        console.log('[DASHBOARD] Screen focused, refreshing data...');
+        fetchDashboardData(false);
+      }
+    }, [user?.phone, initialLoad]) // Only depend on user phone
+  );
+
+  // Handle manual refresh
+  const handleRefresh = useCallback(async () => {
+    console.log('[DASHBOARD] Manual refresh triggered');
+    setRefreshing(true);
+    await fetchDashboardData(false);
+  }, [fetchDashboardData]);
+
+  // Handle logout
+  const handleLogout = useCallback(() => {
+    console.log('[DASHBOARD] Logout requested');
     Alert.alert(
       'Logout',
       'Are you sure you want to logout?',
@@ -60,63 +188,131 @@ const DashboardScreen = ({ navigation }) => {
         },
         {
           text: 'Logout',
+          style: 'destructive',
           onPress: async () => {
+            console.log('[DASHBOARD] Logging out...');
+            setMenuVisible(false);
             await logout();
-            // Navigation will be handled by auth state change
+            navigation.reset({
+              index: 0,
+              routes: [{ name: 'Main' }],
+            });
           },
         },
       ]
     );
-  };
+  }, [logout, navigation]);
 
-  const formatDate = () => {
-    const now = new Date();
-    const options = { 
-      weekday: 'long', 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
+  // Handle menu item press
+  const handleMenuItemPress = useCallback((section) => {
+    console.log('[DASHBOARD] Menu item pressed:', section);
+    setActiveSection(section);
+    setMenuVisible(false);
+  }, []);
+
+  // Handle profile update
+  const handleProfileUpdate = useCallback(async () => {
+    console.log('[DASHBOARD] Profile updated, refreshing data...');
+    await refreshUserData();
+    await fetchDashboardData(false);
+  }, [refreshUserData, fetchDashboardData]);
+
+  // Handle authentication errors
+  const handleAuthError = useCallback((error) => {
+    if (error && error.needsLogin) {
+      Alert.alert(
+        'Session Expired',
+        'Your session has expired. Please login again.',
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              logout();
+              navigation.reset({
+                index: 0,
+                routes: [{ name: 'Main' }],
+              });
+            }
+          }
+        ]
+      );
+      return true;
+    }
+    return false;
+  }, [logout, navigation]);
+
+  // Memoize section title
+  const sectionTitle = useMemo(() => {
+    const titles = {
+      dashboard: 'Dashboard',
+      profile: 'My Profile',
+      mysessions: 'My Sessions',
+      upgrade: 'Profile Upgrade',
+      booked: 'Booked Sessions',
+      wallet: 'Wallet'
     };
-    return now.toLocaleDateString('en-US', options);
-  };
+    return titles[activeSection] || 'Dashboard';
+  }, [activeSection]);
 
-  const formatTime = () => {
-    const now = new Date();
-    return now.toLocaleTimeString('en-US', { 
-      hour: '2-digit', 
-      minute: '2-digit' 
-    });
-  };
+  // Render active section
+  const renderActiveSection = useCallback(() => {
+    const commonProps = {
+      user,
+      onRefresh: handleProfileUpdate,
+      loading: refreshing,
+      onAuthError: handleAuthError
+    };
 
-  const DashboardCard = ({ icon, title, value, color, onPress, trend }) => (
-    <TouchableOpacity style={styles.card} onPress={onPress}>
-      <View style={[styles.cardIcon, { backgroundColor: color }]}>
-        <Ionicons name={icon} size={24} color="#fff" />
-      </View>
-      <View style={styles.cardContent}>
-        <Text style={styles.cardTitle}>{title}</Text>
-        <Text style={styles.cardValue}>{value}</Text>
-        {trend && (
-          <View style={styles.trendContainer}>
-            <Text style={styles.trendText}>{trend}</Text>
-          </View>
-        )}
-      </View>
-      <Ionicons name="chevron-forward" size={20} color="#666" />
-    </TouchableOpacity>
-  );
+    switch (activeSection) {
+      case 'dashboard':
+        return (
+          <DashboardSection 
+            {...commonProps}
+            dashboardData={dashboardData}
+            onRefresh={handleRefresh}
+          />
+        );
+      case 'profile':
+        return <ProfileSection {...commonProps} />;
+      case 'mysessions':
+        return (
+          <MySessionsSection 
+            {...commonProps}
+            sessions={dashboardData.upcomingBookings}
+          />
+        );
+      case 'upgrade':
+        return <ProfileUpgradeSection {...commonProps} />;
+      case 'booked':
+        return (
+          <BookedSessionsSection 
+            {...commonProps}
+            bookings={dashboardData.allBookings}
+          />
+        );
+      case 'wallet':
+        return <WalletSection {...commonProps} />;
+      default:
+        return (
+          <DashboardSection 
+            {...commonProps}
+            dashboardData={dashboardData}
+            onRefresh={handleRefresh}
+          />
+        );
+    }
+  }, [
+    activeSection,
+    user,
+    dashboardData,
+    refreshing,
+    handleProfileUpdate,
+    handleRefresh,
+    handleAuthError
+  ]);
 
-  const MenuButton = ({ icon, title, onPress, color = "#4CAF50" }) => (
-    <TouchableOpacity style={styles.menuButton} onPress={onPress}>
-      <View style={[styles.menuIcon, { backgroundColor: color }]}>
-        <Ionicons name={icon} size={20} color="#fff" />
-      </View>
-      <Text style={styles.menuText}>{title}</Text>
-      <Ionicons name="chevron-forward" size={20} color="#666" />
-    </TouchableOpacity>
-  );
-
-  if (loading) {
+  // Loading state for initial load
+  if (loading && initialLoad) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
@@ -127,103 +323,75 @@ const DashboardScreen = ({ navigation }) => {
     );
   }
 
-  return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView style={styles.scrollView}>
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.userInfo}>
-            <View style={styles.avatarContainer}>
-              {user?.profileImage ? (
-                <Image source={{ uri: user.profileImage }} style={styles.avatar} />
-              ) : (
-                <View style={styles.avatarPlaceholder}>
-                  <Text style={styles.avatarText}>
-                    {user?.fullName ? user.fullName.charAt(0).toUpperCase() : 'U'}
-                  </Text>
-                </View>
-              )}
-              <View style={styles.onlineIndicator} />
-            </View>
-            <View>
-              <Text style={styles.greeting}>
-                Good afternoon, {user?.fullName || 'User'}
-              </Text>
-              <Text style={styles.date}>{formatDate()} • {formatTime()}</Text>
-            </View>
-          </View>
+  // No user state
+  if (!user) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.errorContainer}>
+          <Ionicons name="alert-circle" size={48} color="#FF6B6B" />
+          <Text style={styles.errorText}>Please log in to access dashboard</Text>
           <TouchableOpacity 
-            style={styles.logoutButton}
-            onPress={handleLogout}
+            style={styles.loginButton}
+            onPress={() => navigation.navigate('Main', { screen: 'Login' })}
           >
-            <Ionicons name="log-out-outline" size={24} color="#FF6B6B" />
+            <Text style={styles.loginButtonText}>Go to Login</Text>
           </TouchableOpacity>
         </View>
+      </SafeAreaView>
+    );
+  }
 
-        {/* Stats Cards */}
-        <View style={styles.statsContainer}>
-          <DashboardCard
-            icon="person"
-            title="Profile Completion"
-            value={`${dashboardData?.profileCompletion || 0}%`}
-            color="#FF6B35"
-            trend="+2"
-            onPress={() => console.log('Profile pressed')}
-          />
-          
-          <DashboardCard
-            icon="calendar"
-            title="Scheduled Sessions"
-            value={dashboardData?.scheduledSessions || 0}
-            color="#4CAF50"
-            trend="+3"
-            onPress={() => console.log('Sessions pressed')}
-          />
-          
-          <DashboardCard
-            icon="layers"
-            title="Total Sessions"
-            value={dashboardData?.totalSessions || 0}
-            color="#2196F3"
-            onPress={() => console.log('Total pressed')}
-          />
+  return (
+    <SafeAreaView style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity 
+          style={styles.menuButton}
+          onPress={() => setMenuVisible(true)}
+        >
+          <Ionicons name="menu" size={24} color="#333" />
+        </TouchableOpacity>
+        
+        <Text style={styles.headerTitle}>
+          {sectionTitle}
+        </Text>
+        
+        <View style={styles.headerRight}>
+          <TouchableOpacity 
+            style={styles.refreshButton} 
+            onPress={handleRefresh}
+            disabled={refreshing}
+          >
+            <Ionicons 
+              name="refresh" 
+              size={20} 
+              color={refreshing ? "#ccc" : "#666"} 
+            />
+          </TouchableOpacity>
         </View>
+      </View>
 
-        {/* Quick Actions */}
-        <View style={styles.menuContainer}>
-          <Text style={styles.sectionTitle}>Quick Actions</Text>
-          
-          <MenuButton
-            icon="person-outline"
-            title="My Profile"
-            onPress={() => console.log('Profile pressed')}
-          />
-          
-          <MenuButton
-            icon="layers-outline"
-            title="My Sessions"
-            onPress={() => console.log('Sessions pressed')}
-          />
-          
-          <MenuButton
-            icon="person-add-outline"
-            title="Become Consultant"
-            onPress={() => console.log('Upgrade pressed')}
-          />
-          
-          <MenuButton
-            icon="calendar-outline"
-            title="Booked Sessions"
-            onPress={() => console.log('Booked pressed')}
-          />
-          
-          <MenuButton
-            icon="wallet-outline"
-            title="Wallet"
-            onPress={() => console.log('Wallet pressed')}
-          />
+      {/* Toggle Menu Overlay */}
+      <ToggleMenu
+        visible={menuVisible}
+        user={user}
+        activeSection={activeSection}
+        onItemPress={handleMenuItemPress}
+        onLogout={handleLogout}
+        onClose={() => setMenuVisible(false)}
+      />
+
+      {/* Main Content */}
+      <View style={styles.content}>
+        {renderActiveSection()}
+      </View>
+
+      {/* Loading Overlay */}
+      {loading && !initialLoad && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color="#4CAF50" />
         </View>
-      </ScrollView>
+      )}
     </SafeAreaView>
   );
 };
@@ -243,160 +411,82 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#666',
   },
-  scrollView: {
+  errorContainer: {
     flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginTop: 16,
+    marginBottom: 24,
+  },
+  loginButton: {
+    backgroundColor: '#4CAF50',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  loginButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '500',
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 20,
+    paddingVertical: 15,
     backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
   },
-  userInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  avatarContainer: {
-    position: 'relative',
-    marginRight: 15,
-  },
-  avatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    borderWidth: 2,
-    borderColor: '#4CAF50',
-  },
-  avatarPlaceholder: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#4CAF50',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarText: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#fff',
-  },
-  onlineIndicator: {
-    position: 'absolute',
-    bottom: 2,
-    right: 2,
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#4CAF50',
-    borderWidth: 2,
-    borderColor: '#fff',
-  },
-  greeting: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#333',
-  },
-  date: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 4,
-  },
-  logoutButton: {
+  menuButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#FFE5E5',
+    backgroundColor: '#f0f0f0',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  statsContainer: {
-    padding: 20,
-    gap: 15,
-  },
-  card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    padding: 20,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  cardIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 15,
-  },
-  cardContent: {
-    flex: 1,
-  },
-  cardTitle: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 4,
-  },
-  cardValue: {
-    fontSize: 24,
-    fontWeight: '600',
-    color: '#333',
-  },
-  trendContainer: {
-    marginTop: 4,
-  },
-  trendText: {
-    fontSize: 12,
-    color: '#4CAF50',
-    fontWeight: '500',
-  },
-  menuContainer: {
-    padding: 20,
-  },
-  sectionTitle: {
+  headerTitle: {
     fontSize: 18,
     fontWeight: '600',
     color: '#333',
-    marginBottom: 15,
   },
-  menuButton: {
+  headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    padding: 15,
-    borderRadius: 12,
-    marginBottom: 10,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
   },
-  menuIcon: {
+  refreshButton: {
     width: 36,
     height: 36,
     borderRadius: 18,
+    backgroundColor: '#f0f0f0',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 15,
   },
-  menuText: {
+  content: {
     flex: 1,
-    fontSize: 16,
-    color: '#333',
-    fontWeight: '500',
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
 
