@@ -1,544 +1,571 @@
 // src/components/Dashboard/BookedSessionsSection.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-  TextInput,
-  Alert,
   ActivityIndicator,
-  Image,
+  Alert,
+  RefreshControl,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import ApiService from '../../services/ApiService';
 
-const BookedSessionsSection = ({ user, onRefresh }) => {
-  const [editing, setEditing] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState({
-    fullName: user?.fullName || '',
-    email: user?.email || '',
-    location: user?.location || '',
-    phone: user?.phone?.toString() || '',
-  });
+const BookedSessionsSection = ({ user, onRefresh, onAuthError }) => {
+  const [bookings, setBookings] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [activeFilter, setActiveFilter] = useState('all');
 
-  console.log('[PROFILE_SECTION] Rendering with user:', user);
-
-  const handleSave = async () => {
+  const fetchBookings = useCallback(async (showLoading = true) => {
     try {
-      console.log('[PROFILE_SECTION] Saving profile with data:', formData);
-      setLoading(true);
-
-      // Validate required fields
-      if (!formData.fullName.trim()) {
-        Alert.alert('Error', 'Full name is required');
-        return;
+      if (showLoading) setLoading(true);
+      
+      let result;
+      if (user?.role === 'consultant') {
+        result = await ApiService.getConsultantBookings();
+      } else {
+        result = await ApiService.getUserBookings();
       }
-
-      const result = await ApiService.updateProfile(formData);
-      console.log('[PROFILE_SECTION] Update result:', result);
 
       if (result.success) {
-        Alert.alert('Success', 'Profile updated successfully');
-        setEditing(false);
-        onRefresh && onRefresh();
+        setBookings(Array.isArray(result.data) ? result.data : []);
       } else {
-        Alert.alert('Error', result.error || 'Failed to update profile');
+        if (result.needsLogin && onAuthError) {
+          onAuthError(result);
+          return;
+        }
+        console.error('Failed to fetch bookings:', result.error);
+        setBookings([]);
       }
     } catch (error) {
-      console.error('[PROFILE_SECTION] Error updating profile:', error);
-      Alert.alert('Error', 'Failed to update profile');
+      console.error('Error fetching bookings:', error);
+      setBookings([]);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
+  }, [user?.role, onAuthError]);
+
+  useEffect(() => {
+    if (user) {
+      fetchBookings(true);
+    }
+  }, [user, fetchBookings]);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchBookings(false);
+  }, [fetchBookings]);
+
+  const getFilteredBookings = useCallback(() => {
+    if (activeFilter === 'all') return bookings;
+    return bookings.filter(booking => booking.status === activeFilter);
+  }, [bookings, activeFilter]);
+
+  const getStatusColor = (status) => {
+    const colors = {
+      pending: '#FFA726',
+      scheduled: '#4CAF50',
+      'in-progress': '#2196F3',
+      completed: '#9C27B0',
+      cancelled: '#F44336',
+      missed: '#FF5722',
+      rescheduled: '#FF9800'
+    };
+    return colors[status] || '#666';
   };
 
-  const handleCancel = () => {
-    console.log('[PROFILE_SECTION] Cancel edit');
-    setFormData({
-      fullName: user?.fullName || '',
-      email: user?.email || '',
-      location: user?.location || '',
-      phone: user?.phone?.toString() || '',
-    });
-    setEditing(false);
+  const getStatusBackground = (status) => {
+    const backgrounds = {
+      pending: 'rgba(255, 167, 38, 0.1)',
+      scheduled: 'rgba(76, 175, 80, 0.1)',
+      'in-progress': 'rgba(33, 150, 243, 0.1)',
+      completed: 'rgba(156, 39, 176, 0.1)',
+      cancelled: 'rgba(244, 67, 54, 0.1)',
+      missed: 'rgba(255, 87, 34, 0.1)',
+      rescheduled: 'rgba(255, 152, 0, 0.1)'
+    };
+    return backgrounds[status] || 'rgba(102, 102, 102, 0.1)';
   };
 
-  const calculateProfileCompletion = () => {
-    const fields = ['fullName', 'email', 'location', 'phone'];
-    const filledFields = fields.filter(field => 
-      formData[field] && formData[field].trim() !== ''
-    ).length;
-    return Math.round((filledFields / fields.length) * 100);
+  const getStatusIcon = (status) => {
+    const icons = {
+      pending: 'time-outline',
+      scheduled: 'calendar-outline',
+      'in-progress': 'play-circle-outline',
+      completed: 'checkmark-circle-outline',
+      cancelled: 'close-circle-outline',
+      missed: 'alert-circle-outline',
+      rescheduled: 'refresh-outline'
+    };
+    return icons[status] || 'help-circle-outline';
   };
 
-  const InfoRow = ({ label, value, icon, editable = true }) => (
-    <View style={styles.infoRow}>
-      <View style={styles.infoLeft}>
-        <Ionicons name={icon} size={20} color="#666" />
-        <Text style={styles.infoLabel}>{label}</Text>
+  const formatDateTime = (dateString) => {
+    const date = new Date(dateString);
+    return {
+      date: date.toLocaleDateString('en-GB'),
+      time: date.toLocaleTimeString('en-US', { 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        hour12: true 
+      })
+    };
+  };
+
+  const filters = [
+    { key: 'all', label: 'All', count: bookings.length },
+    { key: 'scheduled', label: 'Scheduled', count: bookings.filter(b => b.status === 'scheduled').length },
+    { key: 'completed', label: 'Completed', count: bookings.filter(b => b.status === 'completed').length },
+    { key: 'pending', label: 'Pending', count: bookings.filter(b => b.status === 'pending').length },
+    { key: 'cancelled', label: 'Cancelled', count: bookings.filter(b => b.status === 'cancelled').length }
+  ];
+
+  const BookingCard = ({ booking }) => {
+    const { date, time } = formatDateTime(booking.bookingDateTime);
+    const otherUser = user?.role === 'consultant' ? booking.user : booking.consultant;
+
+    return (
+      <View style={styles.bookingCard}>
+        <View style={styles.cardHeader}>
+          <View style={[styles.statusContainer, { backgroundColor: getStatusBackground(booking.status) }]}>
+            <Ionicons 
+              name={getStatusIcon(booking.status)} 
+              size={16} 
+              color={getStatusColor(booking.status)} 
+            />
+            <Text style={[styles.statusText, { color: getStatusColor(booking.status) }]}>
+              {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
+            </Text>
+          </View>
+          <Text style={styles.durationText}>{booking.duration} min</Text>
+        </View>
+
+        <View style={styles.cardContent}>
+          <View style={styles.userInfo}>
+            <Ionicons name="person-outline" size={18} color="#666" />
+            <Text style={styles.userName}>
+              {user?.role === 'consultant' ? 'Client: ' : 'Consultant: '}
+              {otherUser?.fullName || 'Unknown'}
+            </Text>
+          </View>
+
+          <View style={styles.dateTimeContainer}>
+            <View style={styles.dateTimeItem}>
+              <Ionicons name="calendar-outline" size={16} color="#666" />
+              <Text style={styles.dateTimeText}>{date}</Text>
+            </View>
+            <View style={styles.dateTimeItem}>
+              <Ionicons name="time-outline" size={16} color="#666" />
+              <Text style={styles.dateTimeText}>{time}</Text>
+            </View>
+          </View>
+
+          {booking.consultationDetail && (
+            <View style={styles.detailContainer}>
+              <Ionicons name="document-text-outline" size={16} color="#666" />
+              <Text style={styles.detailText} numberOfLines={2}>
+                {booking.consultationDetail}
+              </Text>
+            </View>
+          )}
+
+          {booking.meetingLink && booking.status === 'scheduled' && (
+            <TouchableOpacity style={styles.joinButton}>
+              <Ionicons name="videocam-outline" size={16} color="#4CAF50" />
+              <Text style={styles.joinButtonText}>Join Meeting</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        <View style={styles.cardFooter}>
+          <Text style={styles.bookingId}>ID: {booking._id.slice(-8)}</Text>
+          {booking.razorpay_order_id && (
+            <Text style={styles.orderId}>Order: {booking.razorpay_order_id.slice(-8)}</Text>
+          )}
+        </View>
       </View>
-      {editing && editable ? (
-        <TextInput
-          style={styles.infoInput}
-          value={value}
-          onChangeText={(text) => {
-            const key = label.toLowerCase().replace(' ', '');
-            console.log('[PROFILE_SECTION] Updating field:', key, 'with value:', text);
-            setFormData(prev => ({ ...prev, [key]: text }));
-          }}
-          placeholder={`Enter ${label.toLowerCase()}`}
-          keyboardType={label === 'Phone' ? 'phone-pad' : 'default'}
-        />
-      ) : (
-        <Text style={styles.infoValue}>{value || 'Not provided'}</Text>
-      )}
-    </View>
-  );
+    );
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#4CAF50" />
+        <Text style={styles.loadingText}>Loading bookings...</Text>
+      </View>
+    );
+  }
 
   return (
-    <ScrollView style={styles.container}>
-      {/* Profile Header */}
-      <View style={styles.header}>
-        <View style={styles.avatarContainer}>
-          {user?.profileImage ? (
-            <Image source={{ uri: user.profileImage }} style={styles.avatar} />
-          ) : (
-            <View style={styles.avatarPlaceholder}>
-              <Text style={styles.avatarText}>
-                {user?.fullName ? user.fullName.charAt(0).toUpperCase() : 'U'}
-              </Text>
-            </View>
-          )}
-          <TouchableOpacity style={styles.editAvatarButton}>
-            <Ionicons name="camera" size={16} color="#fff" />
-          </TouchableOpacity>
-        </View>
-        
-        <View style={styles.headerInfo}>
-          <Text style={styles.userName}>{user?.fullName || 'User'}</Text>
-          <Text style={styles.userRole}>
-            {user?.role === 'consultant' ? 'Consultant' : 'User'}
-          </Text>
-          <View style={styles.completionContainer}>
-            <Text style={styles.completionText}>
-              Profile {calculateProfileCompletion()}% complete
-            </Text>
-            <View style={styles.progressBar}>
-              <View 
-                style={[
-                  styles.progressFill, 
-                  { width: `${calculateProfileCompletion()}%` }
-                ]} 
-              />
-            </View>
-          </View>
-        </View>
+    <View style={styles.container}>
+      {/* Header Section */}
+      <View style={styles.headerSection}>
+        <Text style={styles.sectionTitle}>
+          {user?.role === 'consultant' ? 'My Booked Sessions' : 'Your Bookings'}
+        </Text>
+        <Text style={styles.sectionSubtitle}>
+          {user?.role === 'consultant' 
+            ? 'Sessions where clients have booked you' 
+            : 'Your consultation bookings'}
+        </Text>
       </View>
 
-      {/* Action Buttons */}
-      <View style={styles.actionButtons}>
-        {editing ? (
-          <>
-            <TouchableOpacity 
-              style={[styles.actionButton, styles.saveButton]}
-              onPress={handleSave}
-              disabled={loading}
+      {/* Filter Tabs */}
+      <View style={styles.filtersWrapper}>
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false} 
+          style={styles.filtersContainer}
+          contentContainerStyle={styles.filtersContent}
+        >
+          {filters.map((filter) => (
+            <TouchableOpacity
+              key={filter.key}
+              style={[
+                styles.filterTab,
+                activeFilter === filter.key && styles.activeFilterTab
+              ]}
+              onPress={() => setActiveFilter(filter.key)}
             >
-              {loading ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <>
-                  <Ionicons name="checkmark" size={20} color="#fff" />
-                  <Text style={styles.saveButtonText}>Save</Text>
-                </>
+              <Text style={[
+                styles.filterText,
+                activeFilter === filter.key && styles.activeFilterText
+              ]}>
+                {filter.label}
+              </Text>
+              {filter.count > 0 && (
+                <View style={[
+                  styles.filterBadge,
+                  activeFilter === filter.key && styles.activeFilterBadge
+                ]}>
+                  <Text style={[
+                    styles.filterBadgeText,
+                    activeFilter === filter.key && styles.activeFilterBadgeText
+                  ]}>
+                    {filter.count}
+                  </Text>
+                </View>
               )}
             </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={[styles.actionButton, styles.cancelButton]}
-              onPress={handleCancel}
-              disabled={loading}
-            >
-              <Ionicons name="close" size={20} color="#666" />
-              <Text style={styles.cancelButtonText}>Cancel</Text>
-            </TouchableOpacity>
-          </>
+          ))}
+        </ScrollView>
+      </View>
+
+      {/* Bookings List */}
+      <ScrollView
+        style={styles.bookingsList}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            colors={['#4CAF50']}
+            tintColor="#4CAF50"
+          />
+        }
+        showsVerticalScrollIndicator={false}
+      >
+        {getFilteredBookings().length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <View style={styles.emptyIconContainer}>
+              <Ionicons name="calendar-outline" size={64} color="#e0e0e0" />
+            </View>
+            <Text style={styles.emptyTitle}>No bookings found</Text>
+            <Text style={styles.emptySubtitle}>
+              {activeFilter === 'all' 
+                ? user?.role === 'consultant'
+                  ? 'No clients have booked you yet'
+                  : 'You haven\'t made any bookings yet'
+                : `No ${activeFilter} bookings found`}
+            </Text>
+          </View>
         ) : (
-          <TouchableOpacity 
-            style={[styles.actionButton, styles.editButton]}
-            onPress={() => {
-              console.log('[PROFILE_SECTION] Edit mode activated');
-              setEditing(true);
-            }}
-          >
-            <Ionicons name="pencil" size={20} color="#4CAF50" />
-            <Text style={styles.editButtonText}>Edit Profile</Text>
-          </TouchableOpacity>
+          getFilteredBookings().map((booking) => (
+            <BookingCard key={booking._id} booking={booking} />
+          ))
         )}
-      </View>
-
-      {/* Profile Information */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Personal Information</Text>
-        
-        <InfoRow
-          label="fullName"
-          value={formData.fullName}
-          icon="person-outline"
-        />
-        
-        <InfoRow
-          label="email"
-          value={formData.email}
-          icon="mail-outline"
-        />
-        
-        <InfoRow
-          label="phone"
-          value={formData.phone}
-          icon="call-outline"
-          editable={false}
-        />
-        
-        <InfoRow
-          label="location"
-          value={formData.location}
-          icon="location-outline"
-        />
-      </View>
-
-      {/* Account Information */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Account Information</Text>
-        
-        <View style={styles.infoRow}>
-          <View style={styles.infoLeft}>
-            <Ionicons name="shield-checkmark-outline" size={20} color="#666" />
-            <Text style={styles.infoLabel}>Account Status</Text>
-          </View>
-          <View style={styles.statusContainer}>
-            <View style={[
-              styles.statusDot, 
-              { backgroundColor: user?.suspended ? '#FF6B6B' : '#4CAF50' }
-            ]} />
-            <Text style={styles.infoValue}>
-              {user?.suspended ? 'Suspended' : 'Active'}
-            </Text>
-          </View>
-        </View>
-        
-        <View style={styles.infoRow}>
-          <View style={styles.infoLeft}>
-            <Ionicons name="card-outline" size={20} color="#666" />
-            <Text style={styles.infoLabel}>Aadhaar Verified</Text>
-          </View>
-          <View style={styles.statusContainer}>
-            <View style={[
-              styles.statusDot, 
-              { backgroundColor: user?.aadharVerified ? '#4CAF50' : '#FFA726' }
-            ]} />
-            <Text style={styles.infoValue}>
-              {user?.aadharVerified ? 'Verified' : 'Pending'}
-            </Text>
-          </View>
-        </View>
-        
-        <View style={styles.infoRow}>
-          <View style={styles.infoLeft}>
-            <Ionicons name="calendar-outline" size={20} color="#666" />
-            <Text style={styles.infoLabel}>Member Since</Text>
-          </View>
-          <Text style={styles.infoValue}>
-            {user?.createdAt ? 
-              new Date(user.createdAt).toLocaleDateString() : 
-              'Recently joined'
-            }
-          </Text>
-        </View>
-      </View>
-
-      {/* Consultant Information (if applicable) */}
-      {user?.role === 'consultant' && user?.consultantRequest && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Consultant Information</Text>
-          
-          <View style={styles.infoRow}>
-            <View style={styles.infoLeft}>
-              <Ionicons name="briefcase-outline" size={20} color="#666" />
-              <Text style={styles.infoLabel}>Application Status</Text>
-            </View>
-            <View style={styles.statusContainer}>
-              <View style={[
-                styles.statusDot, 
-                { backgroundColor: getStatusColor(user.consultantRequest.status) }
-              ]} />
-              <Text style={styles.infoValue}>
-                {user.consultantRequest.status || 'Not Applied'}
-              </Text>
-            </View>
-          </View>
-          
-          {user.consultantRequest.consultantProfile && (
-            <>
-              <View style={styles.infoRow}>
-                <View style={styles.infoLeft}>
-                  <Ionicons name="school-outline" size={20} color="#666" />
-                  <Text style={styles.infoLabel}>Qualification</Text>
-                </View>
-                <Text style={styles.infoValue}>
-                  {user.consultantRequest.consultantProfile.qualification || 'Not provided'}
-                </Text>
-              </View>
-              
-              <View style={styles.infoRow}>
-                <View style={styles.infoLeft}>
-                  <Ionicons name="time-outline" size={20} color="#666" />
-                  <Text style={styles.infoLabel}>Experience</Text>
-                </View>
-                <Text style={styles.infoValue}>
-                  {user.consultantRequest.consultantProfile.yearsOfExperience || 0} years
-                </Text>
-              </View>
-            </>
-          )}
-        </View>
-      )}
-
-      {/* Trial Information */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Trial Status</Text>
-        
-        <View style={styles.infoRow}>
-          <View style={styles.infoLeft}>
-            <Ionicons name="videocam-outline" size={20} color="#666" />
-            <Text style={styles.infoLabel}>Video Trial</Text>
-          </View>
-          <View style={styles.statusContainer}>
-            <View style={[
-              styles.statusDot, 
-              { backgroundColor: user?.videoFreeTrial ? '#4CAF50' : '#FFA726' }
-            ]} />
-            <Text style={styles.infoValue}>
-              {user?.videoFreeTrial ? 'Used' : 'Available'}
-            </Text>
-          </View>
-        </View>
-        
-        <View style={styles.infoRow}>
-          <View style={styles.infoLeft}>
-            <Ionicons name="chatbubble-outline" size={20} color="#666" />
-            <Text style={styles.infoLabel}>Chat Trial</Text>
-          </View>
-          <View style={styles.statusContainer}>
-            <View style={[
-              styles.statusDot, 
-              { backgroundColor: user?.chatFreeTrial ? '#4CAF50' : '#FFA726' }
-            ]} />
-            <Text style={styles.infoValue}>
-              {user?.chatFreeTrial ? 'Used' : 'Available'}
-            </Text>
-          </View>
-        </View>
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
-};
-
-const getStatusColor = (status) => {
-  switch (status) {
-    case 'approved': return '#4CAF50';
-    case 'pending': return '#FFA726';
-    case 'rejected': return '#FF6B6B';
-    default: return '#666';
-  }
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#f8f9fa',
   },
-  header: {
-    flexDirection: 'row',
-    backgroundColor: '#fff',
-    padding: 20,
-    alignItems: 'center',
-  },
-  avatarContainer: {
-    position: 'relative',
-    marginRight: 20,
-  },
-  avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    borderWidth: 3,
-    borderColor: '#4CAF50',
-  },
-  avatarPlaceholder: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#4CAF50',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarText: {
-    fontSize: 32,
-    fontWeight: '600',
-    color: '#fff',
-  },
-  editAvatarButton: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#4CAF50',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#fff',
-  },
-  headerInfo: {
-    flex: 1,
-  },
-  userName: {
-    fontSize: 22,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 4,
-  },
-  userRole: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 8,
-    textTransform: 'capitalize',
-  },
-  completionContainer: {
-    marginTop: 8,
-  },
-  completionText: {
-    fontSize: 12,
-    color: '#666',
-    marginBottom: 4,
-  },
-  progressBar: {
-    height: 4,
-    backgroundColor: '#e0e0e0',
-    borderRadius: 2,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: '#4CAF50',
-    borderRadius: 2,
-  },
-  actionButtons: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    backgroundColor: '#fff',
-    gap: 10,
-  },
-  actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 8,
+  loadingContainer: {
     flex: 1,
     justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f8f9fa',
   },
-  editButton: {
-    backgroundColor: '#f0f8f0',
-    borderWidth: 1,
-    borderColor: '#4CAF50',
-  },
-  editButtonText: {
-    color: '#4CAF50',
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#6c757d',
     fontWeight: '500',
-    marginLeft: 8,
   },
-  saveButton: {
-    backgroundColor: '#4CAF50',
-  },
-  saveButtonText: {
-    color: '#fff',
-    fontWeight: '500',
-    marginLeft: 8,
-  },
-  cancelButton: {
-    backgroundColor: '#f5f5f5',
-    borderWidth: 1,
-    borderColor: '#ddd',
-  },
-  cancelButtonText: {
-    color: '#666',
-    fontWeight: '500',
-    marginLeft: 8,
-  },
-  section: {
+  headerSection: {
     backgroundColor: '#fff',
-    margin: 20,
-    marginTop: 0,
-    padding: 20,
-    borderRadius: 12,
+    paddingHorizontal: 20,
+    paddingTop: 24,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f3f4',
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 15,
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#212529',
+    marginBottom: 4,
   },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
+  sectionSubtitle: {
+    fontSize: 14,
+    color: '#6c757d',
+    fontWeight: '400',
+  },
+  filtersWrapper: {
+    backgroundColor: '#fff',
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: '#e9ecef',
   },
-  infoLeft: {
+  filtersContainer: {
+    backgroundColor: '#fff',
+    paddingVertical: 4,
+  },
+  filtersContent: {
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+  },
+  filterTab: {
     flexDirection: 'row',
     alignItems: 'center',
-    width: 120,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    marginRight: 12,
+    borderRadius: 25,
+    backgroundColor: '#f8f9fa',
+    borderWidth: 1.5,
+    borderColor: '#e9ecef',
+    minHeight: 44,
   },
-  infoLabel: {
-    fontSize: 14,
-    color: '#666',
+  activeFilterTab: {
+    backgroundColor: '#4CAF50',
+    borderColor: '#4CAF50',
+    elevation: 4,
+    shadowColor: '#4CAF50',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+  },
+  filterText: {
+    fontSize: 15,
+    color: '#495057',
+    fontWeight: '600',
+  },
+  activeFilterText: {
+    color: '#fff',
+  },
+  filterBadge: {
     marginLeft: 10,
-    textTransform: 'capitalize',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 14,
+    backgroundColor: '#dee2e6',
+    minWidth: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  infoValue: {
-    fontSize: 14,
-    color: '#333',
-    flex: 1,
+  activeFilterBadge: {
+    backgroundColor: 'rgba(255,255,255,0.25)',
   },
-  infoInput: {
-    fontSize: 14,
-    color: '#333',
+  filterBadgeText: {
+    fontSize: 11,
+    color: '#495057',
+    fontWeight: '700',
+  },
+  activeFilterBadgeText: {
+    color: '#fff',
+  },
+  bookingsList: {
     flex: 1,
+    padding: 16,
+  },
+  bookingCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    marginBottom: 16,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
     borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: '#f9f9f9',
+    borderColor: '#f1f3f4',
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 8,
   },
   statusContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
   },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 8,
+  statusText: {
+    fontSize: 13,
+    fontWeight: '700',
+    marginLeft: 6,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  durationText: {
+    fontSize: 13,
+    color: '#6c757d',
+    backgroundColor: '#f8f9fa',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    fontWeight: '600',
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+  },
+  cardContent: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+  },
+  userInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    backgroundColor: '#f8f9fa',
+    padding: 12,
+    borderRadius: 12,
+  },
+  userName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#212529',
+    marginLeft: 10,
+  },
+  dateTimeContainer: {
+    flexDirection: 'row',
+    marginBottom: 16,
+    backgroundColor: '#fff',
+  },
+  dateTimeItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    backgroundColor: '#f8f9fa',
+    padding: 10,
+    borderRadius: 10,
+    marginHorizontal: 2,
+  },
+  dateTimeText: {
+    fontSize: 14,
+    color: '#495057',
+    marginLeft: 8,
+    fontWeight: '500',
+  },
+  detailContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 16,
+    backgroundColor: '#f8f9fa',
+    padding: 12,
+    borderRadius: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: '#4CAF50',
+  },
+  detailText: {
+    fontSize: 14,
+    color: '#495057',
+    marginLeft: 10,
+    flex: 1,
+    lineHeight: 20,
+    fontStyle: 'italic',
+  },
+  joinButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#4CAF50',
+    paddingVertical: 12,
+    borderRadius: 12,
+    elevation: 2,
+    shadowColor: '#4CAF50',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+  },
+  joinButtonText: {
+    fontSize: 15,
+    color: '#fff',
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  cardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f3f4',
+  },
+  bookingId: {
+    fontSize: 12,
+    color: '#adb5bd',
+    fontWeight: '500',
+  },
+  orderId: {
+    fontSize: 12,
+    color: '#adb5bd',
+    fontWeight: '500',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 80,
+    paddingHorizontal: 40,
+  },
+  emptyIconContainer: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: '#f8f9fa',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+    borderWidth: 2,
+    borderColor: '#e9ecef',
+    borderStyle: 'dashed',
+  },
+  emptyTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#495057',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  emptySubtitle: {
+    fontSize: 16,
+    color: '#6c757d',
+    textAlign: 'center',
+    lineHeight: 24,
+    maxWidth: 280,
   },
 });
 

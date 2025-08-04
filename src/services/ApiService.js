@@ -3,6 +3,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const BASE_URL = 'http://192.168.0.177:8011/api/v1';
 
+
+
+
+
 class ApiService {
   constructor() {
     this.baseURL = BASE_URL;
@@ -336,6 +340,22 @@ class ApiService {
       body: JSON.stringify(requestData),
     });
   }
+
+
+  async createRazorpayOrder(amount) {
+  return await this.apiCall('/payment/create-order', {
+    method: 'POST',
+    body: JSON.stringify({ amount }),
+  });
+}
+
+// Verify payment (uses existing endpoint)  
+async verifyRazorpayPayment(paymentData) {
+  return await this.apiCall('/payment/verifypayment', {
+    method: 'POST',
+    body: JSON.stringify(paymentData),
+  });
+}
 }
 
 export default new ApiService();

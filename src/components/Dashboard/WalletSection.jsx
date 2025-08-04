@@ -1,359 +1,337 @@
 // src/components/Dashboard/WalletSection.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-  TextInput,
+  RefreshControl,
   Alert,
   ActivityIndicator,
-  Image,
+  TextInput,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import ApiService from '../../services/ApiService';
 
-const WalletSection = ({ user, onRefresh }) => {
-  const [editing, setEditing] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState({
-    fullName: user?.fullName || '',
-    email: user?.email || '',
-    location: user?.location || '',
-    phone: user?.phone?.toString() || '',
+const WalletSection = ({ user, onAuthError }) => {
+  const [walletData, setWalletData] = useState({
+    balance: 0,
+    transactions: [],
+    earnings: 0,
+    totalSpent: 0
   });
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [addMoneyAmount, setAddMoneyAmount] = useState('');
+  const [showAddMoney, setShowAddMoney] = useState(false);
+  const [processingPayment, setProcessingPayment] = useState(false);
 
-  console.log('[PROFILE_SECTION] Rendering with user:', user);
-
-  const handleSave = async () => {
+  // Fetch wallet data from existing bookings endpoint
+  const fetchWalletData = useCallback(async (showLoader = true) => {
     try {
-      console.log('[PROFILE_SECTION] Saving profile with data:', formData);
-      setLoading(true);
+      if (showLoader) setLoading(true);
+      
+      // Use existing getUserBookings endpoint to get transaction data
+      const bookingsResult = await ApiService.getUserBookings();
+      
+      if (bookingsResult.success) {
+        const bookings = bookingsResult.data || [];
+        
+        // Calculate wallet data from bookings
+        let totalSpent = 0;
+        let earnings = 0;
+        const transactions = [];
 
-      // Validate required fields
-      if (!formData.fullName.trim()) {
-        Alert.alert('Error', 'Full name is required');
-        return;
-      }
+        bookings.forEach(booking => {
+          if (booking.status === 'completed' && booking.payment) {
+            const amount = booking.consultant?.consultantRequest?.consultantProfile?.sessionFee || 0;
+            
+            // If current user is the consultant, it's earnings
+            if (booking.consultant?._id === user?._id) {
+              earnings += amount;
+              transactions.push({
+                id: booking._id,
+                type: 'earning',
+                amount: amount,
+                date: booking.updatedAt || booking.createdAt,
+                description: `Session with ${booking.user?.fullName || 'User'}`,
+                status: 'completed'
+              });
+            } 
+            // If current user is the client, it's expense
+            else if (booking.user?._id === user?._id) {
+              totalSpent += amount;
+              transactions.push({
+                id: booking._id,
+                type: 'payment',
+                amount: amount,
+                date: booking.updatedAt || booking.createdAt,
+                description: `Session with ${booking.consultant?.fullName || 'Consultant'}`,
+                status: 'completed'
+              });
+            }
+          }
+        });
 
-      const result = await ApiService.updateProfile(formData);
-      console.log('[PROFILE_SECTION] Update result:', result);
+        // Calculate balance (earnings - spent)
+        const balance = earnings - totalSpent;
 
-      if (result.success) {
-        Alert.alert('Success', 'Profile updated successfully');
-        setEditing(false);
-        onRefresh && onRefresh();
+        setWalletData({
+          balance,
+          transactions: transactions.sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 10),
+          earnings,
+          totalSpent
+        });
       } else {
-        Alert.alert('Error', result.error || 'Failed to update profile');
+        console.warn('[WALLET] Failed to fetch wallet data:', bookingsResult.error);
+        if (onAuthError && onAuthError(bookingsResult)) return;
+        
+        setWalletData({ balance: 0, transactions: [], earnings: 0, totalSpent: 0 });
       }
     } catch (error) {
-      console.error('[PROFILE_SECTION] Error updating profile:', error);
-      Alert.alert('Error', 'Failed to update profile');
+      console.error('[WALLET] Error fetching wallet data:', error);
+      Alert.alert('Error', 'Failed to load wallet data');
     } finally {
       setLoading(false);
+      setRefreshing(false);
+    }
+  }, [user?._id, onAuthError]);
+
+  // Handle add money using existing create-order endpoint
+  const handleAddMoney = async () => {
+    if (!addMoneyAmount || parseFloat(addMoneyAmount) <= 0) {
+      Alert.alert('Error', 'Please enter a valid amount');
+      return;
+    }
+
+    const amount = parseFloat(addMoneyAmount);
+    if (amount < 10) {
+      Alert.alert('Error', 'Minimum amount is ₹10');
+      return;
+    }
+
+    try {
+      setProcessingPayment(true);
+      
+      // Use existing create-order endpoint
+      const orderResult = await ApiService.apiCall('/payment/create-order', {
+        method: 'POST',
+        body: JSON.stringify({ amount: amount * 100 }) // Convert to paise
+      });
+
+      if (orderResult.success) {
+        Alert.alert(
+          'Payment Order Created', 
+          `Order created for ₹${amount}. Integrate with Razorpay SDK to complete payment.`,
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                setAddMoneyAmount('');
+                setShowAddMoney(false);
+              }
+            }
+          ]
+        );
+      } else {
+        Alert.alert('Error', orderResult.error || 'Failed to create payment order');
+      }
+    } catch (error) {
+      console.error('[WALLET] Error creating payment order:', error);
+      Alert.alert('Error', 'Failed to process payment');
+    } finally {
+      setProcessingPayment(false);
     }
   };
 
-  const handleCancel = () => {
-    console.log('[PROFILE_SECTION] Cancel edit');
-    setFormData({
-      fullName: user?.fullName || '',
-      email: user?.email || '',
-      location: user?.location || '',
-      phone: user?.phone?.toString() || '',
+  // Handle refresh
+  const handleRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchWalletData(false);
+  }, [fetchWalletData]);
+
+  // Format date
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit'
     });
-    setEditing(false);
   };
 
-  const calculateProfileCompletion = () => {
-    const fields = ['fullName', 'email', 'location', 'phone'];
-    const filledFields = fields.filter(field => 
-      formData[field] && formData[field].trim() !== ''
-    ).length;
-    return Math.round((filledFields / fields.length) * 100);
-  };
+  useEffect(() => {
+    fetchWalletData();
+  }, [fetchWalletData]);
 
-  const InfoRow = ({ label, value, icon, editable = true }) => (
-    <View style={styles.infoRow}>
-      <View style={styles.infoLeft}>
-        <Ionicons name={icon} size={20} color="#666" />
-        <Text style={styles.infoLabel}>{label}</Text>
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#4CAF50" />
+        <Text style={styles.loadingText}>Loading wallet...</Text>
       </View>
-      {editing && editable ? (
-        <TextInput
-          style={styles.infoInput}
-          value={value}
-          onChangeText={(text) => {
-            const key = label.toLowerCase().replace(' ', '');
-            console.log('[PROFILE_SECTION] Updating field:', key, 'with value:', text);
-            setFormData(prev => ({ ...prev, [key]: text }));
-          }}
-          placeholder={`Enter ${label.toLowerCase()}`}
-          keyboardType={label === 'Phone' ? 'phone-pad' : 'default'}
-        />
-      ) : (
-        <Text style={styles.infoValue}>{value || 'Not provided'}</Text>
-      )}
-    </View>
-  );
+    );
+  }
 
   return (
-    <ScrollView style={styles.container}>
-      {/* Profile Header */}
-      <View style={styles.header}>
-        <View style={styles.avatarContainer}>
-          {user?.profileImage ? (
-            <Image source={{ uri: user.profileImage }} style={styles.avatar} />
-          ) : (
-            <View style={styles.avatarPlaceholder}>
-              <Text style={styles.avatarText}>
-                {user?.fullName ? user.fullName.charAt(0).toUpperCase() : 'U'}
-              </Text>
-            </View>
-          )}
-          <TouchableOpacity style={styles.editAvatarButton}>
-            <Ionicons name="camera" size={16} color="#fff" />
-          </TouchableOpacity>
+    <ScrollView 
+      style={styles.container}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={handleRefresh}
+          colors={['#4CAF50']}
+        />
+      }
+    >
+      {/* Balance Card */}
+      <View style={styles.balanceCard}>
+        <View style={styles.balanceHeader}>
+          <Ionicons name="wallet-outline" size={24} color="#4CAF50" />
+          <Text style={styles.balanceTitle}>Wallet Balance</Text>
         </View>
-        
-        <View style={styles.headerInfo}>
-          <Text style={styles.userName}>{user?.fullName || 'User'}</Text>
-          <Text style={styles.userRole}>
-            {user?.role === 'consultant' ? 'Consultant' : 'User'}
-          </Text>
-          <View style={styles.completionContainer}>
-            <Text style={styles.completionText}>
-              Profile {calculateProfileCompletion()}% complete
-            </Text>
-            <View style={styles.progressBar}>
-              <View 
-                style={[
-                  styles.progressFill, 
-                  { width: `${calculateProfileCompletion()}%` }
-                ]} 
-              />
-            </View>
-          </View>
+        <Text style={styles.balanceAmount}>
+          ₹{walletData.balance.toFixed(2)}
+        </Text>
+        <Text style={styles.balanceSubtext}>Available Balance</Text>
+      </View>
+
+      {/* Quick Stats */}
+      <View style={styles.statsContainer}>
+        <View style={styles.statCard}>
+          <Text style={styles.statValue}>₹{walletData.earnings.toFixed(2)}</Text>
+          <Text style={styles.statLabel}>Total Earnings</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Text style={styles.statValue}>₹{walletData.totalSpent.toFixed(2)}</Text>
+          <Text style={styles.statLabel}>Total Spent</Text>
         </View>
       </View>
 
       {/* Action Buttons */}
-      <View style={styles.actionButtons}>
-        {editing ? (
-          <>
-            <TouchableOpacity 
-              style={[styles.actionButton, styles.saveButton]}
-              onPress={handleSave}
-              disabled={loading}
-            >
-              {loading ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <>
-                  <Ionicons name="checkmark" size={20} color="#fff" />
-                  <Text style={styles.saveButtonText}>Save</Text>
-                </>
-              )}
-            </TouchableOpacity>
+      <View style={styles.actionContainer}>
+        <TouchableOpacity 
+          style={styles.actionButton}
+          onPress={() => setShowAddMoney(true)}
+        >
+          <Ionicons name="add-circle-outline" size={20} color="#4CAF50" />
+          <Text style={styles.actionButtonText}>Add Money</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity style={styles.actionButton}>
+          <Ionicons name="send-outline" size={20} color="#666" />
+          <Text style={styles.actionButtonText}>Withdraw</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Add Money Modal */}
+      {showAddMoney && (
+        <View style={styles.addMoneyContainer}>
+          <View style={styles.addMoneyCard}>
+            <Text style={styles.addMoneyTitle}>Add Money to Wallet</Text>
             
-            <TouchableOpacity 
-              style={[styles.actionButton, styles.cancelButton]}
-              onPress={handleCancel}
-              disabled={loading}
-            >
-              <Ionicons name="close" size={20} color="#666" />
-              <Text style={styles.cancelButtonText}>Cancel</Text>
-            </TouchableOpacity>
-          </>
-        ) : (
-          <TouchableOpacity 
-            style={[styles.actionButton, styles.editButton]}
-            onPress={() => {
-              console.log('[PROFILE_SECTION] Edit mode activated');
-              setEditing(true);
-            }}
-          >
-            <Ionicons name="pencil" size={20} color="#4CAF50" />
-            <Text style={styles.editButtonText}>Edit Profile</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-
-      {/* Profile Information */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Personal Information</Text>
-        
-        <InfoRow
-          label="fullName"
-          value={formData.fullName}
-          icon="person-outline"
-        />
-        
-        <InfoRow
-          label="email"
-          value={formData.email}
-          icon="mail-outline"
-        />
-        
-        <InfoRow
-          label="phone"
-          value={formData.phone}
-          icon="call-outline"
-          editable={false}
-        />
-        
-        <InfoRow
-          label="location"
-          value={formData.location}
-          icon="location-outline"
-        />
-      </View>
-
-      {/* Account Information */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Account Information</Text>
-        
-        <View style={styles.infoRow}>
-          <View style={styles.infoLeft}>
-            <Ionicons name="shield-checkmark-outline" size={20} color="#666" />
-            <Text style={styles.infoLabel}>Account Status</Text>
-          </View>
-          <View style={styles.statusContainer}>
-            <View style={[
-              styles.statusDot, 
-              { backgroundColor: user?.suspended ? '#FF6B6B' : '#4CAF50' }
-            ]} />
-            <Text style={styles.infoValue}>
-              {user?.suspended ? 'Suspended' : 'Active'}
-            </Text>
-          </View>
-        </View>
-        
-        <View style={styles.infoRow}>
-          <View style={styles.infoLeft}>
-            <Ionicons name="card-outline" size={20} color="#666" />
-            <Text style={styles.infoLabel}>Aadhaar Verified</Text>
-          </View>
-          <View style={styles.statusContainer}>
-            <View style={[
-              styles.statusDot, 
-              { backgroundColor: user?.aadharVerified ? '#4CAF50' : '#FFA726' }
-            ]} />
-            <Text style={styles.infoValue}>
-              {user?.aadharVerified ? 'Verified' : 'Pending'}
-            </Text>
-          </View>
-        </View>
-        
-        <View style={styles.infoRow}>
-          <View style={styles.infoLeft}>
-            <Ionicons name="calendar-outline" size={20} color="#666" />
-            <Text style={styles.infoLabel}>Member Since</Text>
-          </View>
-          <Text style={styles.infoValue}>
-            {user?.createdAt ? 
-              new Date(user.createdAt).toLocaleDateString() : 
-              'Recently joined'
-            }
-          </Text>
-        </View>
-      </View>
-
-      {/* Consultant Information (if applicable) */}
-      {user?.role === 'consultant' && user?.consultantRequest && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Consultant Information</Text>
-          
-          <View style={styles.infoRow}>
-            <View style={styles.infoLeft}>
-              <Ionicons name="briefcase-outline" size={20} color="#666" />
-              <Text style={styles.infoLabel}>Application Status</Text>
+            <TextInput
+              style={styles.amountInput}
+              placeholder="Enter amount (₹)"
+              value={addMoneyAmount}
+              onChangeText={setAddMoneyAmount}
+              keyboardType="numeric"
+              maxLength={6}
+            />
+            
+            <View style={styles.quickAmounts}>
+              {[100, 500, 1000, 2000].map(amount => (
+                <TouchableOpacity
+                  key={amount}
+                  style={styles.quickAmountButton}
+                  onPress={() => setAddMoneyAmount(amount.toString())}
+                >
+                  <Text style={styles.quickAmountText}>₹{amount}</Text>
+                </TouchableOpacity>
+              ))}
             </View>
-            <View style={styles.statusContainer}>
-              <View style={[
-                styles.statusDot, 
-                { backgroundColor: getStatusColor(user.consultantRequest.status) }
-              ]} />
-              <Text style={styles.infoValue}>
-                {user.consultantRequest.status || 'Not Applied'}
-              </Text>
-            </View>
-          </View>
-          
-          {user.consultantRequest.consultantProfile && (
-            <>
-              <View style={styles.infoRow}>
-                <View style={styles.infoLeft}>
-                  <Ionicons name="school-outline" size={20} color="#666" />
-                  <Text style={styles.infoLabel}>Qualification</Text>
-                </View>
-                <Text style={styles.infoValue}>
-                  {user.consultantRequest.consultantProfile.qualification || 'Not provided'}
-                </Text>
-              </View>
+            
+            <View style={styles.addMoneyActions}>
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={() => {
+                  setShowAddMoney(false);
+                  setAddMoneyAmount('');
+                }}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
               
-              <View style={styles.infoRow}>
-                <View style={styles.infoLeft}>
-                  <Ionicons name="time-outline" size={20} color="#666" />
-                  <Text style={styles.infoLabel}>Experience</Text>
-                </View>
-                <Text style={styles.infoValue}>
-                  {user.consultantRequest.consultantProfile.yearsOfExperience || 0} years
-                </Text>
-              </View>
-            </>
-          )}
+              <TouchableOpacity
+                style={styles.addButton}
+                onPress={handleAddMoney}
+                disabled={processingPayment}
+              >
+                {processingPayment ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.addButtonText}>Add Money</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
       )}
 
-      {/* Trial Information */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Trial Status</Text>
-        
-        <View style={styles.infoRow}>
-          <View style={styles.infoLeft}>
-            <Ionicons name="videocam-outline" size={20} color="#666" />
-            <Text style={styles.infoLabel}>Video Trial</Text>
-          </View>
-          <View style={styles.statusContainer}>
-            <View style={[
-              styles.statusDot, 
-              { backgroundColor: user?.videoFreeTrial ? '#4CAF50' : '#FFA726' }
-            ]} />
-            <Text style={styles.infoValue}>
-              {user?.videoFreeTrial ? 'Used' : 'Available'}
+      {/* Recent Transactions */}
+      <View style={styles.transactionSection}>
+        <Text style={styles.sectionTitle}>Recent Transactions</Text>
+
+        {walletData.transactions.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Ionicons name="receipt-outline" size={48} color="#ccc" />
+            <Text style={styles.emptyText}>No transactions yet</Text>
+            <Text style={styles.emptySubtext}>
+              Complete sessions to see your transaction history
             </Text>
           </View>
-        </View>
-        
-        <View style={styles.infoRow}>
-          <View style={styles.infoLeft}>
-            <Ionicons name="chatbubble-outline" size={20} color="#666" />
-            <Text style={styles.infoLabel}>Chat Trial</Text>
-          </View>
-          <View style={styles.statusContainer}>
-            <View style={[
-              styles.statusDot, 
-              { backgroundColor: user?.chatFreeTrial ? '#4CAF50' : '#FFA726' }
-            ]} />
-            <Text style={styles.infoValue}>
-              {user?.chatFreeTrial ? 'Used' : 'Available'}
-            </Text>
-          </View>
-        </View>
+        ) : (
+          walletData.transactions.map((transaction, index) => (
+            <View key={transaction.id || index} style={styles.transactionItem}>
+              <View style={styles.transactionLeft}>
+                <View style={[
+                  styles.transactionIcon, 
+                  { backgroundColor: transaction.type === 'earning' ? '#e8f5e8' : '#fff3e0' }
+                ]}>
+                  <Ionicons 
+                    name={transaction.type === 'earning' ? 'arrow-down-circle' : 'arrow-up-circle'} 
+                    size={20} 
+                    color={transaction.type === 'earning' ? '#4CAF50' : '#FF9800'} 
+                  />
+                </View>
+                <View style={styles.transactionDetails}>
+                  <Text style={styles.transactionDescription}>
+                    {transaction.description}
+                  </Text>
+                  <Text style={styles.transactionDate}>
+                    {formatDate(transaction.date)}
+                  </Text>
+                </View>
+              </View>
+              
+              <View style={styles.transactionRight}>
+                <Text style={[
+                  styles.transactionAmount,
+                  { color: transaction.type === 'earning' ? '#4CAF50' : '#FF9800' }
+                ]}>
+                  {transaction.type === 'earning' ? '+' : '-'}₹{transaction.amount.toFixed(2)}
+                </Text>
+                <View style={styles.statusBadge}>
+                  <Text style={styles.statusText}>COMPLETED</Text>
+                </View>
+              </View>
+            </View>
+          ))
+        )}
       </View>
     </ScrollView>
   );
-};
-
-const getStatusColor = (status) => {
-  switch (status) {
-    case 'approved': return '#4CAF50';
-    case 'pending': return '#FFA726';
-    case 'rejected': return '#FF6B6B';
-    default: return '#666';
-  }
 };
 
 const styles = StyleSheet.create({
@@ -361,184 +339,245 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f5f5f5',
   },
-  header: {
-    flexDirection: 'row',
-    backgroundColor: '#fff',
-    padding: 20,
-    alignItems: 'center',
-  },
-  avatarContainer: {
-    position: 'relative',
-    marginRight: 20,
-  },
-  avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    borderWidth: 3,
-    borderColor: '#4CAF50',
-  },
-  avatarPlaceholder: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#4CAF50',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarText: {
-    fontSize: 32,
-    fontWeight: '600',
-    color: '#fff',
-  },
-  editAvatarButton: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#4CAF50',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#fff',
-  },
-  headerInfo: {
+  loadingContainer: {
     flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  userName: {
-    fontSize: 22,
+  loadingText: {
+    marginTop: 10,
+    color: '#666',
+  },
+  balanceCard: {
+    backgroundColor: '#fff',
+    margin: 20,
+    padding: 24,
+    borderRadius: 16,
+    alignItems: 'center',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  balanceHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  balanceTitle: {
+    fontSize: 16,
+    color: '#666',
+    marginLeft: 8,
+  },
+  balanceAmount: {
+    fontSize: 36,
+    fontWeight: '700',
+    color: '#333',
+    marginBottom: 4,
+  },
+  balanceSubtext: {
+    fontSize: 14,
+    color: '#999',
+  },
+  statsContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+    gap: 12,
+    marginBottom: 20,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: '#fff',
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    elevation: 1,
+  },
+  statValue: {
+    fontSize: 18,
     fontWeight: '600',
     color: '#333',
     marginBottom: 4,
   },
-  userRole: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 8,
-    textTransform: 'capitalize',
-  },
-  completionContainer: {
-    marginTop: 8,
-  },
-  completionText: {
+  statLabel: {
     fontSize: 12,
     color: '#666',
-    marginBottom: 4,
   },
-  progressBar: {
-    height: 4,
-    backgroundColor: '#e0e0e0',
-    borderRadius: 2,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: '#4CAF50',
-    borderRadius: 2,
-  },
-  actionButtons: {
+  actionContainer: {
     flexDirection: 'row',
     paddingHorizontal: 20,
-    paddingVertical: 15,
-    backgroundColor: '#fff',
-    gap: 10,
+    gap: 12,
+    marginBottom: 20,
   },
   actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 8,
     flex: 1,
+    backgroundColor: '#fff',
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    elevation: 1,
+  },
+  actionButtonText: {
+    fontSize: 12,
+    color: '#333',
+    marginTop: 4,
+  },
+  addMoneyContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
   },
-  editButton: {
-    backgroundColor: '#f0f8f0',
-    borderWidth: 1,
-    borderColor: '#4CAF50',
+  addMoneyCard: {
+    backgroundColor: '#fff',
+    padding: 24,
+    borderRadius: 16,
+    width: '90%',
+    maxWidth: 400,
   },
-  editButtonText: {
-    color: '#4CAF50',
-    fontWeight: '500',
-    marginLeft: 8,
+  addMoneyTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 20,
   },
-  saveButton: {
-    backgroundColor: '#4CAF50',
-  },
-  saveButtonText: {
-    color: '#fff',
-    fontWeight: '500',
-    marginLeft: 8,
-  },
-  cancelButton: {
-    backgroundColor: '#f5f5f5',
+  amountInput: {
     borderWidth: 1,
     borderColor: '#ddd',
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    marginBottom: 16,
+  },
+  quickAmounts: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 20,
+  },
+  quickAmountButton: {
+    flex: 1,
+    backgroundColor: '#f0f8f0',
+    paddingVertical: 8,
+    borderRadius: 6,
+    alignItems: 'center',
+  },
+  quickAmountText: {
+    color: '#4CAF50',
+    fontWeight: '500',
+  },
+  addMoneyActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  cancelButton: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
   },
   cancelButtonText: {
     color: '#666',
-    fontWeight: '500',
-    marginLeft: 8,
   },
-  section: {
+  addButton: {
+    flex: 1,
+    backgroundColor: '#4CAF50',
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderRadius: 8,
+  },
+  addButtonText: {
+    color: '#fff',
+    fontWeight: '500',
+  },
+  transactionSection: {
     backgroundColor: '#fff',
     margin: 20,
     marginTop: 0,
+    borderRadius: 16,
     padding: 20,
-    borderRadius: 12,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
     color: '#333',
-    marginBottom: 15,
+    marginBottom: 16,
   },
-  infoRow: {
+  emptyContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: '#666',
+    marginTop: 12,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: '#999',
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  transactionItem: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
   },
-  infoLeft: {
+  transactionLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    width: 120,
+    flex: 1,
   },
-  infoLabel: {
+  transactionIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  transactionDetails: {
+    flex: 1,
+  },
+  transactionDescription: {
     fontSize: 14,
+    fontWeight: '500',
+    color: '#333',
+  },
+  transactionDate: {
+    fontSize: 12,
     color: '#666',
-    marginLeft: 10,
-    textTransform: 'capitalize',
+    marginTop: 2,
   },
-  infoValue: {
+  transactionRight: {
+    alignItems: 'flex-end',
+  },
+  transactionAmount: {
     fontSize: 14,
-    color: '#333',
-    flex: 1,
+    fontWeight: '600',
+    marginBottom: 4,
   },
-  infoInput: {
-    fontSize: 14,
-    color: '#333',
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: '#f9f9f9',
-  },
-  statusContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
+  statusBadge: {
+    backgroundColor: '#4CAF50',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
     borderRadius: 4,
-    marginRight: 8,
+  },
+  statusText: {
+    fontSize: 9,
+    color: '#fff',
+    fontWeight: '500',
   },
 });
 
