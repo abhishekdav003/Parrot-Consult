@@ -15,6 +15,8 @@ import DashboardScreen from './src/screens/DashboardScreen';
 import SearchScreen from './src/screens/SearchScreen';
 import ReelsScreen from './src/screens/ReelsScreen';
 import NotificationsScreen from './src/screens/NotificationsScreen';
+import CategoriesScreen from './src/screens/CategoriesScreen'; // New import
+import ConsultantListScreen from './src/screens/ConsultantListScreen'; // New import
 
 import Navbar from './src/components/Navbar/Navbar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -56,6 +58,22 @@ const App = () => {
             <Stack.Screen name="SignUp" component={SignUpScreen} />
             <Stack.Screen name="OTPVerification" component={OTPVerificationScreen} />
             <Stack.Screen name="PasswordVerification" component={PasswordVerificationScreen} />
+            <Stack.Screen 
+              name="Categories" 
+              component={CategoriesScreen}
+              options={{
+                headerShown: false,
+                presentation: 'card',
+              }}
+            />
+            <Stack.Screen 
+              name="ConsultantList" 
+              component={ConsultantListScreen}
+              options={{
+                headerShown: false,
+                presentation: 'card',
+              }}
+            />
           </Stack.Navigator>
         </NavigationContainer>
       </AuthProvider>

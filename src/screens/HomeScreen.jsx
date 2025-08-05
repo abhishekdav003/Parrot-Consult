@@ -6,6 +6,7 @@ import ExpertsSection from '../components/ExpertsSection/ExpertsSection';
 import UserReviews from '../components/UserReviews/UserReviews';
 import GetStartedSection from '../components/GetStartedSection/GetStartedSection';
 import BottomNavigation from '../components/Navbar/Navbar'; // Updated import name
+import CategorySection from '../components/Category/CategorySection';
 
 const HomeScreen = () => (
   <View style={styles.container}>
@@ -15,6 +16,7 @@ const HomeScreen = () => (
       showsVerticalScrollIndicator={false}
     >
       <HeroSection />
+      <CategorySection />
       <ExpertsSection />
       <UserReviews />
       <GetStartedSection />
