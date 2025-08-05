@@ -3,10 +3,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const BASE_URL = 'http://192.168.0.177:8011/api/v1';
 
-
-
-
-
 class ApiService {
   constructor() {
     this.baseURL = BASE_URL;
@@ -289,6 +285,16 @@ class ApiService {
     return result;
   }
 
+  // Get all users (to filter approved consultants on frontend)
+  async getAllUsers() {
+  console.log('[API] getAllUsers called');
+  const result = await this.apiCall('/user/allusers', {
+    method: 'GET',
+  });
+  console.log('[API] getAllUsers result:', result);
+  return result;
+}
+
   // Booking APIs
   async getUserBookings() {
     return await this.apiCall('/user/seebookings', {
@@ -335,155 +341,26 @@ class ApiService {
 
     console.log('[API] Request data for Aadhaar verification:', requestData);
 
-    return await this.apiCall('/profileUpgrade/aadharVerify', {
+    return await this.apiCall('/user/aadharVerify', {
       method: 'POST',
       body: JSON.stringify(requestData),
     });
   }
 
-
   async createRazorpayOrder(amount) {
-  return await this.apiCall('/payment/create-order', {
-    method: 'POST',
-    body: JSON.stringify({ amount }),
-  });
-}
-
-// Verify payment (uses existing endpoint)  
-async verifyRazorpayPayment(paymentData) {
-  return await this.apiCall('/payment/verifypayment', {
-    method: 'POST',
-    body: JSON.stringify(paymentData),
-  });
-}
-
-async getConsultantsByCategory(category) {
-  try {
-    // Since you don't have a specific endpoint, using a general consultant endpoint
-    // Replace with actual endpoint when available
-    const result = await this.apiCall('/consultant/getbycategory', {
+    return await this.apiCall('/payment/create-order', {
       method: 'POST',
-      body: JSON.stringify({ category }),
+      body: JSON.stringify({ amount }),
     });
-    
-    if (result.success) {
-      return result;
-    }
-    
-    // Fallback to all consultants if category-specific endpoint doesn't work
-    return await this.getAllConsultants();
-  } catch (error) {
-    console.error('[API] Error getting consultants by category:', error);
-    return {
-      success: false,
-      error: 'Failed to get consultants',
-    };
   }
-}
 
-async getAllConsultants() {
-  try {
-    const result = await this.apiCall('/consultant/getall', {
-      method: 'GET',
-    });
-    
-    return result;
-  } catch (error) {
-    console.error('[API] Error getting all consultants:', error);
-    return {
-      success: false,
-      error: 'Failed to get consultants',
-    };
-  }
-}
-
-async getConsultantProfile(consultantId) {
-  try {
-    const result = await this.apiCall(`/consultant/profile/${consultantId}`, {
-      method: 'GET',
-    });
-    
-    return result;
-  } catch (error) {
-    console.error('[API] Error getting consultant profile:', error);
-    return {
-      success: false,
-      error: 'Failed to get consultant profile',
-    };
-  }
-}
-
-async searchConsultants(searchQuery, category = null) {
-  try {
-    const params = {
-      query: searchQuery,
-      ...(category && { category }),
-    };
-    
-    const result = await this.apiCall('/consultant/search', {
+  // Verify payment (uses existing endpoint)  
+  async verifyRazorpayPayment(paymentData) {
+    return await this.apiCall('/payment/verifypayment', {
       method: 'POST',
-      body: JSON.stringify(params),
+      body: JSON.stringify(paymentData),
     });
-    
-    return result;
-  } catch (error) {
-    console.error('[API] Error searching consultants:', error);
-    return {
-      success: false,
-      error: 'Failed to search consultants',
-    };
   }
-}
-
-async getAllApprovedConsultants() {
-  try {
-    console.log('[API] Fetching all approved consultants...');
-    
-    // Since there's no specific endpoint in your routes, we'll try a general approach
-    // You might need to create this endpoint on your backend
-    const result = await this.apiCall('/consultant/approved', {
-      method: 'GET',
-    });
-
-    if (result.success) {
-      console.log('[API] Successfully fetched consultants:', result.data?.length || 0);
-      return result;
-    }
-
-    // If that doesn't work, try getting all consultants and filter approved ones
-    console.log('[API] Trying alternative endpoint...');
-    const allResult = await this.apiCall('/consultant/getall', {
-      method: 'GET',
-    });
-
-    if (allResult.success) {
-      // Filter only approved consultants
-      const approvedConsultants = (allResult.data || []).filter(consultant => 
-        consultant.isApproved === true && consultant.status === 'approved'
-      );
-      
-      return {
-        success: true,
-        data: approvedConsultants,
-        message: 'Approved consultants fetched successfully'
-      };
-    }
-
-    return {
-      success: false,
-      error: 'No consultant endpoints available'
-    };
-
-  } catch (error) {
-    console.error('[API] Error getting approved consultants:', error);
-    return {
-      success: false,
-      error: 'Failed to get consultants',
-    };
-  }
-}
-
-
 }
 
 export default new ApiService();

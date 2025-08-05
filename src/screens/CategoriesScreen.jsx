@@ -16,46 +16,66 @@ const CategoriesScreen = () => {
   const [searchQuery, setSearchQuery] = useState('');
 
   const categories = [
-    {
-      id: 1,
-      title: 'IT Consulting',
-      description: 'Get support and guidance on technology solutions',
-      icon: 'computer',
-    },
-    {
-      id: 2,
-      title: 'Ecommerce Consulting',
-      description: 'Spice up your online business for growth',
-      icon: 'shopping-cart',
-    },
-    {
-      id: 3,
-      title: 'Legal Consulting',
-      description: 'Navigate complex legal decisions with confidence and expertise',
-      icon: 'gavel',
-    },
-    {
-      id: 4,
-      title: 'Marketing Consulting',
-      description: 'Boost your brand visibility and customer engagement',
-      icon: 'campaign',
-    },
-    {
-      id: 5,
-      title: 'Financial Consulting',
-      description: 'Expert advice on financial planning and investment strategies',
-      icon: 'account-balance',
-    },
-    {
-      id: 6,
-      title: 'HR Consulting',
-      description: 'Human resource management and talent acquisition solutions',
-      icon: 'people',
-    },
-  ];
+  {
+    id: 1,
+    title: 'tech', // Changed to match database
+    displayTitle: 'IT Consulting',
+    description: 'Get support and guidance on technology solutions',
+    icon: 'computer',
+  },
+  {
+    id: 2,
+    title: 'E-commerce', // Changed to match database
+    displayTitle: 'Ecommerce Consulting',
+    description: 'Spice up your online business for growth',
+    icon: 'shopping-cart',
+  },
+  {
+    id: 3,
+    title: 'Legal', // Changed to match database
+    displayTitle: 'Legal Consulting',
+    description: 'Navigate complex legal decisions with confidence and expertise',
+    icon: 'gavel',
+  },
+  {
+    id: 4,
+    title: 'Marketing', // Changed to match database
+    displayTitle: 'Marketing Consulting',
+    description: 'Boost your brand visibility and customer engagement',
+    icon: 'campaign',
+  },
+  {
+    id: 5,
+    title: 'Finance', // Changed to match database
+    displayTitle: 'Financial Consulting',
+    description: 'Expert advice on financial planning and investment strategies',
+    icon: 'account-balance',
+  },
+  {
+    id: 6,
+    title: 'HR', // Changed to match database
+    displayTitle: 'HR Consulting',
+    description: 'Human resource management and talent acquisition solutions',
+    icon: 'people',
+  },
+  {
+    id: 7,
+    title: 'Business', // Changed to match database
+    displayTitle: 'Business Consulting',
+    description: 'Strategic business advice for growth and optimization',
+    icon: 'business',
+  },
+  {
+    id: 8,
+    title: 'Other', // Changed to match database
+    displayTitle: 'Other Consulting',
+    description: 'Various other consulting services and expertise',
+    icon: 'miscellaneous-services',
+  },
+];
 
   const filteredCategories = categories.filter(category =>
-    category.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    category.displayTitle.toLowerCase().includes(searchQuery.toLowerCase()) ||
     category.description.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -69,9 +89,16 @@ const CategoriesScreen = () => {
   };
 
   const handleCategorySelect = (category) => {
-    console.log('Navigating to consultant list for category:', category.title);
-    navigation.navigate('ConsultantList', { category });
-  };
+  console.log('Navigating to consultant list for category:', category.displayTitle);
+  navigation.navigate('ConsultantList', { 
+    category: {
+      title: category.title, // This should match backend category field
+      displayTitle: category.displayTitle,
+      description: category.description,
+      icon: category.icon
+    }
+  });
+};
 
   return (
     <SafeAreaView style={styles.container}>
@@ -113,7 +140,7 @@ const CategoriesScreen = () => {
                   <Icon name={category.icon} size={28} color="#2E7D32" />
                 </View>
                 <View style={styles.textContainer}>
-                  <Text style={styles.categoryTitle}>{category.title}</Text>
+                  <Text style={styles.categoryTitle}>{category.displayTitle}</Text>
                   <Text style={styles.categoryDescription}>
                     {category.description}
                   </Text>

@@ -15,6 +15,20 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import ApiService from '../services/ApiService';
 
+const getCategoryMapping = (frontendCategory) => {
+  const mappings = {
+    'it-consultant': 'tech',
+    'e-commerce': 'E-commerce',
+    'legal-consultant': 'Legal',
+    'marketing-consultant': 'Marketing',
+    'financial-consultant': 'Finance',
+    'hr-consultant': 'HR',
+    'Business': 'strategy',
+    'other': 'Other'
+  };
+  return mappings[frontendCategory] || frontendCategory;
+};
+
 const ConsultantListScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
@@ -34,42 +48,122 @@ const ConsultantListScreen = () => {
   }, [searchQuery, consultants]);
 
   const fetchConsultants = async () => {
-    try {
-      setLoading(true);
-      console.log('[CONSULTANT_LIST] Fetching consultants for category:', category?.title);
+  try {
+    setLoading(true);
+    console.log('[CONSULTANT_LIST] Starting fetch process...');
+    console.log('[CONSULTANT_LIST] Category being searched:', category?.title);
+    
+    // Create a timeout promise to prevent infinite loading
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Request timeout - please check your connection')), 15000)
+    );
+    
+    console.log('[CONSULTANT_LIST] Making API call...');
+    
+    // Race between API call and timeout
+    const result = await Promise.race([
+      ApiService.getAllUsers(),
+      timeoutPromise
+    ]);
+    
+    console.log('[CONSULTANT_LIST] API Response received:', result);
+    
+    if (result.success) {
+      let allUsers = result.data || [];
+      console.log('[CONSULTANT_LIST] Fetched users:', allUsers.length);
       
-      // Since there's no specific endpoint for getting consultants by category,
-      // we'll fetch all approved consultants and filter by category on frontend
-      const result = await ApiService.getAllApprovedConsultants();
+      // Log available categories in DB for debugging
+      const availableCategories = allUsers
+        .map(user => user.consultantRequest?.consultantProfile?.category)
+        .filter(Boolean);
+      console.log('[CONSULTANT_LIST] Available categories in DB:', [...new Set(availableCategories)]);
       
-      if (result.success) {
-        let consultantData = result.data || [];
-        console.log('[CONSULTANT_LIST] Fetched consultants:', consultantData);
-        
-        // Filter by category if provided
-        if (category?.title) {
-          consultantData = consultantData.filter(consultant => 
-            consultant.primaryCategory === category.title ||
-            consultant.specializedServices?.some(service => 
-              service.toLowerCase().includes(category.title.toLowerCase())
-            )
-          );
-        }
-        
-        setConsultants(consultantData);
-      } else {
-        console.error('[CONSULTANT_LIST] Error fetching consultants:', result.error);
-        Alert.alert('Error', result.error || 'Failed to load consultants');
-        setConsultants([]);
+      // Filter only approved consultants
+      let approvedConsultants = allUsers.filter(user => 
+        user.consultantRequest && 
+        user.consultantRequest.status === 'approved' &&
+        user.consultantRequest.consultantProfile
+      );
+
+      console.log('[CONSULTANT_LIST] Approved consultants found:', approvedConsultants.length);
+      
+      // Log approved consultants for debugging
+      if (approvedConsultants.length > 0) {
+        console.log('[CONSULTANT_LIST] Approved consultants details:', 
+          approvedConsultants.map(user => ({
+            name: user.fullName,
+            category: user.consultantRequest.consultantProfile.category,
+            status: user.consultantRequest.status
+          }))
+        );
       }
-    } catch (error) {
-      console.error('[CONSULTANT_LIST] Exception fetching consultants:', error);
-      Alert.alert('Error', 'Failed to load consultants');
+      
+      // Filter by category if provided
+      if (category?.title) {
+        const dbCategoryName = getCategoryMapping(category.title);
+        console.log('[CONSULTANT_LIST] Mapping frontend category:', category.title, '-> DB category:', dbCategoryName);
+        
+        approvedConsultants = approvedConsultants.filter(user => {
+          const consultantCategory = user.consultantRequest.consultantProfile.category;
+          const matches = consultantCategory === dbCategoryName;
+          console.log('[CONSULTANT_LIST] Consultant:', user.fullName, 'Category:', consultantCategory, 'Matches:', matches);
+          return matches;
+        });
+        
+        console.log('[CONSULTANT_LIST] Consultants after category filter:', approvedConsultants.length);
+      }
+      
+      // Transform user data to consultant format
+      const transformedConsultants = approvedConsultants.map(user => ({
+        _id: user._id,
+        name: user.fullName,
+        email: user.email,
+        phone: user.phone,
+        profilePicture: user.profileImage || null,
+        primaryCategory: user.consultantRequest.consultantProfile.category || category?.displayTitle || 'General Consulting',
+        specializedServices: user.consultantRequest.consultantProfile.keySkills || [],
+        keySkills: user.consultantRequest.consultantProfile.keySkills || [],
+        sessionFee: user.consultantRequest.consultantProfile.sessionFee,
+        yearsOfExperience: user.consultantRequest.consultantProfile.yearsOfExperience,
+        qualification: user.consultantRequest.consultantProfile.qualification,
+        university: user.consultantRequest.consultantProfile.university,
+        shortBio: user.consultantRequest.consultantProfile.shortBio,
+        languages: user.consultantRequest.consultantProfile.languages || [],
+        daysPerWeek: user.consultantRequest.consultantProfile.daysPerWeek,
+        availableTimePerDay: user.consultantRequest.consultantProfile.availableTimePerDay,
+        consultantType: user.consultantRequest.consultantProfile.consultantType,
+        rating: 4.5, // Default rating since no rating system in backend yet
+        reviewCount: Math.floor(Math.random() * 50) + 1, // Random review count for now
+        isApproved: true,
+        status: 'approved'
+      }));
+      
+      console.log('[CONSULTANT_LIST] Final transformed consultants:', transformedConsultants.length);
+      console.log('[CONSULTANT_LIST] Transformed consultants details:', 
+        transformedConsultants.map(c => ({ name: c.name, category: c.primaryCategory }))
+      );
+      
+      setConsultants(transformedConsultants);
+    } else {
+      console.error('[CONSULTANT_LIST] API Error:', result.error);
+      Alert.alert('Error', result.error || 'Failed to load consultants');
       setConsultants([]);
-    } finally {
-      setLoading(false);
     }
-  };
+  } catch (error) {
+    console.error('[CONSULTANT_LIST] Exception fetching consultants:', error);
+    
+    if (error.message.includes('timeout')) {
+      Alert.alert('Timeout', 'Request timed out. Please check your internet connection and try again.');
+    } else {
+      Alert.alert('Error', error.message || 'Failed to load consultants');
+    }
+    
+    setConsultants([]);
+  } finally {
+    console.log('[CONSULTANT_LIST] Setting loading to false');
+    setLoading(false);
+  }
+};
 
   const filterConsultants = () => {
     if (!searchQuery.trim()) {
@@ -87,7 +181,9 @@ const ConsultantListScreen = () => {
         ) ||
         consultant.keySkills?.some(skill =>
           skill.toLowerCase().includes(searchLower)
-        )
+        ) ||
+        consultant.qualification?.toLowerCase().includes(searchLower) ||
+        consultant.university?.toLowerCase().includes(searchLower)
       );
     });
     setFilteredConsultants(filtered);
@@ -156,18 +252,23 @@ const ConsultantListScreen = () => {
               <Text style={styles.consultantName}>
                 {consultant.name || 'Unknown'}
               </Text>
-              {consultant.isApproved && consultant.status === 'approved' && (
+              {consultant.isApproved && (
                 <View style={styles.vettedBadge}>
                   <Text style={styles.vettedText}>Verified</Text>
                 </View>
               )}
             </View>
             <Text style={styles.specialization}>
-              {consultant.specializedServices?.length > 0 
-                ? consultant.specializedServices.join(', ')
-                : consultant.primaryCategory || 'General Consulting'
+              {consultant.qualification && consultant.university 
+                ? `${consultant.qualification} - ${consultant.university}`
+                : consultant.primaryCategory
               }
             </Text>
+            {consultant.keySkills && consultant.keySkills.length > 0 && (
+              <Text style={styles.skillsText}>
+                Skills: {consultant.keySkills.join(', ')}
+              </Text>
+            )}
             <View style={styles.ratingContainer}>
               <View style={styles.starsContainer}>
                 {renderStars(consultant.rating || 0)}
@@ -179,14 +280,19 @@ const ConsultantListScreen = () => {
                 ({consultant.reviewCount || 0})
               </Text>
             </View>
-            {consultant.hourlyRate && (
-              <Text style={styles.hourlyRate}>
-                ${consultant.hourlyRate}/hour
+            {consultant.sessionFee && (
+              <Text style={styles.sessionFee}>
+                ₹{consultant.sessionFee}/session
               </Text>
             )}
-            {consultant.experience && (
+            {consultant.yearsOfExperience && (
               <Text style={styles.experience}>
-                {consultant.experience} years experience
+                {consultant.yearsOfExperience} years experience
+              </Text>
+            )}
+            {consultant.languages && consultant.languages.length > 0 && (
+              <Text style={styles.languages}>
+                Languages: {consultant.languages.join(', ')}
               </Text>
             )}
           </View>
@@ -217,7 +323,7 @@ const ConsultantListScreen = () => {
         <TouchableOpacity onPress={handleBack} style={styles.backButton}>
           <Icon name="arrow-back" size={24} color="#333" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{category?.title || 'Consultants'}</Text>
+        <Text style={styles.headerTitle}>{category?.displayTitle || 'Consultants'}</Text>
         <View style={styles.placeholder} />
       </View>
 
@@ -253,7 +359,7 @@ const ConsultantListScreen = () => {
                 <Text style={styles.noResultsSubtext}>
                   {searchQuery.trim() 
                     ? 'Try searching with different keywords'
-                    : `No consultants available for ${category?.title || 'this category'}`
+                    : `No consultants available for ${category?.displayTitle || 'this category'}`
                   }
                 </Text>
               </View>
@@ -394,7 +500,13 @@ const styles = StyleSheet.create({
   specialization: {
     fontSize: 14,
     color: '#666',
+    marginBottom: 4,
+  },
+  skillsText: {
+    fontSize: 12,
+    color: '#888',
     marginBottom: 8,
+    fontStyle: 'italic',
   },
   ratingContainer: {
     flexDirection: 'row',
@@ -415,13 +527,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
   },
-  hourlyRate: {
+  sessionFee: {
     fontSize: 14,
     fontWeight: '600',
     color: '#2E7D32',
     marginBottom: 4,
   },
   experience: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 4,
+  },
+  languages: {
     fontSize: 12,
     color: '#666',
     fontStyle: 'italic',
