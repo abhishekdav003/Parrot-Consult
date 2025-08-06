@@ -194,8 +194,35 @@ const ConsultantListScreen = () => {
   };
 
   const handleViewProfile = (consultant) => {
-    // Navigate to consultant profile screen
-    navigation.navigate('ConsultantProfile', { consultant });
+    // Transform consultant data back to the format expected by ExpertProfileScreen
+    const expertData = {
+      _id: consultant._id,
+      fullName: consultant.name,
+      email: consultant.email,
+      phone: consultant.phone,
+      profileImage: consultant.profilePicture,
+      location: consultant.location || 'Available Online',
+      consultantRequest: {
+        status: 'approved',
+        consultantProfile: {
+          category: consultant.primaryCategory,
+          keySkills: consultant.keySkills,
+          sessionFee: consultant.sessionFee,
+          yearsOfExperience: consultant.yearsOfExperience,
+          qualification: consultant.qualification,
+          university: consultant.university,
+          shortBio: consultant.shortBio,
+          languages: consultant.languages,
+          daysPerWeek: consultant.daysPerWeek,
+          availableTimePerDay: consultant.availableTimePerDay,
+          consultantType: consultant.consultantType,
+          fieldOfStudy: consultant.primaryCategory // Fallback for category display
+        }
+      }
+    };
+    
+    // Navigate to ExpertProfileScreen
+    navigation.navigate('ExpertProfileScreen', { expert: expertData });
   };
 
   const handleBookNow = (consultant) => {

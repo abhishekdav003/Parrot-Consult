@@ -1,4 +1,4 @@
-// src/services/ApiService.js
+// src/services/ApiService.js - Updated with booking functionality
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const BASE_URL = 'http://192.168.0.177:8011/api/v1';
@@ -287,15 +287,27 @@ class ApiService {
 
   // Get all users (to filter approved consultants on frontend)
   async getAllUsers() {
-  console.log('[API] getAllUsers called');
-  const result = await this.apiCall('/user/allusers', {
-    method: 'GET',
-  });
-  console.log('[API] getAllUsers result:', result);
-  return result;
-}
+    console.log('[API] getAllUsers called');
+    const result = await this.apiCall('/user/allusers', {
+      method: 'GET',
+    });
+    console.log('[API] getAllUsers result:', result);
+    return result;
+  }
 
   // Booking APIs
+  async createBooking(bookingData) {
+    console.log('[API] Creating booking with data:', bookingData);
+    
+    const result = await this.apiCall('/booking/createbooking', {
+      method: 'POST',
+      body: JSON.stringify(bookingData),
+    });
+
+    console.log('[API] Create booking result:', result);
+    return result;
+  }
+
   async getUserBookings() {
     return await this.apiCall('/user/seebookings', {
       method: 'GET',
@@ -304,6 +316,12 @@ class ApiService {
 
   async getConsultantBookings() {
     return await this.apiCall('/booking/getbookingsviaConsultantid', {
+      method: 'GET',
+    });
+  }
+
+  async getBookingById(bookingId) {
+    return await this.apiCall(`/booking/getbooking/${bookingId}`, {
       method: 'GET',
     });
   }
