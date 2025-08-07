@@ -15,10 +15,17 @@ import {
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import ApiService from '../services/ApiService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import PaymentScreen from './PaymentScreen';
+import { useAuth } from '../context/AuthContext';
+import { useNavigation } from '@react-navigation/native';
 
-const UnifiedBookingModal = ({ visible, onClose, expert, navigation }) => {
+
+const UnifiedBookingModal = ({ visible, onClose, expert }) => {
+  const navigation = useNavigation();
+  const { isAuthenticated, user } = useAuth();
+  
   // State management for all screens
-  const [currentStep, setCurrentStep] = useState('howItWorks'); // howItWorks, duration, dateTime, confirmation
+  const [currentStep, setCurrentStep] = useState('howItWorks');
   const [dontShowAgain, setDontShowAgain] = useState(false);
   const [selectedDuration, setSelectedDuration] = useState('30');
   const [selectedDate, setSelectedDate] = useState(null);
@@ -27,10 +34,15 @@ const UnifiedBookingModal = ({ visible, onClose, expert, navigation }) => {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [loading, setLoading] = useState(false);
   const [bookingCreated, setBookingCreated] = useState(false);
+  
+  // Payment related states
+  const [showPaymentScreen, setShowPaymentScreen] = useState(false);
+  const [bookingData, setBookingData] = useState(null);
+  const [razorpayOrder, setRazorpayOrder] = useState(null);
 
   const today = new Date();
 
-  // Available time slots - in a real app, this would come from the consultant's availability
+  // Available time slots
   const timeSlots = [
     { id: '12:45', label: '12:45 PM' },
     { id: '13:00', label: '01:00 PM' },
@@ -80,11 +92,33 @@ const UnifiedBookingModal = ({ visible, onClose, expert, navigation }) => {
     setCurrentMonth(new Date());
     setLoading(false);
     setBookingCreated(false);
+    setShowPaymentScreen(false);
+    setBookingData(null);
+    setRazorpayOrder(null);
   };
 
   const handleClose = () => {
     resetState();
     onClose();
+  };
+
+  // Check authentication before proceeding
+  const checkAuthentication = () => {
+    if (!isAuthenticated || !user) {
+      Alert.alert(
+        'Login Required',
+        'Please login to book a consultation.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Login', onPress: () => {
+            handleClose();
+            navigation.navigate('Login');
+          }}
+        ]
+      );
+      return false;
+    }
+    return true;
   };
 
   // Navigation between steps
@@ -97,6 +131,7 @@ const UnifiedBookingModal = ({ visible, onClose, expert, navigation }) => {
         setCurrentStep('dateTime');
         break;
       case 'dateTime':
+        if (!checkAuthentication()) return;
         handleCreateBooking();
         break;
     }
@@ -122,7 +157,7 @@ const UnifiedBookingModal = ({ visible, onClose, expert, navigation }) => {
     if (duration === '30') {
       return baseRate;
     } else {
-      return Math.round(baseRate * 1.8); // 60 minutes costs 1.8x the 30-minute rate
+      return Math.round(baseRate * 1.8);
     }
   };
 
@@ -136,7 +171,7 @@ const UnifiedBookingModal = ({ visible, onClose, expert, navigation }) => {
   const handleDateSelect = (date) => {
     if (isDateDisabled(date)) return;
     setSelectedDate(date);
-    setSelectedTime(null); // Reset time selection when date changes
+    setSelectedTime(null);
   };
 
   const navigateMonth = (direction) => {
@@ -153,11 +188,10 @@ const UnifiedBookingModal = ({ visible, onClose, expert, navigation }) => {
     
     const firstDayOfMonth = new Date(year, month, 1);
     const lastDayOfMonth = new Date(year, month + 1, 0);
-    const firstDayWeekday = (firstDayOfMonth.getDay() + 6) % 7; // Convert to Monday = 0
+    const firstDayWeekday = (firstDayOfMonth.getDay() + 6) % 7;
     
     const days = [];
     
-    // Previous month's trailing days
     const prevMonth = new Date(year, month - 1, 0);
     for (let i = firstDayWeekday - 1; i >= 0; i--) {
       const date = new Date(year, month - 1, prevMonth.getDate() - i);
@@ -170,7 +204,6 @@ const UnifiedBookingModal = ({ visible, onClose, expert, navigation }) => {
       });
     }
     
-    // Current month's days
     for (let day = 1; day <= lastDayOfMonth.getDate(); day++) {
       const date = new Date(year, month, day);
       const isToday = today.toDateString() === date.toDateString();
@@ -186,7 +219,6 @@ const UnifiedBookingModal = ({ visible, onClose, expert, navigation }) => {
       });
     }
     
-    // Next month's leading days
     const totalCells = Math.ceil(days.length / 7) * 7;
     let nextMonthDay = 1;
     while (days.length < totalCells) {
@@ -213,81 +245,126 @@ const UnifiedBookingModal = ({ visible, onClose, expert, navigation }) => {
   };
 
   // Backend integration
-  const handleCreateBooking = async () => {
-    if (!selectedDate || !selectedTime) {
-      Alert.alert('Selection Required', 'Please select both date and time for your consultation.');
+ // Alternative version if you want to make API call for free trials too
+// Replace the existing handleCreateBooking function with this:
+
+// Replace your handleCreateBooking function with this version:
+
+const handleCreateBooking = async () => {
+  if (!selectedDate || !selectedTime) {
+    Alert.alert('Selection Required', 'Please select both date and time for your consultation.');
+    return;
+  }
+
+  try {
+    setLoading(true);
+    
+    // Combine date and time
+    const [hours, minutes] = selectedTime.split(':');
+    const bookingDateTime = new Date(selectedDate);
+    bookingDateTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+    
+    // Check if it's a free trial (5 minutes) - handle directly without API call
+    if (selectedDuration === '5') {
+      console.log('Free trial booking - handling locally');
+      setBookingCreated(true);
+      setCurrentStep('confirmation');
+      Alert.alert(
+        'Booking Confirmed!', 
+        'Your free trial consultation has been scheduled successfully.',
+        [{ text: 'OK', onPress: handleClose }]
+      );
       return;
     }
+    
+    // Prepare booking data for paid bookings
+    const newBookingData = {
+      consultantId: expert._id,
+      userId: user._id,
+      datetime: bookingDateTime.toISOString(),
+      duration: parseInt(selectedDuration),
+      consultationDetail: projectDetails || 'General consultation'
+    };
 
-    try {
-      setLoading(true);
-      
-      // Get user data from AsyncStorage
-      const userData = await AsyncStorage.getItem('userData');
-      if (!userData) {
-        Alert.alert('Error', 'Please login to book a consultation.');
+    console.log('Creating paid booking with data:', newBookingData);
+
+    // Call backend API for paid bookings
+    const result = await ApiService.createBooking(newBookingData);
+    console.log('Booking API result:', result);
+    
+    // Check if the API call failed due to server format issues
+    if (!result.success) {
+      if (result.error?.includes('invalid format') || result.error?.includes('Server returned')) {
+        console.error('Server format error, showing user-friendly message');
+        throw new Error('Unable to connect to booking service. Please try again later.');
+      } else if (result.needsLogin) {
+        Alert.alert(
+          'Login Required',
+          'Your session has expired. Please login again.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Login', onPress: () => {
+              handleClose();
+              navigation.navigate('Login');
+            }}
+          ]
+        );
         return;
-      }
-      
-      const user = JSON.parse(userData);
-      
-      // Combine date and time
-      const [hours, minutes] = selectedTime.split(':');
-      const bookingDateTime = new Date(selectedDate);
-      bookingDateTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
-      
-      // Prepare booking data according to your backend model
-      const bookingData = {
-        consultantId: expert._id,
-        userId: user._id,
-        datetime: bookingDateTime.toISOString(),
-        duration: parseInt(selectedDuration),
-        consultationDetail: projectDetails || 'General consultation'
-      };
-
-      console.log('Creating booking with data:', bookingData);
-
-      // Call your backend API
-      const result = await ApiService.createBooking(bookingData);
-      
-      if (result.success) {
-        setBookingCreated(true);
-        setCurrentStep('confirmation');
-        
-        // If it's a free trial (5 minutes)
-        if (selectedDuration === '5' && result.data.message?.includes('free trial')) {
-          Alert.alert(
-            'Booking Confirmed!', 
-            'Your free trial consultation has been scheduled.',
-            [{ text: 'OK', onPress: handleClose }]
-          );
-        } else if (result.data.razorpayOrder) {
-          // Handle payment for paid bookings
-          Alert.alert(
-            'Booking Created!', 
-            'Please complete the payment to confirm your booking.',
-            [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'Pay Now', onPress: () => handlePayment(result.data.razorpayOrder) }
-            ]
-          );
-        }
       } else {
         throw new Error(result.error || 'Failed to create booking');
       }
-    } catch (error) {
-      console.error('Booking creation error:', error);
-      Alert.alert('Error', error.message || 'Failed to create booking. Please try again.');
-    } finally {
-      setLoading(false);
     }
+
+    // API call successful - process the response
+    setBookingData(newBookingData);
+    
+    if (result.data?.razorpayOrder) {
+      // Handle payment for paid bookings
+      console.log('Setting up payment with Razorpay order:', result.data.razorpayOrder);
+      setRazorpayOrder(result.data.razorpayOrder);
+      setBookingData({
+        ...newBookingData,
+        bookingId: result.data.bookingId
+      });
+      setShowPaymentScreen(true);
+    } else {
+      // No payment needed (shouldn't happen for paid bookings, but handle gracefully)
+      console.log('No payment required, showing confirmation');
+      setBookingCreated(true);
+      setCurrentStep('confirmation');
+      Alert.alert(
+        'Booking Confirmed!',
+        'Your consultation has been scheduled successfully.',
+        [{ text: 'OK', onPress: handleClose }]
+      );
+    }
+  } catch (error) {
+    console.error('Booking creation error:', error);
+    
+    // Show user-friendly error message
+    const errorMessage = error.message || 'Failed to create booking. Please try again.';
+    Alert.alert('Booking Error', errorMessage);
+  } finally {
+    setLoading(false);
+  }
+};
+
+  // Handle payment success
+  const handlePaymentSuccess = () => {
+    setShowPaymentScreen(false);
+    setBookingCreated(true);
+    setCurrentStep('confirmation');
+    Alert.alert(
+      'Payment Successful!',
+      'Your consultation has been booked successfully.',
+      [{ text: 'OK', onPress: handleClose }]
+    );
   };
 
-  // Payment handling (basic implementation - you'll need to integrate with Razorpay)
-  const handlePayment = (razorpayOrder) => {
-    // This is where you'd integrate with Razorpay SDK
-    console.log('Initiating payment for order:', razorpayOrder);
-    Alert.alert('Payment', 'Payment integration would be implemented here.');
+  // Handle payment screen close
+  const handlePaymentClose = () => {
+    setShowPaymentScreen(false);
+    // Don't reset other states, user can retry payment
   };
 
   // Render different steps
@@ -638,37 +715,58 @@ const UnifiedBookingModal = ({ visible, onClose, expert, navigation }) => {
   const canGoBack = currentStep !== 'howItWorks' && currentStep !== 'confirmation';
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={handleClose}
-    >
-      <SafeAreaView style={styles.container}>
-        {/* Header */}
-        <View style={styles.header}>
-          {canGoBack && (
-            <TouchableOpacity onPress={goToPreviousStep} style={styles.backButton}>
-              <Icon name="arrow-back" size={24} color="#333" />
+    <>
+      <Modal
+        visible={visible && !showPaymentScreen}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={handleClose}
+      >
+        <SafeAreaView style={styles.container}>
+          {/* Header */}
+          <View style={styles.header}>
+            {canGoBack && (
+              <TouchableOpacity onPress={goToPreviousStep} style={styles.backButton}>
+                <Icon name="arrow-back" size={24} color="#333" />
+              </TouchableOpacity>
+            )}
+            
+            {getHeaderTitle() && (
+              <Text style={styles.headerTitle}>{getHeaderTitle()}</Text>
+            )}
+            
+            <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
+              <Icon name="close" size={24} color="#333" />
             </TouchableOpacity>
-          )}
-          
-          {getHeaderTitle() && (
-            <Text style={styles.headerTitle}>{getHeaderTitle()}</Text>
-          )}
-          
-          <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
-            <Icon name="close" size={24} color="#333" />
-          </TouchableOpacity>
-        </View>
+          </View>
 
-        {/* Content based on current step */}
-        {currentStep === 'howItWorks' && renderHowItWorks()}
-        {currentStep === 'duration' && renderDurationSelection()}
-        {currentStep === 'dateTime' && renderDateTimeSelection()}
-        {currentStep === 'confirmation' && renderConfirmation()}
-      </SafeAreaView>
-    </Modal>
+          {/* Content based on current step */}
+          {currentStep === 'howItWorks' && renderHowItWorks()}
+          {currentStep === 'duration' && renderDurationSelection()}
+          {currentStep === 'dateTime' && renderDateTimeSelection()}
+          {currentStep === 'confirmation' && renderConfirmation()}
+        </SafeAreaView>
+      </Modal>
+
+      {/* Payment Screen Modal */}
+      <Modal
+        visible={showPaymentScreen}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={handlePaymentClose}
+      >
+        <SafeAreaView style={styles.container}>
+          <PaymentScreen
+            visible={showPaymentScreen}
+            onClose={handlePaymentClose}
+            bookingData={bookingData}
+            razorpayOrder={razorpayOrder}
+            onPaymentSuccess={handlePaymentSuccess}
+            expert={expert}
+          />
+        </SafeAreaView>
+      </Modal>
+    </>
   );
 };
 
@@ -697,7 +795,7 @@ const styles = StyleSheet.create({
     color: '#333',
     flex: 1,
     textAlign: 'center',
-    marginRight: 32, // Compensate for back button
+    marginRight: 32,
   },
   closeButton: {
     padding: 8,

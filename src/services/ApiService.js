@@ -372,13 +372,27 @@ class ApiService {
     });
   }
 
+     async createRazorpayOrder(amount) {
+    console.log('[API] Creating Razorpay order with amount:', amount);
+    
+    return await this.apiCall('/payment/create-order', {
+      method: 'POST',
+      body: JSON.stringify({ amount: amount * 100 }), // Convert to paise
+    });
+  }
+
   // Verify payment (uses existing endpoint)  
   async verifyRazorpayPayment(paymentData) {
+    console.log('[API] Verifying Razorpay payment:', paymentData);
+    
     return await this.apiCall('/payment/verifypayment', {
       method: 'POST',
       body: JSON.stringify(paymentData),
     });
   }
+
+ 
+  
 }
 
 export default new ApiService();

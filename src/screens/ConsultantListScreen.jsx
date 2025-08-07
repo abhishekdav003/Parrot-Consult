@@ -14,6 +14,7 @@ import {
 import { useNavigation, useRoute } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import ApiService from '../services/ApiService';
+import UnifiedBookingModal from './UnifiedBookingModal';
 
 const getCategoryMapping = (frontendCategory) => {
   const mappings = {
@@ -38,6 +39,8 @@ const ConsultantListScreen = () => {
   const [consultants, setConsultants] = useState([]);
   const [filteredConsultants, setFilteredConsultants] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showBookingModal, setShowBookingModal] = useState(false);
+const [selectedConsultant, setSelectedConsultant] = useState(null);
 
   useEffect(() => {
     fetchConsultants();
@@ -226,9 +229,34 @@ const ConsultantListScreen = () => {
   };
 
   const handleBookNow = (consultant) => {
-    // Navigate to booking screen
-    navigation.navigate('BookingScreen', { consultant });
+  // Transform consultant data to expert format expected by UnifiedBookingModal
+  const expertData = {
+    _id: consultant._id,
+    fullName: consultant.name,
+    email: consultant.email,
+    phone: consultant.phone,
+    profileImage: consultant.profilePicture,
+    consultantRequest: {
+      status: 'approved',
+      consultantProfile: {
+        sessionFee: consultant.sessionFee,
+        category: consultant.primaryCategory,
+        keySkills: consultant.keySkills,
+        yearsOfExperience: consultant.yearsOfExperience,
+        qualification: consultant.qualification,
+        university: consultant.university,
+        shortBio: consultant.shortBio,
+        languages: consultant.languages,
+        daysPerWeek: consultant.daysPerWeek,
+        availableTimePerDay: consultant.availableTimePerDay,
+        consultantType: consultant.consultantType
+      }
+    }
   };
+  
+  setSelectedConsultant(expertData);
+  setShowBookingModal(true);
+};
 
   const renderStars = (rating = 0) => {
     const stars = [];
@@ -394,6 +422,14 @@ const ConsultantListScreen = () => {
           </View>
         </ScrollView>
       )}
+      <UnifiedBookingModal
+  visible={showBookingModal}
+  onClose={() => {
+    setShowBookingModal(false);
+    setSelectedConsultant(null);
+  }}
+  expert={selectedConsultant}
+/>
     </SafeAreaView>
   );
 };
