@@ -15,8 +15,8 @@ import DashboardScreen from './src/screens/DashboardScreen';
 import SearchScreen from './src/screens/SearchScreen';
 import ReelsScreen from './src/screens/ReelsScreen';
 import NotificationsScreen from './src/screens/NotificationsScreen';
-import CategoriesScreen from './src/screens/CategoriesScreen'; // New import
-import ConsultantListScreen from './src/screens/ConsultantListScreen'; // New import
+import CategoriesScreen from './src/screens/CategoriesScreen';
+import ConsultantListScreen from './src/screens/ConsultantListScreen';
 import ExpertProfileScreen from './src/screens/ExpertProfileScreen';
 
 import Navbar from './src/components/Navbar/Navbar';
@@ -33,11 +33,27 @@ const MainTabNavigator = () => {
   return (
     <Tab.Navigator
       tabBar={(props) => <CustomTabBar {...props} />}
-      screenOptions={{ headerShown: false }}
+      screenOptions={{ 
+        headerShown: false,
+        // Hide tab bar on Reels screen
+        tabBarStyle: ({ route }) => {
+          const routeName = route.name;
+          if (routeName === 'Reels') {
+            return { display: 'none' };
+          }
+          return {};
+        }
+      }}
     >
       <Tab.Screen name="Home" component={HomeScreen} />
       <Tab.Screen name="Search" component={SearchScreen} />
-      <Tab.Screen name="Reels" component={ReelsScreen} />
+      <Tab.Screen 
+        name="Reels" 
+        component={ReelsScreen}
+        options={{
+          tabBarStyle: { display: 'none' },
+        }}
+      />
       <Tab.Screen name="Notifications" component={NotificationsScreen} />
       <Tab.Screen name="Login" component={LoginScreen} />
       <Tab.Screen name="Dashboard" component={DashboardScreen} />
@@ -45,37 +61,35 @@ const MainTabNavigator = () => {
         name="ExpertProfile" 
         component={ExpertProfileScreen}
         options={{
-          tabBarButton: () => null, // This hides it from the tab bar
-          tabBarStyle: { display: 'none' }, // Optional: hide navbar on this screen
+          tabBarButton: () => null,
+          tabBarStyle: { display: 'none' },
         }}
       />
       <Tab.Screen 
         name="Categories" 
         component={CategoriesScreen}
         options={{
-          tabBarButton: () => null, // This hides it from the tab bar
-          tabBarStyle: { display: 'none' }, // Optional: hide navbar on this screen
+          tabBarButton: () => null,
+          tabBarStyle: { display: 'none' },
         }}
       />
       <Tab.Screen 
         name="ConsultantList" 
         component={ConsultantListScreen}
         options={{
-          tabBarButton: () => null, // This hides it from the tab bar
-          tabBarStyle: { display: 'none' }, // Optional: hide navbar on this screen
+          tabBarButton: () => null,
+          tabBarStyle: { display: 'none' },
         }}
       />
       <Tab.Screen 
         name="ExpertProfileScreen" 
         component={ExpertProfileScreen}
         options={{
-          tabBarButton: () => null, // This hides it from the tab bar
-          tabBarStyle: { display: 'none' }, // Optional: hide navbar on this screen
+          tabBarButton: () => null,
+          tabBarStyle: { display: 'none' },
         }}
       />
     </Tab.Navigator>
-    
-    
   );
 };
 
@@ -110,23 +124,23 @@ const App = () => {
               }}
             />
             <Stack.Screen 
-  name="ConsultantListScreen" 
-  component={ConsultantListScreen}
-  options={{ headerShown: false }}
-/>
-<Stack.Screen 
-  name="ExpertProfileScreen" 
-  component={ExpertProfileScreen}
-  options={{ headerShown: false }}
-/>
+              name="ConsultantListScreen" 
+              component={ConsultantListScreen}
+              options={{ headerShown: false }}
+            />
             <Stack.Screen 
-  name="ExpertProfile" 
-  component={ExpertProfileScreen}
-  options={{
-    headerShown: false,
-    presentation: 'card',
-  }}
-/>
+              name="ExpertProfileScreen" 
+              component={ExpertProfileScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen 
+              name="ExpertProfile" 
+              component={ExpertProfileScreen}
+              options={{
+                headerShown: false,
+                presentation: 'card',
+              }}
+            />
           </Stack.Navigator>
         </NavigationContainer>
       </AuthProvider>

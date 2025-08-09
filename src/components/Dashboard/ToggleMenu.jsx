@@ -1,4 +1,4 @@
-// src/components/Dashboard/ToggleMenu.jsx
+// src/components/Dashboard/ToggleMenu.jsx - Updated with Upload Reels option
 import React from 'react';
 import {
   View,
@@ -10,52 +10,69 @@ import {
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 
-const ToggleMenu = ({ 
-  visible, 
-  user, 
-  activeSection, 
-  onItemPress, 
-  onLogout, 
-  onClose 
+const ToggleMenu = ({
+  visible,
+  user,
+  activeSection,
+  onItemPress,
+  onLogout,
+  onClose,
 }) => {
-  console.log('[TOGGLE_MENU] Rendering menu, visible:', visible, 'activeSection:', activeSection);
-
   const menuItems = [
-    { id: 'dashboard', title: 'Dashboard', icon: 'grid-outline' },
-    { id: 'profile', title: 'My Profile', icon: 'person-outline' },
-    { id: 'mysessions', title: 'My Sessions', icon: 'layers-outline' },
-    { id: 'upgrade', title: 'Profile Upgrade', icon: 'trending-up-outline' },
-    { id: 'booked', title: 'Booked Sessions', icon: 'calendar-outline' },
-    { id: 'wallet', title: 'Wallet', icon: 'wallet-outline' },
+    {
+      id: 'dashboard',
+      title: 'Dashboard',
+      icon: 'grid-outline',
+    },
+    {
+      id: 'profile',
+      title: 'My Profile',
+      icon: 'person-outline',
+    },
+    {
+      id: 'mysessions',
+      title: 'My Sessions',
+      icon: 'calendar-outline',
+    },
+    {
+      id: 'booked',
+      title: 'Booked Sessions',
+      icon: 'bookmark-outline',
+    },
+    {
+      id: 'wallet',
+      title: 'Wallet',
+      icon: 'wallet-outline',
+    },
+    {
+      id: 'upgrade',
+      title: 'Profile Upgrade',
+      icon: 'star-outline',
+    },
   ];
 
-  const MenuItem = ({ item }) => (
+  const renderMenuItem = (item) => (
     <TouchableOpacity
+      key={item.id}
       style={[
         styles.menuItem,
-        activeSection === item.id && styles.activeMenuItem
+        activeSection === item.id && styles.activeMenuItem,
       ]}
-      onPress={() => {
-        console.log('[TOGGLE_MENU] Menu item pressed:', item.id);
-        onItemPress(item.id);
-      }}
+      onPress={() => onItemPress(item.id)}
     >
       <Ionicons
         name={item.icon}
-        size={20}
+        size={22}
         color={activeSection === item.id ? '#4CAF50' : '#666'}
       />
       <Text
         style={[
           styles.menuItemText,
-          activeSection === item.id && styles.activeMenuItemText
+          activeSection === item.id && styles.activeMenuItemText,
         ]}
       >
         {item.title}
       </Text>
-      {activeSection === item.id && (
-        <View style={styles.activeIndicator} />
-      )}
     </TouchableOpacity>
   );
 
@@ -63,69 +80,64 @@ const ToggleMenu = ({
     <Modal
       visible={visible}
       transparent
-      animationType="fade"
+      animationType="slide"
       onRequestClose={onClose}
     >
-      <TouchableOpacity
-        style={styles.overlay}
-        activeOpacity={1}
-        onPress={onClose}
-      >
-        <View style={styles.menuContainer}>
-          {/* User Info Section */}
-          <View style={styles.userSection}>
-            <View style={styles.avatarContainer}>
-              {user?.profileImage ? (
-                <Image source={{ uri: user.profileImage }} style={styles.avatar} />
-              ) : (
-                <View style={styles.avatarPlaceholder}>
-                  <Text style={styles.avatarText}>
-                    {user?.fullName ? user.fullName.charAt(0).toUpperCase() : 'U'}
-                  </Text>
-                </View>
-              )}
-            </View>
+      <View style={styles.overlay}>
+        <TouchableOpacity
+          style={styles.backdrop}
+          onPress={onClose}
+          activeOpacity={1}
+        />
+        
+        <View style={styles.menu}>
+          {/* Header */}
+          <View style={styles.header}>
             <View style={styles.userInfo}>
-              <Text style={styles.userName}>
-                {user?.fullName || 'User'}
-              </Text>
-              <Text style={styles.userPhone}>
-                {user?.phone || 'Phone not available'}
-              </Text>
-              {user?.email && (
-                <Text style={styles.userEmail}>
-                  {user.email}
+              <Image
+                source={{
+                  uri: user?.profileImage || 'https://via.placeholder.com/50',
+                }}
+                style={styles.avatar}
+              />
+              <View style={styles.userDetails}>
+                <Text style={styles.userName}>
+                  {user?.fullName || 'Guest User'}
                 </Text>
-              )}
+                <Text style={styles.userPhone}>{user?.phone}</Text>
+              </View>
             </View>
+            
+            <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+              <Ionicons name="close" size={24} color="#666" />
+            </TouchableOpacity>
           </View>
-
-          {/* Divider */}
-          <View style={styles.divider} />
 
           {/* Menu Items */}
-          <View style={styles.menuItemsContainer}>
-            {menuItems.map((item) => (
-              <MenuItem key={item.id} item={item} />
-            ))}
+          <View style={styles.menuItems}>
+            {menuItems.map(renderMenuItem)}
           </View>
 
-          {/* Divider */}
-          <View style={styles.divider} />
+          {/* Upload Reels Section */}
+          <View style={styles.actionSection}>
+            <TouchableOpacity
+              style={styles.uploadReelButton}
+              onPress={() => onItemPress('uploadreel')}
+            >
+              <Ionicons name="videocam" size={22} color="#4CAF50" />
+              <Text style={styles.uploadReelText}>Upload Reel</Text>
+            </TouchableOpacity>
+          </View>
 
-          {/* Logout Button */}
-          <TouchableOpacity
-            style={styles.logoutButton}
-            onPress={() => {
-              console.log('[TOGGLE_MENU] Logout pressed');
-              onLogout();
-            }}
-          >
-            <Ionicons name="log-out-outline" size={20} color="#FF6B6B" />
-            <Text style={styles.logoutText}>Logout</Text>
-          </TouchableOpacity>
+          {/* Logout */}
+          <View style={styles.footer}>
+            <TouchableOpacity style={styles.logoutButton} onPress={onLogout}>
+              <Ionicons name="log-out-outline" size={22} color="#FF6B6B" />
+              <Text style={styles.logoutText}>Logout</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      </TouchableOpacity>
+      </View>
     </Modal>
   );
 };
@@ -134,44 +146,40 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-start',
   },
-  menuContainer: {
-    width: 280,
-    height: '100%',
+  backdrop: {
+    flex: 1,
+  },
+  menu: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: '75%',
     backgroundColor: '#fff',
     paddingTop: 50,
   },
-  userSection: {
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingVertical: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
   },
-  avatarContainer: {
-    marginRight: 15,
+  userInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
   },
   avatar: {
     width: 50,
     height: 50,
     borderRadius: 25,
-    borderWidth: 2,
-    borderColor: '#4CAF50',
+    marginRight: 12,
   },
-  avatarPlaceholder: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#4CAF50',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarText: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#fff',
-  },
-  userInfo: {
+  userDetails: {
     flex: 1,
   },
   userName: {
@@ -183,18 +191,11 @@ const styles = StyleSheet.create({
   userPhone: {
     fontSize: 14,
     color: '#666',
-    marginBottom: 2,
   },
-  userEmail: {
-    fontSize: 12,
-    color: '#888',
+  closeButton: {
+    padding: 4,
   },
-  divider: {
-    height: 1,
-    backgroundColor: '#eee',
-    marginHorizontal: 20,
-  },
-  menuItemsContainer: {
+  menuItems: {
     paddingVertical: 10,
   },
   menuItem: {
@@ -202,41 +203,55 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 15,
-    position: 'relative',
   },
   activeMenuItem: {
-    backgroundColor: '#f0f8f0',
+    backgroundColor: '#f0f9f0',
+    borderRightWidth: 3,
+    borderRightColor: '#4CAF50',
   },
   menuItemText: {
+    marginLeft: 12,
     fontSize: 16,
     color: '#666',
-    marginLeft: 15,
-    flex: 1,
   },
   activeMenuItemText: {
     color: '#4CAF50',
     fontWeight: '500',
   },
-  activeIndicator: {
-    width: 3,
-    height: 20,
-    backgroundColor: '#4CAF50',
-    position: 'absolute',
-    right: 0,
-    borderTopLeftRadius: 2,
-    borderBottomLeftRadius: 2,
+  actionSection: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
+  },
+  uploadReelButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 15,
+  },
+  uploadReelText: {
+    marginLeft: 12,
+    fontSize: 16,
+    color: '#4CAF50',
+    fontWeight: '500',
+  },
+  footer: {
+    marginTop: 'auto',
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
   },
   logoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
     paddingVertical: 15,
-    marginTop: 10,
   },
   logoutText: {
+    marginLeft: 12,
     fontSize: 16,
     color: '#FF6B6B',
-    marginLeft: 15,
+    fontWeight: '500',
   },
 });
 

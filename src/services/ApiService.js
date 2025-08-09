@@ -1,5 +1,6 @@
 // src/services/ApiService.js - Updated with booking functionality
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 
 const BASE_URL = 'http://192.168.0.177:8011/api/v1';
 
@@ -388,6 +389,65 @@ class ApiService {
     return await this.apiCall('/payment/verifypayment', {
       method: 'POST',
       body: JSON.stringify(paymentData),
+    });
+  }
+
+
+
+
+
+    // Reels APIs
+  async uploadReel({ video, description }) {
+    const formData = new FormData();
+    
+    formData.append('video', {
+  uri: Platform.OS === 'android' && !video.uri.startsWith('file://')
+    ? `file://${video.uri}`
+    : video.uri,
+  type: video.type || 'video/mp4',
+  name: video.fileName || `reel_${Date.now()}.mp4`,
+});
+    
+    if (description) {
+      formData.append('description', description);
+    }
+
+    console.log('[API] Uploading reel...');
+
+    return await this.apiCall('/reel/upload', {
+      method: 'POST',
+      body: formData,
+    });
+  }
+
+  async getAllReels(page = 1) {
+    return await this.apiCall(`/reel/feed?page=${page}&limit=10`, {
+      method: 'GET',
+    });
+  }
+
+  async getUserReels() {
+    return await this.apiCall('/reel/my-reels', {
+      method: 'GET',
+    });
+  }
+
+  async likeReel(reelId) {
+    return await this.apiCall(`/reel/${reelId}/like`, {
+      method: 'POST',
+    });
+  }
+
+  async addComment(reelId, comment) {
+    return await this.apiCall(`/reel/${reelId}/comment`, {
+      method: 'POST',
+      body: JSON.stringify({ comment }),
+    });
+  }
+
+  async deleteReel(reelId) {
+    return await this.apiCall(`/reel/${reelId}`, {
+      method: 'DELETE',
     });
   }
 

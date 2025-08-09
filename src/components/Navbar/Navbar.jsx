@@ -10,12 +10,22 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useAuth } from '../../context/AuthContext';
+import { useFocusEffect } from '@react-navigation/native';
 
 const { width } = Dimensions.get('window');
 
 const Navbar = ({ state, descriptors, navigation }) => {
   const [hasNotifications, setHasNotifications] = useState(true);
+  const [isVisible, setIsVisible] = useState(true);
   const { isAuthenticated, user } = useAuth();
+
+  // Hide navbar on Reels screen
+  useFocusEffect(
+    React.useCallback(() => {
+      const currentRoute = state.routes[state.index].name;
+      setIsVisible(currentRoute !== 'Reels');
+    }, [state])
+  );
 
   const navItems = [
     { 
@@ -115,6 +125,11 @@ const Navbar = ({ state, descriptors, navigation }) => {
       </Text>
     </TouchableOpacity>
   );
+
+  // Don't render navbar if not visible
+  if (!isVisible) {
+    return null;
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>

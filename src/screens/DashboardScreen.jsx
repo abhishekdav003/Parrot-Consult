@@ -22,6 +22,8 @@ import ProfileUpgradeSection from '../components/Dashboard/ProfileUpgradeSection
 import BookedSessionsSection from '../components/Dashboard/BookedSessionsSection';
 import WalletSection from '../components/Dashboard/WalletSection';
 import ToggleMenu from '../components/Dashboard/ToggleMenu';
+// import UploadReels from '../components/Dashboard/UploadReelSection';
+import UploadReelSection from '../components/Dashboard/UploadReelSection';
 
 const DashboardScreen = ({ navigation }) => {
   const { user, logout, refreshUserData } = useAuth();
@@ -290,8 +292,16 @@ const DashboardScreen = ({ navigation }) => {
             bookings={dashboardData.allBookings}
           />
         );
+        
       case 'wallet':
         return <WalletSection {...commonProps} />;
+        case 'uploadreel':
+  return (
+    <UploadReelSection
+      {...commonProps}
+      onRefresh={handleRefresh}
+    />
+  );
       default:
         return (
           <DashboardSection 
