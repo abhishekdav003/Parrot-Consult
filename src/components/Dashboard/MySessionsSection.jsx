@@ -9,6 +9,7 @@ import {
   Alert,
   ActivityIndicator,
   RefreshControl,
+  Linking,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import ApiService from '../../services/ApiService';
@@ -18,49 +19,160 @@ const MySessionsSection = ({ user, onRefresh, onAuthError }) => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState('all');
+  const [consultantCache, setConsultantCache] = useState({});
 
-  // Fetch bookings based on user role
+  // Helper function to get consultant name from available data
+  const getConsultantName = useCallback(async (consultantData) => {
+    if (!consultantData) return 'Unknown Consultant';
+
+    // If consultant is just a string ID
+    if (typeof consultantData === 'string') {
+      // Check cache first
+      if (consultantCache[consultantData]) {
+        return consultantCache[consultantData];
+      }
+      
+      try {
+        // Try to get full consultant data
+        const allUsersResult = await ApiService.getAllUsers();
+        if (allUsersResult.success && Array.isArray(allUsersResult.data)) {
+          const consultant = allUsersResult.data.find(u => u._id === consultantData);
+          if (consultant?.fullName) {
+            const name = consultant.fullName;
+            setConsultantCache(prev => ({ ...prev, [consultantData]: name }));
+            return name;
+          }
+        }
+      } catch (error) {
+        console.log('[CONSULTANT_NAME] Error fetching full data:', error);
+      }
+      
+      return `Consultant ${consultantData.slice(-6)}`;
+    }
+
+    // If consultant is an object
+    if (typeof consultantData === 'object') {
+      const consultantId = consultantData._id;
+      
+      // Check if we already have the full name in cache
+      if (consultantId && consultantCache[consultantId]) {
+        return consultantCache[consultantId];
+      }
+
+      // Try direct fields first
+      if (consultantData.fullName) {
+        const name = consultantData.fullName;
+        if (consultantId) {
+          setConsultantCache(prev => ({ ...prev, [consultantId]: name }));
+        }
+        return name;
+      }
+      
+      if (consultantData.name) {
+        const name = consultantData.name;
+        if (consultantId) {
+          setConsultantCache(prev => ({ ...prev, [consultantId]: name }));
+        }
+        return name;
+      }
+
+      // Try to fetch full data if we only have partial data
+      if (consultantId) {
+        try {
+          const allUsersResult = await ApiService.getAllUsers();
+          if (allUsersResult.success && Array.isArray(allUsersResult.data)) {
+            const fullConsultant = allUsersResult.data.find(u => u._id === consultantId);
+            if (fullConsultant?.fullName) {
+              const name = fullConsultant.fullName;
+              setConsultantCache(prev => ({ ...prev, [consultantId]: name }));
+              return name;
+            }
+          }
+        } catch (error) {
+          console.log('[CONSULTANT_NAME] Error fetching consultant details:', error);
+        }
+      }
+
+      // Fallback to email-based name extraction
+      if (consultantData.email) {
+        const emailPart = consultantData.email.split('@')[0];
+        // Remove numbers and special characters, then format
+        let nameFromEmail = emailPart.replace(/[0-9]/g, '').replace(/[^a-zA-Z]/g, ' ').trim();
+        
+        if (nameFromEmail) {
+          // Capitalize each word
+          nameFromEmail = nameFromEmail.split(' ')
+            .filter(word => word.length > 0)
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+            .join(' ');
+          
+          if (consultantId) {
+            setConsultantCache(prev => ({ ...prev, [consultantId]: nameFromEmail }));
+          }
+          return nameFromEmail;
+        }
+      }
+
+      // Final fallback
+      return consultantId ? `Consultant ${consultantId.slice(-6)}` : 'Unknown Consultant';
+    }
+
+    return 'Unknown Consultant';
+  }, [consultantCache]);
+
+  // Fetch sessions I booked (user bookings)
   const fetchBookings = useCallback(async (showLoading = true) => {
     try {
       if (showLoading) setLoading(true);
       
-      console.log('[MYSESSIONS] Fetching bookings for user role:', user?.role);
+      console.log('[MY_SESSIONS] Fetching sessions I booked');
       
-      let result;
-      if (user?.role === 'consultant') {
-        result = await ApiService.apiCall('/booking/getbookingsviaConsultantid', {
-          method: 'GET',
-        });
-      } else {
-        result = await ApiService.getUserBookings();
-      }
+      // Always get user bookings for this section (sessions I booked)
+      const result = await ApiService.getUserBookings();
       
       if (result.success) {
         const bookingsData = Array.isArray(result.data) ? result.data : [];
-        setBookings(bookingsData);
-        console.log('[MYSESSIONS] Bookings loaded:', bookingsData.length);
-      } else {
-        console.warn('[MYSESSIONS] Failed to fetch bookings:', result.error);
         
+        // Pre-cache consultant names to avoid repeated API calls
+        const consultantIds = [...new Set(bookingsData.map(b => 
+          typeof b.consultant === 'object' ? b.consultant._id : b.consultant
+        ).filter(Boolean))];
+        
+        if (consultantIds.length > 0) {
+          try {
+            const allUsersResult = await ApiService.getAllUsers();
+            if (allUsersResult.success && Array.isArray(allUsersResult.data)) {
+              const consultantData = {};
+              allUsersResult.data.forEach(user => {
+                if (consultantIds.includes(user._id) && user.fullName) {
+                  consultantData[user._id] = user.fullName;
+                }
+              });
+              setConsultantCache(prev => ({ ...prev, ...consultantData }));
+            }
+          } catch (error) {
+            console.log('[MY_SESSIONS] Error pre-caching consultant data:', error);
+          }
+        }
+        
+        setBookings(bookingsData);
+        console.log('[MY_SESSIONS] Sessions loaded:', bookingsData.length);
+      } else {
         if (result.needsLogin && onAuthError) {
           onAuthError(result);
           return;
         }
-        
-        if (result.error) {
-          Alert.alert('Error', result.error);
-        }
+        console.error('[MY_SESSIONS] Failed to fetch bookings:', result.error);
         setBookings([]);
       }
     } catch (error) {
-      console.error('[MYSESSIONS] Error fetching bookings:', error);
-      Alert.alert('Error', 'Failed to load sessions');
+      console.error('[MY_SESSIONS] Error:', error);
       setBookings([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [onAuthError, user?.role]);
+  }, [onAuthError]);
 
   useEffect(() => {
     if (user) {
@@ -74,12 +186,11 @@ const MySessionsSection = ({ user, onRefresh, onAuthError }) => {
     if (onRefresh) onRefresh();
   }, [fetchBookings, onRefresh]);
 
-  // Filter bookings based on active tab
   const getFilteredBookings = useCallback(() => {
     if (activeTab === 'all') return bookings;
     return bookings.filter(booking => {
       switch (activeTab) {
-        case 'scheduled':
+        case 'upcoming':
           return ['scheduled', 'pending'].includes(booking.status);
         case 'completed':
           return booking.status === 'completed';
@@ -91,50 +202,32 @@ const MySessionsSection = ({ user, onRefresh, onAuthError }) => {
     });
   }, [bookings, activeTab]);
 
-  const getStatusColor = (status) => {
-    const colors = {
-      scheduled: '#4CAF50',
-      pending: '#FFA726',
-      completed: '#2196F3',
-      cancelled: '#FF6B6B',
-      missed: '#9E9E9E',
-      'in-progress': '#FF9800'
+  const getStatusConfig = (status) => {
+    const configs = {
+      pending: { color: '#FF9500', bg: '#FFF4E6', icon: 'time-outline' },
+      scheduled: { color: '#34C759', bg: '#E8F7ED', icon: 'calendar-check-outline' },
+      'in-progress': { color: '#007AFF', bg: '#E6F3FF', icon: 'play-circle-outline' },
+      completed: { color: '#8E44AD', bg: '#F3E8FF', icon: 'checkmark-circle-outline' },
+      cancelled: { color: '#FF3B30', bg: '#FFE8E6', icon: 'close-circle-outline' },
+      missed: { color: '#8E8E93', bg: '#F2F2F7', icon: 'alert-circle-outline' }
     };
-    return colors[status] || '#666';
+    return configs[status] || { color: '#8E8E93', bg: '#F2F2F7', icon: 'help-circle-outline' };
   };
 
-  const getStatusIcon = (status) => {
-    const icons = {
-      scheduled: 'calendar',
-      pending: 'time',
-      completed: 'checkmark-circle',
-      cancelled: 'close-circle',
-      missed: 'alert-circle',
-      'in-progress': 'play-circle'
+  const formatDateTime = (dateString) => {
+    const date = new Date(dateString);
+    return {
+      date: date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+      time: date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
+      dayName: date.toLocaleDateString('en-GB', { weekday: 'short' })
     };
-    return icons[status] || 'help-circle';
-  };
-
-  const formatDateTime = (dateTime) => {
-    try {
-      const date = new Date(dateTime);
-      return {
-        date: date.toLocaleDateString('en-GB'),
-        time: date.toLocaleTimeString('en-GB', { 
-          hour: '2-digit', 
-          minute: '2-digit' 
-        })
-      };
-    } catch (error) {
-      return { date: 'Invalid Date', time: '' };
-    }
   };
 
   const getTabCount = (tab) => {
     switch (tab) {
       case 'all':
         return bookings.length;
-      case 'scheduled':
+      case 'upcoming':
         return bookings.filter(b => ['scheduled', 'pending'].includes(b.status)).length;
       case 'completed':
         return bookings.filter(b => b.status === 'completed').length;
@@ -145,138 +238,186 @@ const MySessionsSection = ({ user, onRefresh, onAuthError }) => {
     }
   };
 
-  const handleJoinMeeting = (booking) => {
+  const handleJoinMeeting = useCallback(async (booking) => {
     if (booking.meetingLink) {
-      // Handle meeting link navigation
-      console.log('Joining meeting:', booking.meetingLink);
+      try {
+        const supported = await Linking.canOpenURL(booking.meetingLink);
+        if (supported) {
+          await Linking.openURL(booking.meetingLink);
+        } else {
+          Alert.alert('Error', 'Cannot open meeting link');
+        }
+      } catch (error) {
+        Alert.alert('Error', 'Failed to open meeting link');
+      }
     } else {
-      Alert.alert('No Meeting Link', 'Meeting link will be available closer to the session time.');
+      Alert.alert('Meeting Link', 'Meeting link will be available 10 minutes before the session.');
     }
-  };
+  }, []);
 
-  const handleReschedule = (booking) => {
-    Alert.alert('Reschedule', 'Reschedule functionality will be implemented soon.');
-  };
-
-  const handleCancel = (booking) => {
+  const handleReschedule = useCallback((booking) => {
     Alert.alert(
-      'Cancel Session',
-      'Are you sure you want to cancel this session?',
+      'Reschedule Session',
+      'Would you like to reschedule this session?',
       [
-        { text: 'No', style: 'cancel' },
+        { text: 'Cancel', style: 'cancel' },
         { 
-          text: 'Yes', 
-          style: 'destructive',
+          text: 'Reschedule', 
           onPress: () => {
-            // Implement cancel functionality
-            console.log('Cancelling booking:', booking._id);
+            // Navigate to reschedule screen
+            console.log('Reschedule booking:', booking._id);
           }
         }
       ]
     );
-  };
+  }, []);
+
+  const handleCancelSession = useCallback((booking) => {
+    Alert.alert(
+      'Cancel Session',
+      'Are you sure you want to cancel this session? This action cannot be undone.',
+      [
+        { text: 'No', style: 'cancel' },
+        { 
+          text: 'Yes, Cancel', 
+          style: 'destructive',
+          onPress: () => {
+            // Implement cancel functionality
+            console.log('Cancel booking:', booking._id);
+          }
+        }
+      ]
+    );
+  }, []);
 
   const SessionCard = ({ booking }) => {
-    const { date, time } = formatDateTime(booking.bookingDateTime);
+    const [consultantName, setConsultantName] = useState('Loading...');
+    const { date, time, dayName } = formatDateTime(booking.bookingDateTime);
+    const statusConfig = getStatusConfig(booking.status);
     
-    // Determine other party name based on user role
-    const otherParty = user?.role === 'consultant' ? booking.user : booking.consultant;
-    const otherPartyName = otherParty?.fullName || 'Unknown';
-    const roleLabel = user?.role === 'consultant' ? 'Client' : 'Consultant';
+    // Load consultant name
+    useEffect(() => {
+      const loadConsultantName = async () => {
+        const name = await getConsultantName(booking.consultant);
+        setConsultantName(name);
+      };
+      loadConsultantName();
+    }, [booking.consultant, getConsultantName]);
+    
+    const isUpcoming = ['scheduled', 'pending'].includes(booking.status);
+    const canJoin = booking.status === 'scheduled';
 
     return (
       <View style={styles.sessionCard}>
         <View style={styles.cardHeader}>
-          <View style={styles.cardInfo}>
-            <Text style={styles.partyName}>
-              {roleLabel}: {otherPartyName}
-            </Text>
-            <Text style={styles.sessionDate}>{date} at {time}</Text>
+          <View style={styles.consultantInfo}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>
+                {consultantName && consultantName !== 'Loading...' ? consultantName.charAt(0).toUpperCase() : '?'}
+              </Text>
+            </View>
+            <View style={styles.consultantDetails}>
+              <Text style={styles.consultantName}>
+                {consultantName}
+              </Text>
+              <Text style={styles.sessionType}>Online Consultation</Text>
+            </View>
           </View>
-          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(booking.status) }]}>
-            <Ionicons 
-              name={getStatusIcon(booking.status)} 
-              size={12} 
-              color="#fff" 
-            />
-            <Text style={styles.statusText}>
+          <View style={[styles.statusBadge, { backgroundColor: statusConfig.bg }]}>
+            <Ionicons name={statusConfig.icon} size={12} color={statusConfig.color} />
+            <Text style={[styles.statusText, { color: statusConfig.color }]}>
               {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
             </Text>
           </View>
         </View>
 
-        <View style={styles.cardDetails}>
+        <View style={styles.sessionDetails}>
           <View style={styles.detailRow}>
-            <Ionicons name="time-outline" size={16} color="#666" />
-            <Text style={styles.detailText}>{booking.duration} minutes</Text>
+            <View style={styles.detailItem}>
+              <Ionicons name="calendar-outline" size={16} color="#007AFF" />
+              <Text style={styles.detailText}>{dayName}, {date}</Text>
+            </View>
+            <View style={styles.detailItem}>
+              <Ionicons name="time-outline" size={16} color="#007AFF" />
+              <Text style={styles.detailText}>{time}</Text>
+            </View>
           </View>
           
-          {booking.consultationDetail && (
-            <View style={styles.detailRow}>
-              <Ionicons name="document-text-outline" size={16} color="#666" />
-              <Text style={styles.detailText} numberOfLines={2}>
-                {booking.consultationDetail}
-              </Text>
+          <View style={styles.detailRow}>
+            <View style={styles.detailItem}>
+              <Ionicons name="hourglass-outline" size={16} color="#007AFF" />
+              <Text style={styles.detailText}>{booking.duration} min</Text>
             </View>
-          )}
+            <View style={styles.detailItem}>
+              <Ionicons name="card-outline" size={16} color="#007AFF" />
+              <Text style={styles.detailText}>ID: {booking._id.slice(-6)}</Text>
+            </View>
+          </View>
         </View>
 
-        {booking.status === 'scheduled' && (
-          <View style={styles.cardActions}>
-            {booking.meetingLink && (
+        {booking.consultationDetail && (
+          <View style={styles.consultationNote}>
+            <Ionicons name="document-text-outline" size={14} color="#8E8E93" />
+            <Text style={styles.noteText} numberOfLines={2}>
+              {booking.consultationDetail}
+            </Text>
+          </View>
+        )}
+
+        {isUpcoming && (
+          <View style={styles.actionButtons}>
+            {canJoin && (
               <TouchableOpacity 
                 style={styles.joinButton}
                 onPress={() => handleJoinMeeting(booking)}
               >
                 <Ionicons name="videocam" size={16} color="#fff" />
-                <Text style={styles.joinButtonText}>Join Meeting</Text>
+                <Text style={styles.joinButtonText}>Join Session</Text>
               </TouchableOpacity>
             )}
             
-            <View style={styles.actionButtons}>
+            <View style={styles.secondaryActions}>
               <TouchableOpacity 
-                style={styles.actionButton}
+                style={styles.secondaryButton}
                 onPress={() => handleReschedule(booking)}
               >
-                <Ionicons name="calendar-outline" size={14} color="#666" />
-                <Text style={styles.actionButtonText}>Reschedule</Text>
+                <Ionicons name="calendar-outline" size={14} color="#007AFF" />
+                <Text style={styles.secondaryButtonText}>Reschedule</Text>
               </TouchableOpacity>
               
               <TouchableOpacity 
-                style={[styles.actionButton, styles.cancelAction]}
-                onPress={() => handleCancel(booking)}
+                style={[styles.secondaryButton, styles.cancelButton]}
+                onPress={() => handleCancelSession(booking)}
               >
-                <Ionicons name="close-outline" size={14} color="#FF6B6B" />
-                <Text style={[styles.actionButtonText, styles.cancelText]}>Cancel</Text>
+                <Ionicons name="close-outline" size={14} color="#FF3B30" />
+                <Text style={[styles.secondaryButtonText, styles.cancelButtonText]}>Cancel</Text>
               </TouchableOpacity>
             </View>
           </View>
+        )}
+
+        {booking.status === 'completed' && (
+          <TouchableOpacity style={styles.reviewButton}>
+            <Ionicons name="star-outline" size={16} color="#FF9500" />
+            <Text style={styles.reviewButtonText}>Rate & Review</Text>
+          </TouchableOpacity>
         )}
       </View>
     );
   };
 
-  const TabButton = ({ tab, label, active, onPress }) => (
-    <TouchableOpacity
-      style={[styles.tabButton, active && styles.activeTab]}
-      onPress={onPress}
-    >
-      <Text style={[styles.tabText, active && styles.activeTabText]}>
-        {label}
-      </Text>
-      <View style={[styles.tabBadge, active && styles.activeTabBadge]}>
-        <Text style={[styles.badgeText, active && styles.activeBadgeText]}>
-          {getTabCount(tab)}
-        </Text>
-      </View>
-    </TouchableOpacity>
-  );
+  const tabs = [
+    { key: 'all', label: 'All', icon: 'list-outline' },
+    { key: 'upcoming', label: 'Upcoming', icon: 'calendar-outline' },
+    { key: 'completed', label: 'Completed', icon: 'checkmark-circle-outline' },
+    { key: 'cancelled', label: 'Cancelled', icon: 'close-circle-outline' }
+  ];
 
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#4CAF50" />
-        <Text style={styles.loadingText}>Loading sessions...</Text>
+        <ActivityIndicator size="large" color="#007AFF" />
+        <Text style={styles.loadingText}>Loading your sessions...</Text>
       </View>
     );
   }
@@ -285,33 +426,42 @@ const MySessionsSection = ({ user, onRefresh, onAuthError }) => {
 
   return (
     <View style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.title}>My Sessions</Text>
+        <Text style={styles.subtitle}>Consultations you have booked</Text>
+      </View>
+
       {/* Tab Navigation */}
       <View style={styles.tabContainer}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <TabButton
-            tab="all"
-            label="All"
-            active={activeTab === 'all'}
-            onPress={() => setActiveTab('all')}
-          />
-          <TabButton
-            tab="scheduled"
-            label="Upcoming"
-            active={activeTab === 'scheduled'}
-            onPress={() => setActiveTab('scheduled')}
-          />
-          <TabButton
-            tab="completed"
-            label="Completed"
-            active={activeTab === 'completed'}
-            onPress={() => setActiveTab('completed')}
-          />
-          <TabButton
-            tab="cancelled"
-            label="Cancelled"
-            active={activeTab === 'cancelled'}
-            onPress={() => setActiveTab('cancelled')}
-          />
+          {tabs.map((tab) => {
+            const count = getTabCount(tab.key);
+            const isActive = activeTab === tab.key;
+            
+            return (
+              <TouchableOpacity
+                key={tab.key}
+                style={[styles.tab, isActive && styles.activeTab]}
+                onPress={() => setActiveTab(tab.key)}
+              >
+                <Ionicons 
+                  name={tab.icon} 
+                  size={16} 
+                  color={isActive ? '#007AFF' : '#8E8E93'} 
+                />
+                <Text style={[styles.tabText, isActive && styles.activeTabText]}>
+                  {tab.label}
+                </Text>
+                {count > 0 && (
+                  <View style={[styles.tabBadge, isActive && styles.activeTabBadge]}>
+                    <Text style={[styles.tabBadgeText, isActive && styles.activeTabBadgeText]}>
+                      {count}
+                    </Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          })}
         </ScrollView>
       </View>
 
@@ -319,21 +469,37 @@ const MySessionsSection = ({ user, onRefresh, onAuthError }) => {
       <ScrollView 
         style={styles.sessionsList}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+          <RefreshControl 
+            refreshing={refreshing} 
+            onRefresh={handleRefresh}
+            colors={['#007AFF']}
+            tintColor="#007AFF"
+          />
         }
+        showsVerticalScrollIndicator={false}
       >
         {filteredBookings.length === 0 ? (
           <View style={styles.emptyState}>
-            <Ionicons name="calendar-outline" size={48} color="#ccc" />
+            <View style={styles.emptyIcon}>
+              <Ionicons 
+                name={activeTab === 'all' ? 'calendar-outline' : tabs.find(t => t.key === activeTab)?.icon} 
+                size={48} 
+                color="#C7C7CC" 
+              />
+            </View>
             <Text style={styles.emptyTitle}>
-              {activeTab === 'all' ? 'No sessions found' : `No ${activeTab} sessions`}
+              {activeTab === 'all' ? 'No Sessions Found' : `No ${activeTab} Sessions`}
             </Text>
-            <Text style={styles.emptyText}>
+            <Text style={styles.emptySubtitle}>
               {activeTab === 'all' 
-                ? 'Book your first consultation session' 
-                : `You don't have any ${activeTab} sessions`
-              }
+                ? 'Book your first consultation to get started'
+                : `You don't have any ${activeTab} sessions`}
             </Text>
+            {activeTab === 'all' && (
+              <TouchableOpacity style={styles.bookNowButton}>
+                <Text style={styles.bookNowText}>Book Consultation</Text>
+              </TouchableOpacity>
+            )}
           </View>
         ) : (
           filteredBookings.map((booking) => (
@@ -342,19 +508,19 @@ const MySessionsSection = ({ user, onRefresh, onAuthError }) => {
         )}
       </ScrollView>
 
-      {/* Summary Stats */}
+      {/* Bottom Stats */}
       {bookings.length > 0 && (
-        <View style={styles.statsContainer}>
-          <View style={styles.statItem}>
+        <View style={styles.bottomStats}>
+          <View style={styles.statCard}>
             <Text style={styles.statNumber}>{getTabCount('all')}</Text>
             <Text style={styles.statLabel}>Total</Text>
           </View>
-          <View style={styles.statItem}>
+          <View style={styles.statCard}>
             <Text style={styles.statNumber}>{getTabCount('completed')}</Text>
             <Text style={styles.statLabel}>Completed</Text>
           </View>
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>{getTabCount('scheduled')}</Text>
+          <View style={styles.statCard}>
+            <Text style={styles.statNumber}>{getTabCount('upcoming')}</Text>
             <Text style={styles.statLabel}>Upcoming</Text>
           </View>
         </View>
@@ -366,209 +532,303 @@ const MySessionsSection = ({ user, onRefresh, onAuthError }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#F2F2F7',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#F2F2F7',
   },
   loadingText: {
-    marginTop: 10,
+    marginTop: 12,
     fontSize: 16,
-    color: '#666',
+    color: '#8E8E93',
+    fontWeight: '500',
+  },
+  header: {
+    backgroundColor: '#fff',
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5EA',
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#1C1C1E',
+    marginBottom: 4,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: '#8E8E93',
   },
   tabContainer: {
     backgroundColor: '#fff',
-    paddingVertical: 10,
+    paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: '#E5E5EA',
   },
-  tabButton: {
+  tab: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 8,
-    marginHorizontal: 4,
+    paddingVertical: 10,
+    marginHorizontal: 8,
     borderRadius: 20,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#F2F2F7',
   },
   activeTab: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: '#E3F2FD',
   },
   tabText: {
     fontSize: 14,
-    color: '#666',
-    fontWeight: '500',
+    fontWeight: '600',
+    color: '#8E8E93',
+    marginLeft: 6,
   },
   activeTabText: {
-    color: '#fff',
+    color: '#007AFF',
   },
   tabBadge: {
-    marginLeft: 6,
-    backgroundColor: '#ddd',
+    marginLeft: 8,
+    backgroundColor: '#C7C7CC',
     borderRadius: 10,
     paddingHorizontal: 6,
     paddingVertical: 2,
+    minWidth: 20,
+    alignItems: 'center',
   },
   activeTabBadge: {
-    backgroundColor: '#fff',
+    backgroundColor: '#007AFF',
   },
-  badgeText: {
-    fontSize: 12,
-    color: '#666',
-    fontWeight: '600',
+  tabBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#fff',
   },
-  activeBadgeText: {
-    color: '#4CAF50',
+  activeTabBadgeText: {
+    color: '#fff',
   },
   sessionsList: {
     flex: 1,
-    padding: 16,
+    paddingHorizontal: 20,
+    paddingTop: 16,
   },
   sessionCard: {
     backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    elevation: 2,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 12,
+    alignItems: 'center',
+    marginBottom: 16,
   },
-  cardInfo: {
+  consultantInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
     flex: 1,
   },
-  partyName: {
+  avatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#007AFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  avatarText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  consultantDetails: {
+    flex: 1,
+  },
+  consultantName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
-    marginBottom: 4,
+    color: '#1C1C1E',
+    marginBottom: 2,
   },
-  sessionDate: {
-    fontSize: 14,
-    color: '#666',
+  sessionType: {
+    fontSize: 13,
+    color: '#8E8E93',
   },
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
   },
   statusText: {
     fontSize: 12,
-    color: '#fff',
-    fontWeight: '500',
+    fontWeight: '600',
     marginLeft: 4,
+    textTransform: 'capitalize',
   },
-  cardDetails: {
-    marginBottom: 12,
+  sessionDetails: {
+    marginBottom: 16,
   },
   detailRow: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  detailItem: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 6,
+    flex: 1,
   },
   detailText: {
     fontSize: 14,
-    color: '#666',
+    color: '#1C1C1E',
+    marginLeft: 8,
+    fontWeight: '500',
+  },
+  consultationNote: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#F2F2F7',
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 16,
+  },
+  noteText: {
+    fontSize: 13,
+    color: '#1C1C1E',
     marginLeft: 8,
     flex: 1,
+    lineHeight: 18,
   },
-  cardActions: {
-    borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
-    paddingTop: 12,
+  actionButtons: {
+    gap: 12,
   },
   joinButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#4CAF50',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
-    marginBottom: 12,
     justifyContent: 'center',
+    backgroundColor: '#34C759',
+    paddingVertical: 14,
+    borderRadius: 12,
   },
   joinButtonText: {
-    fontSize: 14,
-    color: '#fff',
+    fontSize: 16,
     fontWeight: '600',
-    marginLeft: 6,
+    color: '#fff',
+    marginLeft: 8,
   },
-  actionButtons: {
+  secondaryActions: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    gap: 12,
   },
-  actionButton: {
+  secondaryButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 6,
-    backgroundColor: '#f5f5f5',
-    flex: 1,
     justifyContent: 'center',
-    marginHorizontal: 4,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: '#F2F2F7',
   },
-  cancelAction: {
-    backgroundColor: '#ffebee',
+  cancelButton: {
+    backgroundColor: '#FFE8E6',
   },
-  actionButtonText: {
-    fontSize: 13,
-    color: '#666',
-    marginLeft: 4,
-    fontWeight: '500',
+  secondaryButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#007AFF',
+    marginLeft: 6,
   },
-  cancelText: {
-    color: '#FF6B6B',
+  cancelButtonText: {
+    color: '#FF3B30',
+  },
+  reviewButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFF4E6',
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  reviewButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FF9500',
+    marginLeft: 6,
   },
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 60,
+    paddingVertical: 80,
+    paddingHorizontal: 40,
+  },
+  emptyIcon: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: '#F2F2F7',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
   },
   emptyTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '600',
-    color: '#333',
-    marginTop: 16,
+    color: '#1C1C1E',
     marginBottom: 8,
-  },
-  emptyText: {
-    fontSize: 14,
-    color: '#666',
     textAlign: 'center',
-    lineHeight: 20,
   },
-  statsContainer: {
+  emptySubtitle: {
+    fontSize: 16,
+    color: '#8E8E93',
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 24,
+  },
+  bookNowButton: {
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 24,
+  },
+  bookNowText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  bottomStats: {
     flexDirection: 'row',
     backgroundColor: '#fff',
-    paddingVertical: 16,
+    paddingVertical: 20,
+    paddingHorizontal: 20,
     borderTopWidth: 1,
-    borderTopColor: '#eee',
+    borderTopColor: '#E5E5EA',
   },
-  statItem: {
+  statCard: {
     flex: 1,
     alignItems: 'center',
   },
   statNumber: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#333',
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#1C1C1E',
     marginBottom: 4,
   },
   statLabel: {
-    fontSize: 12,
-    color: '#666',
+    fontSize: 13,
+    color: '#8E8E93',
+    fontWeight: '500',
   },
 });
 

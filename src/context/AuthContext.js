@@ -1,4 +1,4 @@
-// src/context/AuthContext.js
+// src/context/AuthContext.js - Fixed to match backend expectations exactly
 import React, { createContext, useContext, useReducer, useEffect, useCallback } from 'react';
 import ApiService from '../services/ApiService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -53,13 +53,11 @@ const initialState = {
 export const AuthProvider = ({ children }) => {
   const [state, dispatch] = useReducer(authReducer, initialState);
 
-  // Memoize checkAuthStatus to prevent infinite re-renders
   const checkAuthStatus = useCallback(async () => {
     try {
       console.log('[AUTH] Checking auth status...');
       dispatch({ type: 'SET_LOADING', payload: true });
       
-      // Check if user data exists in storage
       const userData = await AsyncStorage.getItem('userData');
       const authToken = await AsyncStorage.getItem('authToken');
       
@@ -75,7 +73,24 @@ export const AuthProvider = ({ children }) => {
       console.error('[AUTH] Error checking auth status:', error);
       dispatch({ type: 'LOGOUT' });
     }
-  }, []); // Empty dependency array since this doesn't depend on any variables
+  }, []);
+
+  const refreshUserData = useCallback(async () => {
+    try {
+      const result = await ApiService.getUserProfile();
+      if (result.success) {
+        dispatch({ type: 'SET_USER', payload: result.data });
+        return { success: true, data: result.data };
+      } else if (result.needsLogin) {
+        dispatch({ type: 'LOGOUT' });
+        return { success: false, error: 'Session expired', needsLogin: true };
+      }
+      return result;
+    } catch (error) {
+      console.error('[AUTH] Error refreshing user data:', error);
+      return { success: false, error: 'Failed to refresh user data' };
+    }
+  }, []);
 
   useEffect(() => {
     checkAuthStatus();
@@ -171,7 +186,6 @@ export const AuthProvider = ({ children }) => {
         dispatch({ type: 'SET_USER', payload: userData });
         return { success: true, data: userData };
       } else {
-        // Handle session expiry
         if (result.needsLogin) {
           dispatch({ type: 'LOGOUT' });
         }
@@ -185,17 +199,42 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
+  // FIXED: Profile update method to match backend exactly
   const updateUserProfile = useCallback(async (profileData) => {
     try {
+      console.log('[AUTH_CONTEXT] Updating user profile with data:', profileData);
       dispatch({ type: 'SET_LOADING', payload: true });
       dispatch({ type: 'CLEAR_ERROR' });
 
+      // Determine if this is a consultant profile update
+      const isConsultantUpdate = profileData.role === 'consultant' || 
+                                 profileData.sessionFee || 
+                                 profileData.qualification || 
+                                 profileData.fieldOfStudy || 
+                                 profileData.university || 
+                                 profileData.yearsOfExperience || 
+                                 profileData.category;
+
+      console.log('[AUTH_CONTEXT] Is consultant update:', isConsultantUpdate);
+
+      // Use the single updateProfile method that handles both cases
       const result = await ApiService.updateProfile(profileData);
 
       if (result.success) {
-        const updatedUser = result.data.user || result.data;
-        dispatch({ type: 'UPDATE_USER', payload: updatedUser });
-        return { success: true, data: updatedUser };
+        console.log('[AUTH_CONTEXT] Profile update successful:', result.data);
+        
+        // Update user state with fresh data from response
+        if (result.data) {
+          const updatedUser = result.data.user || result.data;
+          
+          // Update the user data in state
+          dispatch({ type: 'SET_USER', payload: updatedUser });
+          
+          // Update local storage with fresh user data
+          await AsyncStorage.setItem('userData', JSON.stringify(updatedUser));
+        }
+        
+        return result;
       } else {
         // Handle session expiry
         if (result.needsLogin) {
@@ -203,10 +242,11 @@ export const AuthProvider = ({ children }) => {
           return { success: false, error: 'Session expired. Please login again.', needsLogin: true };
         }
         dispatch({ type: 'SET_ERROR', payload: result.error });
-        return { success: false, error: result.error };
+        return result;
       }
     } catch (error) {
-      const errorMsg = error.message || 'Profile update failed';
+      console.error('[AUTH_CONTEXT] Error updating user profile:', error);
+      const errorMsg = error.message || 'Failed to update profile';
       dispatch({ type: 'SET_ERROR', payload: errorMsg });
       return { success: false, error: errorMsg };
     } finally {
@@ -214,7 +254,7 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
-  // New Aadhaar verification function
+  // Aadhaar verification function
   const submitAadharVerification = useCallback(async (kycData) => {
     try {
       dispatch({ type: 'SET_LOADING', payload: true });
@@ -227,12 +267,10 @@ export const AuthProvider = ({ children }) => {
         const updatedUser = result.data.user || result.data;
         dispatch({ type: 'UPDATE_USER', payload: updatedUser });
         
-        // Update local storage with fresh user data
         await AsyncStorage.setItem('userData', JSON.stringify(updatedUser));
         
         return { success: true, data: updatedUser };
       } else {
-        // Handle session expiry
         if (result.needsLogin) {
           dispatch({ type: 'LOGOUT' });
           return { success: false, error: 'Session expired. Please login again.', needsLogin: true };
@@ -249,23 +287,6 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
-  const refreshUserData = useCallback(async () => {
-    try {
-      const result = await ApiService.getUserProfile();
-      if (result.success) {
-        dispatch({ type: 'SET_USER', payload: result.data });
-        return { success: true, data: result.data };
-      } else if (result.needsLogin) {
-        dispatch({ type: 'LOGOUT' });
-        return { success: false, error: 'Session expired', needsLogin: true };
-      }
-      return result;
-    } catch (error) {
-      console.error('[AUTH] Error refreshing user data:', error);
-      return { success: false, error: 'Failed to refresh user data' };
-    }
-  }, []);
-
   const logout = useCallback(async () => {
     try {
       dispatch({ type: 'SET_LOADING', payload: true });
@@ -278,7 +299,6 @@ export const AuthProvider = ({ children }) => {
       return { success: true };
     } catch (error) {
       console.error('[AUTH] Logout error:', error);
-      // Always logout locally even if API call fails
       dispatch({ type: 'LOGOUT' });
       return { success: true };
     }
@@ -288,7 +308,6 @@ export const AuthProvider = ({ children }) => {
     dispatch({ type: 'CLEAR_ERROR' });
   }, []);
 
-  // Memoize the context value to prevent unnecessary re-renders
   const value = React.useMemo(() => ({
     ...state,
     signUp,
@@ -300,7 +319,7 @@ export const AuthProvider = ({ children }) => {
     checkAuthStatus,
     updateUserProfile,
     refreshUserData,
-    submitAadharVerification, // Added new function
+    submitAadharVerification,
   }), [
     state,
     signUp,

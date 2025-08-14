@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -18,7 +18,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import PaymentScreen from './PaymentScreen';
 import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
-
 
 const UnifiedBookingModal = ({ visible, onClose, expert }) => {
   const navigation = useNavigation();
@@ -40,24 +39,192 @@ const UnifiedBookingModal = ({ visible, onClose, expert }) => {
   const [bookingData, setBookingData] = useState(null);
   const [razorpayOrder, setRazorpayOrder] = useState(null);
 
+  // New states for dynamic data
+  const [availableTimeSlots, setAvailableTimeSlots] = useState([]);
+  const [loadingAvailability, setLoadingAvailability] = useState(false);
+  const [bookedSlots, setBookedSlots] = useState([]);
+
   const today = new Date();
 
-  // Available time slots
-  const timeSlots = [
-    { id: '12:45', label: '12:45 PM' },
-    { id: '13:00', label: '01:00 PM' },
-    { id: '13:15', label: '01:15 PM' },
-    { id: '14:00', label: '02:00 PM' },
-    { id: '14:30', label: '02:30 PM' },
-    { id: '15:00', label: '03:00 PM' },
-  ];
+  // Canonicalize any day inputs (full names, short names, numbers, or ranges) to JS indexes: Sun=0..Sat=6
+const normalizeAvailableDays = (rawDays) => {
+  if (!Array.isArray(rawDays) || rawDays.length === 0) return new Set();
+
+  const map = {
+    '0': 0, '7': 0, sun: 0, sunday: 0,
+    '1': 1, mon: 1, monday: 1,
+    '2': 2, tue: 2, tues: 2, tuesday: 2,
+    '3': 3, wed: 3, weds: 3, wednesday: 3,
+    '4': 4, thu: 4, thur: 4, thurs: 4, thursday: 4,
+    '5': 5, fri: 5, friday: 5,
+    '6': 6, sat: 6, saturday: 6,
+  };
+
+  const out = new Set();
+
+  const addIdx = (s) => {
+    const key = s.toLowerCase().replace(/\./g, '').trim();
+    const idx = map[key] ?? map[key.slice(0, 3)];
+    if (typeof idx === 'number') out.add(idx);
+  };
+
+  rawDays.forEach((d) => {
+    const txt = String(d).trim();
+    // Support ranges like "Mon-Fri" or "2-5"
+    if (txt.includes('-')) {
+      const [a, b] = txt.split('-').map((x) => x.trim());
+      const start = map[a.toLowerCase()] ?? map[a.toLowerCase().slice(0, 3)] ?? (isNaN(+a) ? undefined : (+a % 7));
+      const end   = map[b.toLowerCase()] ?? map[b.toLowerCase().slice(0, 3)] ?? (isNaN(+b) ? undefined : (+b % 7));
+      if (typeof start === 'number' && typeof end === 'number') {
+        let i = start;
+        // walk circularly until we hit end
+        while (true) {
+          out.add(i);
+          if (i === end) break;
+          i = (i + 1) % 7;
+        }
+        return;
+      }
+    }
+    addIdx(txt);
+  });
+
+  return out;
+};
+
+const availableDayIndexes = useMemo(() => {
+  const days = expert?.consultantRequest?.consultantProfile?.days;
+  const set = normalizeAvailableDays(days || []);
+  console.log('Available days (normalized):', Array.from(set));
+  return set;
+}, [expert]);
+
 
   const months = [
     'January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December'
   ];
 
-  const weekdays = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU'];
+  const weekdays = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
+
+  // Fetch time slots when date is selected
+  useEffect(() => {
+    if (selectedDate && expert) {
+      fetchTimeSlots(selectedDate);
+    }
+  }, [selectedDate, expert]);
+
+  // Clear selection when month changes
+  useEffect(() => {
+    if (selectedDate) {
+      const selectedMonth = selectedDate.getMonth();
+      const currentViewMonth = currentMonth.getMonth();
+      const selectedYear = selectedDate.getFullYear();
+      const currentViewYear = currentMonth.getFullYear();
+      
+      if (selectedMonth !== currentViewMonth || selectedYear !== currentViewYear) {
+        
+        setSelectedDate(null);
+        setSelectedTime(null);
+        setAvailableTimeSlots([]);
+      }
+    }
+  }, [currentMonth]);
+
+  // Fetch time slots and booked slots
+  const fetchTimeSlots = async (date) => {
+    try {
+      setLoadingAvailability(true);
+
+      // Check if day is available
+      const dayIndex = date.getDay();
+      if (availableDayIndexes.size > 0 && !availableDayIndexes.has(dayIndex)) {
+        setAvailableTimeSlots([]);
+        setLoadingAvailability(false);
+        return;
+      }
+
+      // Generate time slots based on consultant availability
+      const generatedSlots = generateTimeSlots(date);
+      
+      // Fetch booked slots for this date
+      const bookedSlotsResult = await ApiService.getBookedSlots(expert._id, date);
+      let bookedTimes = [];
+      
+      if (bookedSlotsResult.success) {
+        bookedTimes = (bookedSlotsResult.data || []).map(slot => slot.time);
+        setBookedSlots(bookedTimes);
+      }
+
+      // Filter out booked slots
+      const availableSlots = generatedSlots.filter(slot => 
+        !bookedTimes.includes(slot.id)
+      );
+
+      setAvailableTimeSlots(availableSlots);
+    } catch (error) {
+      console.error('Error fetching time slots:', error);
+      setAvailableTimeSlots([]);
+    } finally {
+      setLoadingAvailability(false);
+    }
+  };
+
+  // Generate time slots based on consultant's available time per day
+  const generateTimeSlots = (selectedDate) => {
+    if (!expert?.consultantRequest?.consultantProfile) return [];
+
+    const profile = expert.consultantRequest.consultantProfile;
+    
+    // Parse availableTimePerDay - could be "8 hours", "6-8 hours", etc.
+    const availableTimeStr = profile.availableTimePerDay || '8';
+    const hoursMatch = availableTimeStr.match(/(\d+)/);
+    const availableHours = hoursMatch ? parseInt(hoursMatch[1]) : 8;
+    
+    // Business hours: 9 AM to 9 PM (with consultant's available hours)
+    const startHour = 9;
+    const maxEndHour = Math.min(21, startHour + availableHours); // Cap at 9 PM
+    
+    const now = new Date();
+    const isToday = selectedDate.toDateString() === now.toDateString();
+    
+    // If it's today, start from current time + 30 minutes buffer
+    let earliestTime = new Date(selectedDate);
+    if (isToday) {
+      const bufferTime = new Date(now.getTime() + 30 * 60 * 1000);
+      earliestTime.setHours(bufferTime.getHours(), bufferTime.getMinutes(), 0, 0);
+    } else {
+      earliestTime.setHours(startHour, 0, 0, 0);
+    }
+
+    const slots = [];
+    
+    // Generate 30-minute slots
+    for (let hour = startHour; hour < maxEndHour; hour++) {
+      for (let minute = 0; minute < 60; minute += 30) {
+        const slotTime = new Date(selectedDate);
+        slotTime.setHours(hour, minute, 0, 0);
+        
+        // Skip past times and too early times
+        if (slotTime < earliestTime) continue;
+        
+        const timeStr = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+        const displayTime = slotTime.toLocaleTimeString([], { 
+          hour: 'numeric', 
+          minute: '2-digit',
+          hour12: true 
+        });
+        
+        slots.push({
+          id: timeStr,
+          label: displayTime,
+          datetime: slotTime
+        });
+      }
+    }
+
+    return slots;
+  };
 
   const getImageSource = () => {
     if (!expert?.profileImage || 
@@ -95,6 +262,8 @@ const UnifiedBookingModal = ({ visible, onClose, expert }) => {
     setShowPaymentScreen(false);
     setBookingData(null);
     setRazorpayOrder(null);
+    setAvailableTimeSlots([]);
+    setBookedSlots([]);
   };
 
   const handleClose = () => {
@@ -151,50 +320,70 @@ const UnifiedBookingModal = ({ visible, onClose, expert }) => {
     }
   };
 
-  // Calculate session fees based on duration
+  // Calculate session fees based on duration and consultant's rate
   const getSessionFee = (duration) => {
     const baseRate = expert?.consultantRequest?.consultantProfile?.sessionFee || 1000;
     if (duration === '30') {
       return baseRate;
-    } else {
+    } else if (duration === '60') {
       return Math.round(baseRate * 1.8);
     }
+    return baseRate;
   };
 
-  // Date/Time logic
+  // Check if date should be disabled
   const isDateDisabled = (date) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    return date < today;
+    
+    const checkDate = new Date(date);
+    checkDate.setHours(0, 0, 0, 0);
+    
+    // Past dates are disabled
+    if (checkDate < today) return true;
+    
+    // If no availability set, allow all future dates
+    if (availableDayIndexes.size === 0) return false;
+    
+    // Check if day is in consultant's available days
+    const dayIndex = checkDate.getDay();
+    return !availableDayIndexes.has(dayIndex);
   };
 
   const handleDateSelect = (date) => {
-    if (isDateDisabled(date)) return;
+    if (isDateDisabled(date)) {
+      return;
+    }
+    
+    console.log('Selecting date:', date);
+    console.log('[Select]', date.toDateString(), 'weekday=', date.getDay());
+
     setSelectedDate(date);
     setSelectedTime(null);
+    setAvailableTimeSlots([]);
   };
 
   const navigateMonth = (direction) => {
     const newMonth = new Date(currentMonth);
     newMonth.setMonth(currentMonth.getMonth() + direction);
     setCurrentMonth(newMonth);
-    setSelectedDate(null);
-    setSelectedTime(null);
   };
 
+  // Generate calendar days
   const calendarDays = useMemo(() => {
     const year = currentMonth.getFullYear();
     const month = currentMonth.getMonth();
     
     const firstDayOfMonth = new Date(year, month, 1);
     const lastDayOfMonth = new Date(year, month + 1, 0);
-    const firstDayWeekday = (firstDayOfMonth.getDay() + 6) % 7;
+    const firstDayWeekday = firstDayOfMonth.getDay(); // 0 = Sunday
     
     const days = [];
     
-    const prevMonth = new Date(year, month - 1, 0);
-    for (let i = firstDayWeekday - 1; i >= 0; i--) {
-      const date = new Date(year, month - 1, prevMonth.getDate() - i);
+    // Previous month days
+   const prevMonthLastDay = new Date(year, month, 0);
+for (let i = firstDayWeekday - 1; i >= 0; i--) {
+  const date = new Date(year, month - 1, prevMonthLastDay.getDate() - i);
       days.push({
         date,
         isCurrentMonth: false,
@@ -204,6 +393,7 @@ const UnifiedBookingModal = ({ visible, onClose, expert }) => {
       });
     }
     
+    // Current month days
     for (let day = 1; day <= lastDayOfMonth.getDate(); day++) {
       const date = new Date(year, month, day);
       const isToday = today.toDateString() === date.toDateString();
@@ -219,6 +409,7 @@ const UnifiedBookingModal = ({ visible, onClose, expert }) => {
       });
     }
     
+    // Next month days to fill grid
     const totalCells = Math.ceil(days.length / 7) * 7;
     let nextMonthDay = 1;
     while (days.length < totalCells) {
@@ -234,7 +425,7 @@ const UnifiedBookingModal = ({ visible, onClose, expert }) => {
     }
     
     return days;
-  }, [currentMonth, selectedDate, today]);
+  }, [currentMonth, selectedDate, today, availableDayIndexes]);
 
   const formatSelectedDate = () => {
     if (!selectedDate) return '';
@@ -244,110 +435,87 @@ const UnifiedBookingModal = ({ visible, onClose, expert }) => {
     });
   };
 
-  // Backend integration
- // Alternative version if you want to make API call for free trials too
-// Replace the existing handleCreateBooking function with this:
-
-// Replace your handleCreateBooking function with this version:
-
-const handleCreateBooking = async () => {
-  if (!selectedDate || !selectedTime) {
-    Alert.alert('Selection Required', 'Please select both date and time for your consultation.');
-    return;
-  }
-
-  try {
-    setLoading(true);
-    
-    // Combine date and time
-    const [hours, minutes] = selectedTime.split(':');
-    const bookingDateTime = new Date(selectedDate);
-    bookingDateTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
-    
-    // Check if it's a free trial (5 minutes) - handle directly without API call
-    if (selectedDuration === '5') {
-      console.log('Free trial booking - handling locally');
-      setBookingCreated(true);
-      setCurrentStep('confirmation');
-      Alert.alert(
-        'Booking Confirmed!', 
-        'Your free trial consultation has been scheduled successfully.',
-        [{ text: 'OK', onPress: handleClose }]
-      );
+  const handleCreateBooking = async () => {
+    if (!selectedDate || !selectedTime) {
+      Alert.alert('Selection Required', 'Please select both date and time for your consultation.');
       return;
     }
-    
-    // Prepare booking data for paid bookings
-    const newBookingData = {
-      consultantId: expert._id,
-      userId: user._id,
-      datetime: bookingDateTime.toISOString(),
-      duration: parseInt(selectedDuration),
-      consultationDetail: projectDetails || 'General consultation'
-    };
 
-    console.log('Creating paid booking with data:', newBookingData);
-
-    // Call backend API for paid bookings
-    const result = await ApiService.createBooking(newBookingData);
-    console.log('Booking API result:', result);
-    
-    // Check if the API call failed due to server format issues
-    if (!result.success) {
-      if (result.error?.includes('invalid format') || result.error?.includes('Server returned')) {
-        console.error('Server format error, showing user-friendly message');
-        throw new Error('Unable to connect to booking service. Please try again later.');
-      } else if (result.needsLogin) {
-        Alert.alert(
-          'Login Required',
-          'Your session has expired. Please login again.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Login', onPress: () => {
-              handleClose();
-              navigation.navigate('Login');
-            }}
-          ]
-        );
+    try {
+      setLoading(true);
+      
+      // Combine date and time
+      const [hours, minutes] = selectedTime.split(':');
+      const bookingDateTime = new Date(selectedDate);
+      bookingDateTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+      
+      // Check if booking is at least 30 minutes from now
+      const nowPlus30 = new Date(Date.now() + 30 * 60 * 1000);
+      if (bookingDateTime.getTime() < nowPlus30.getTime()) {
+        Alert.alert('Invalid Time', 'Please choose a time at least 30 minutes from now.');
+        setLoading(false);
         return;
-      } else {
-        throw new Error(result.error || 'Failed to create booking');
       }
-    }
+      
+      // Prepare booking data
+      const newBookingData = {
+        consultantId: expert._id,
+        userId: user._id,
+        datetime: bookingDateTime.toISOString(),
+        duration: parseInt(selectedDuration),
+        consultationDetail: projectDetails || 'General consultation'
+      };
 
-    // API call successful - process the response
-    setBookingData(newBookingData);
-    
-    if (result.data?.razorpayOrder) {
-      // Handle payment for paid bookings
-      console.log('Setting up payment with Razorpay order:', result.data.razorpayOrder);
-      setRazorpayOrder(result.data.razorpayOrder);
-      setBookingData({
-        ...newBookingData,
-        bookingId: result.data.bookingId
-      });
-      setShowPaymentScreen(true);
-    } else {
-      // No payment needed (shouldn't happen for paid bookings, but handle gracefully)
-      console.log('No payment required, showing confirmation');
-      setBookingCreated(true);
-      setCurrentStep('confirmation');
-      Alert.alert(
-        'Booking Confirmed!',
-        'Your consultation has been scheduled successfully.',
-        [{ text: 'OK', onPress: handleClose }]
-      );
+      console.log('Creating booking with data:', newBookingData);
+
+      const result = await ApiService.createBooking(newBookingData);
+      console.log('Booking API result:', result);
+      
+      if (!result.success) {
+        if (result.needsLogin) {
+          Alert.alert(
+            'Login Required',
+            'Your session has expired. Please login again.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Login', onPress: () => {
+                handleClose();
+                navigation.navigate('Login');
+              }}
+            ]
+          );
+          return;
+        } else {
+          throw new Error(result.error || 'Failed to create booking');
+        }
+      }
+
+      // Handle successful booking
+      if (selectedDuration === '5' || !result.data?.razorpayOrder) {
+        // Free trial or no payment required
+        setBookingCreated(true);
+        setCurrentStep('confirmation');
+        Alert.alert(
+          'Booking Confirmed!', 
+          'Your consultation has been scheduled successfully.',
+          [{ text: 'OK', onPress: handleClose }]
+        );
+      } else {
+        // Payment required
+        setBookingData({
+          ...newBookingData,
+          bookingId: result.data.bookingId
+        });
+        setRazorpayOrder(result.data.razorpayOrder);
+        setShowPaymentScreen(true);
+      }
+    } catch (error) {
+      console.error('Booking creation error:', error);
+      Alert.alert('Booking Error', error.message || 'Failed to create booking. Please try again.');
+    } finally {
+      setLoading(false);
     }
-  } catch (error) {
-    console.error('Booking creation error:', error);
-    
-    // Show user-friendly error message
-    const errorMessage = error.message || 'Failed to create booking. Please try again.';
-    Alert.alert('Booking Error', errorMessage);
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   // Handle payment success
   const handlePaymentSuccess = () => {
@@ -361,10 +529,8 @@ const handleCreateBooking = async () => {
     );
   };
 
-  // Handle payment screen close
   const handlePaymentClose = () => {
     setShowPaymentScreen(false);
-    // Don't reset other states, user can retry payment
   };
 
   // Render different steps
@@ -454,7 +620,8 @@ const handleCreateBooking = async () => {
             />
             <View style={styles.consultantText}>
               <Text style={styles.consultantMessage}>
-                "You decided to take the lead on this new project, but you still feel like you can use some help/guidance? Let's talk about your project requirements."
+                {expert?.consultantRequest?.consultantProfile?.shortBio || 
+                 "Let's discuss your project requirements and how I can help you achieve your goals."}
               </Text>
             </View>
           </View>
@@ -515,6 +682,25 @@ const handleCreateBooking = async () => {
               </Text>
             </TouchableOpacity>
           </View>
+
+          {/* Show consultant availability info */}
+          {expert?.consultantRequest?.consultantProfile && (
+            <View style={styles.availabilityInfo}>
+              <Text style={styles.availabilityTitle}>Consultant Availability:</Text>
+              <Text style={styles.availabilityText}>
+                Available {expert.consultantRequest.consultantProfile.daysPerWeek || '5'} days per week
+              </Text>
+              <Text style={styles.availabilityText}>
+                {expert.consultantRequest.consultantProfile.availableTimePerDay || '8 hours'} per day
+              </Text>
+              <Text style={styles.availabilityText}>
+                {expert.consultantRequest.consultantProfile.yearsOfExperience} years of experience
+              </Text>
+              <Text style={styles.availabilityText}>
+                Days: {expert.consultantRequest.consultantProfile.days?.join(', ') || 'Not specified'}
+              </Text>
+            </View>
+          )}
         </View>
       </View>
 
@@ -541,6 +727,16 @@ const handleCreateBooking = async () => {
           contentContainerStyle={styles.scrollContent}
         >
           <Text style={styles.question}>When would you like to meet?</Text>
+
+          {/* Available days info */}
+          {expert?.consultantRequest?.consultantProfile?.days && (
+            <View style={styles.availableDaysInfo}>
+              <Text style={styles.availableDaysTitle}>Available Days:</Text>
+              <Text style={styles.availableDaysText}>
+                {expert.consultantRequest.consultantProfile.days.join(', ')}
+              </Text>
+            </View>
+          )}
 
           {/* Calendar Header */}
           <View style={styles.calendarHeader}>
@@ -605,26 +801,44 @@ const handleCreateBooking = async () => {
                 Choose a time on {formatSelectedDate()}
               </Text>
               
-              <View style={styles.timeSlotsContainer}>
-                {timeSlots.map((slot) => (
-                  <TouchableOpacity
-                    key={slot.id}
-                    style={[
-                      styles.timeSlot,
-                      selectedTime === slot.id && styles.selectedTimeSlot
-                    ]}
-                    onPress={() => setSelectedTime(slot.id)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[
-                      styles.timeSlotText,
-                      selectedTime === slot.id && styles.selectedTimeSlotText
-                    ]}>
-                      {slot.label}
+              {loadingAvailability ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="small" color="#2E7D32" />
+                  <Text style={styles.loadingText}>Loading available slots...</Text>
+                </View>
+              ) : availableTimeSlots.length === 0 ? (
+                <View style={styles.noSlotsContainer}>
+                  <Text style={styles.noSlotsText}>
+                    No available time slots for this date
+                  </Text>
+                  {bookedSlots.length > 0 && (
+                    <Text style={styles.noSlotsSubtext}>
+                      Booked slots: {bookedSlots.join(', ')}
                     </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+                  )}
+                </View>
+              ) : (
+                <View style={styles.timeSlotsContainer}>
+                  {availableTimeSlots.map((slot) => (
+                    <TouchableOpacity
+                      key={slot.id}
+                      style={[
+                        styles.timeSlot,
+                        selectedTime === slot.id && styles.selectedTimeSlot
+                      ]}
+                      onPress={() => setSelectedTime(slot.id)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[
+                        styles.timeSlotText,
+                        selectedTime === slot.id && styles.selectedTimeSlotText
+                      ]}>
+                        {slot.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
             </View>
           )}
 
@@ -680,7 +894,7 @@ const handleCreateBooking = async () => {
           Date: {selectedDate?.toLocaleDateString()}
         </Text>
         <Text style={styles.confirmationDetail}>
-          Time: {timeSlots.find(slot => slot.id === selectedTime)?.label}
+          Time: {availableTimeSlots.find(slot => slot.id === selectedTime)?.label}
         </Text>
         <Text style={styles.confirmationDetail}>
           Duration: {selectedDuration} minutes
@@ -946,6 +1160,7 @@ const styles = StyleSheet.create({
   },
   durationOptions: {
     gap: 12,
+    marginBottom: 24,
   },
   durationOption: {
     backgroundColor: '#fff',
@@ -967,6 +1182,24 @@ const styles = StyleSheet.create({
   },
   selectedDurationText: {
     color: '#fff',
+  },
+  availabilityInfo: {
+    backgroundColor: '#f8f9fa',
+    padding: 16,
+    borderRadius: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: '#2E7D32',
+  },
+  availabilityTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 8,
+  },
+  availabilityText: {
+    fontSize: 13,
+    color: '#666',
+    marginBottom: 4,
   },
   continueButton: {
     backgroundColor: '#2E7D32',
@@ -993,8 +1226,24 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '600',
     color: '#333',
-    marginBottom: 24,
+    marginBottom: 16,
     marginTop: 16,
+  },
+  availableDaysInfo: {
+    backgroundColor: '#e8f5e8',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 20,
+  },
+  availableDaysTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#2E7D32',
+    marginBottom: 4,
+  },
+  availableDaysText: {
+    fontSize: 13,
+    color: '#2E7D32',
   },
   calendarHeader: {
     flexDirection: 'row',
@@ -1077,6 +1326,32 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#333',
     marginBottom: 16,
+  },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 20,
+  },
+  loadingText: {
+    marginLeft: 8,
+    fontSize: 14,
+    color: '#666',
+  },
+  noSlotsContainer: {
+    paddingVertical: 20,
+    alignItems: 'center',
+  },
+  noSlotsText: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+  },
+  noSlotsSubtext: {
+    fontSize: 12,
+    color: '#999',
+    textAlign: 'center',
+    marginTop: 8,
   },
   timeSlotsContainer: {
     flexDirection: 'row',
