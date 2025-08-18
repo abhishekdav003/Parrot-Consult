@@ -4,7 +4,9 @@ import { Platform } from 'react-native';
 import RNBlobUtil from 'react-native-blob-util';
 
 // const BASE_URL = 'http://192.168.0.177:8011/api/v1';
-const BASE_URL = 'https://dev.api.parrotconsult.com/api/v1';
+const BASE_URL = 'http://10.0.2.2:8011/api/v1';
+
+// const BASE_URL = 'https://dev.api.parrotconsult.com/api/v1';
 
 
 const toLocalDateOnly = (date) => {
@@ -200,7 +202,7 @@ class ApiService {
       body: JSON.stringify({
         phoneNumber: phone,
         password: password,
-        OTPverified: false
+        OTPverified: true
       }),
     });
 
@@ -431,7 +433,7 @@ class ApiService {
   // Get all users
   async getAllUsers() {
     console.log('[API] getAllUsers called');
-    const result = await this.apiCall('/user/allusers', {
+    const result = await this.apiCall('/global/globalseeallactiveconsultants', {
       method: 'GET',
     });
     console.log('[API] getAllUsers result:', result);
@@ -674,6 +676,17 @@ async createBooking(bookingData) {
     return result;
   }
 
+  async getConsultantStatus() {
+    console.log('[API] Fetching consultant status...');
+
+    const result = await this.apiCall('/user/consultantStatus', {
+      method: 'GET',
+    });
+
+    console.log('[API] Consultant status result:', result);
+    return result;
+  }
+
   async createRazorpayOrder(amount) {
     console.log('[API] Creating Razorpay order with amount:', amount);
     
@@ -716,10 +729,45 @@ async createBooking(bookingData) {
     });
   }
 
-  async getAllReels(page = 1) {
-    return await this.apiCall(`/reel/feed?page=${page}&limit=10`, {
+ // Updated getAllReels method for infinite scroll
+  async getAllReels(page = 1, limit = 15) {
+    console.log(`[API] Getting reels - page: ${page}, limit: ${limit}`);
+    const result = await this.apiCall(`/reel/feed?page=${page}&limit=${limit}`, {
       method: 'GET',
     });
+    console.log('[API] getAllReels result:', result);
+    return result;
+  }
+
+  // Updated likeReel method to handle like/unlike
+  async likeReel(reelId) {
+    console.log('[API] Toggling like for reel:', reelId);
+    
+    // Extract original reel ID (remove page suffix if present)
+    const originalReelId = reelId.split('_')[0];
+    
+    const result = await this.apiCall(`/reel/${originalReelId}/like`, {
+      method: 'POST',
+    });
+    
+    console.log('[API] Like reel result:', result);
+    return result;
+  }
+
+  // Updated addComment method
+  async addComment(reelId, comment) {
+    console.log('[API] Adding comment to reel:', reelId, comment);
+    
+    // Extract original reel ID (remove page suffix if present)
+    const originalReelId = reelId.split('_')[0];
+    
+    const result = await this.apiCall(`/reel/${originalReelId}/comment`, {
+      method: 'POST',
+      body: JSON.stringify({ comment }),
+    });
+    
+    console.log('[API] Add comment result:', result);
+    return result;
   }
 
   async getUserReels() {
@@ -767,6 +815,17 @@ async createBooking(bookingData) {
       return { success: false, error: 'Server is not reachable' };
     }
   }
+  async getChatBotResponse(prompt) {
+  console.log('[API] Getting chatbot response for prompt:', prompt);
+  
+  const result = await this.apiCall('/openai/generate', {
+    method: 'POST',
+    body: JSON.stringify({ prompt }),
+  });
+  
+  console.log('[API] ChatBot response result:', result);
+  return result;
+}
 }
 
 export default new ApiService();

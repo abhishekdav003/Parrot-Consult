@@ -32,9 +32,8 @@ const ExpertsSection = ({ onBookNow }) => {
       
       if (result.success) {
         const approvedExperts = result.data.filter(user => 
-          user.consultantRequest?.status === 'approved' && 
-          user.role === 'consultant'
-        );
+  user.role === 'consultant'
+);
         setExperts(approvedExperts);
       } else {
         setError(result.error || 'Failed to fetch experts');

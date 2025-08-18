@@ -63,10 +63,9 @@ const OTPVerificationScreen = ({ navigation, route }) => {
             {
               text: 'OK',
               onPress: () => {
-                navigation.reset({
-                  index: 0,
-                  routes: [{ name: 'Login' }],
-                });
+                navigation.navigate('Main', {
+  screen: 'Login',
+});
               }
             }
           ]

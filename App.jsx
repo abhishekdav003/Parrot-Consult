@@ -12,12 +12,13 @@ import SignUpScreen from './src/screens/SignUpScreen';
 import OTPVerificationScreen from './src/screens/OTPVerificationScreen';
 import PasswordVerificationScreen from './src/screens/PasswordVerificationScreen';
 import DashboardScreen from './src/screens/DashboardScreen';
-import SearchScreen from './src/screens/SearchScreen';
+// import SearchScreen from './src/screens/SearchScreen'; // Removed - replaced with ChatBot
 import ReelsScreen from './src/screens/ReelsScreen';
 import NotificationsScreen from './src/screens/NotificationsScreen';
 import CategoriesScreen from './src/screens/CategoriesScreen';
 import ConsultantListScreen from './src/screens/ConsultantListScreen';
 import ExpertProfileScreen from './src/screens/ExpertProfileScreen';
+import ChatBot from './src/screens/ChatBot'; // Import ChatBot component
 
 import Navbar from './src/components/Navbar/Navbar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -46,7 +47,7 @@ const MainTabNavigator = () => {
       }}
     >
       <Tab.Screen name="Home" component={HomeScreen} />
-      <Tab.Screen name="Search" component={SearchScreen} />
+      <Tab.Screen name="Search" component={ChatBot} />
       <Tab.Screen 
         name="Reels" 
         component={ReelsScreen}
@@ -57,6 +58,17 @@ const MainTabNavigator = () => {
       <Tab.Screen name="Notifications" component={NotificationsScreen} />
       <Tab.Screen name="Login" component={LoginScreen} />
       <Tab.Screen name="Dashboard" component={DashboardScreen} />
+      
+      {/* ChatBot Tab - Hidden from Tab Bar but accessible via navigation */}
+      <Tab.Screen 
+        name="ChatBot" 
+        component={ChatBot}
+        options={{
+          tabBarButton: () => null,
+          tabBarStyle: { display: 'none' },
+        }}
+      />
+      
       <Tab.Screen 
         name="ExpertProfile" 
         component={ExpertProfileScreen}
@@ -107,6 +119,18 @@ const App = () => {
             <Stack.Screen name="SignUp" component={SignUpScreen} />
             <Stack.Screen name="OTPVerification" component={OTPVerificationScreen} />
             <Stack.Screen name="PasswordVerification" component={PasswordVerificationScreen} />
+            
+            {/* ChatBot as Stack Screen for better navigation control */}
+            <Stack.Screen 
+              name="ChatBotStack" 
+              component={ChatBot}
+              options={{
+                headerShown: false,
+                presentation: 'card',
+                animation: 'slide_from_right',
+              }}
+            />
+            
             <Stack.Screen 
               name="Categories" 
               component={CategoriesScreen}

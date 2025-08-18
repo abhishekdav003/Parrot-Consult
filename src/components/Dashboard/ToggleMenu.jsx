@@ -1,5 +1,5 @@
-// src/components/Dashboard/ToggleMenu.jsx - Updated with Upload Reels option
-import React from 'react';
+// src/components/Dashboard/ToggleMenu.jsx
+import React, { useMemo } from 'react';
 import {
   View,
   Text,
@@ -18,38 +18,24 @@ const ToggleMenu = ({
   onLogout,
   onClose,
 }) => {
+  // Check if user is consultant
+  const isConsultant = useMemo(() => {
+    return user?.role === 'consultant' || user?.consultantRequest?.status === 'approved';
+  }, [user?.role, user?.consultantRequest?.status]);
+
+  // Base menu (visible to all)
   const menuItems = [
-    {
-      id: 'dashboard',
-      title: 'Dashboard',
-      icon: 'grid-outline',
-    },
-    {
-      id: 'profile',
-      title: 'My Profile',
-      icon: 'person-outline',
-    },
-    {
-      id: 'mysessions',
-      title: 'My Sessions',
-      icon: 'calendar-outline',
-    },
-    {
-      id: 'booked',
-      title: 'Booked Sessions',
-      icon: 'bookmark-outline',
-    },
-    {
-      id: 'wallet',
-      title: 'Wallet',
-      icon: 'wallet-outline',
-    },
-    {
-      id: 'upgrade',
-      title: 'Profile Upgrade',
-      icon: 'star-outline',
-    },
+    { id: 'dashboard', title: 'Dashboard', icon: 'grid-outline' },
+    { id: 'profile', title: 'My Profile', icon: 'person-outline' },
+    { id: 'mysessions', title: 'My Sessions', icon: 'calendar-outline' },
+    { id: 'upgrade', title: 'Profile Upgrade', icon: 'star-outline' },
   ];
+
+  // Add consultant-only items
+  if (isConsultant) {
+    menuItems.splice(3, 0, { id: 'booked', title: 'Booked Sessions', icon: 'bookmark-outline' });
+    menuItems.splice(4, 0, { id: 'wallet', title: 'Wallet', icon: 'wallet-outline' });
+  }
 
   const renderMenuItem = (item) => (
     <TouchableOpacity
@@ -89,7 +75,7 @@ const ToggleMenu = ({
           onPress={onClose}
           activeOpacity={1}
         />
-        
+
         <View style={styles.menu}>
           {/* Header */}
           <View style={styles.header}>
@@ -107,7 +93,7 @@ const ToggleMenu = ({
                 <Text style={styles.userPhone}>{user?.phone}</Text>
               </View>
             </View>
-            
+
             <TouchableOpacity style={styles.closeButton} onPress={onClose}>
               <Ionicons name="close" size={24} color="#666" />
             </TouchableOpacity>
@@ -118,16 +104,18 @@ const ToggleMenu = ({
             {menuItems.map(renderMenuItem)}
           </View>
 
-          {/* Upload Reels Section */}
-          <View style={styles.actionSection}>
-            <TouchableOpacity
-              style={styles.uploadReelButton}
-              onPress={() => onItemPress('uploadreel')}
-            >
-              <Ionicons name="videocam" size={22} color="#4CAF50" />
-              <Text style={styles.uploadReelText}>Upload Reel</Text>
-            </TouchableOpacity>
-          </View>
+          {/* Upload Reels Section (only for consultant) */}
+          {isConsultant && (
+            <View style={styles.actionSection}>
+              <TouchableOpacity
+                style={styles.uploadReelButton}
+                onPress={() => onItemPress('uploadreel')}
+              >
+                <Ionicons name="videocam" size={22} color="#4CAF50" />
+                <Text style={styles.uploadReelText}>Upload Reel</Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
           {/* Logout */}
           <View style={styles.footer}>
