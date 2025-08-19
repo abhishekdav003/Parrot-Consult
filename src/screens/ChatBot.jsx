@@ -11,31 +11,54 @@ import {
   KeyboardAvoidingView,
   Platform,
   Animated,
-  Image,
   ActivityIndicator,
+  StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import LinearGradient from 'react-native-linear-gradient';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 import ApiService from '../services/ApiService';
 
 const { width, height } = Dimensions.get('window');
 
 const ChatBot = ({ route, navigation }) => {
-  const initialQuery = route?.params?.query || 'hello'; // Default to 'hello' if no query
+  const initialQuery = route?.params?.query || 'hello';
   const [messages, setMessages] = useState([
     { 
       id: 1, 
       sender: 'bot', 
-      text: "Hi! I'm Parry 🦜 — Ask me anything about Parrot Consult!", 
+      text: "Hello! I'm Parry, your AI assistant. How can I help you today?", 
       timestamp: new Date() 
     },
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const scrollViewRef = useRef(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(50)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+  const typingAnim = useRef(new Animated.Value(0)).current;
+
+  // Keyboard listeners
+  useEffect(() => {
+    const keyboardWillShow = (e) => {
+      setKeyboardHeight(e.endCoordinates.height);
+    };
+    const keyboardWillHide = () => {
+      setKeyboardHeight(0);
+    };
+
+    const showListener = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideListener = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const showSubscription = require('react-native').Keyboard.addListener(showListener, keyboardWillShow);
+    const hideSubscription = require('react-native').Keyboard.addListener(hideListener, keyboardWillHide);
+
+    return () => {
+      showSubscription?.remove();
+      hideSubscription?.remove();
+    };
+  }, []);
 
   // Auto-scroll to bottom
   const scrollToBottom = () => {
@@ -44,30 +67,56 @@ const ChatBot = ({ route, navigation }) => {
     }, 100);
   };
 
-  // Initialize with query - always send 'hello' when component mounts for Search tab
+  // Initialize with query
   useEffect(() => {
     const timer = setTimeout(() => {
       handleSendMessage(initialQuery);
-    }, 1000); // Delay to let component mount properly
+    }, 1000);
     
     return () => clearTimeout(timer);
-  }, []); // Empty dependency to run only once on mount
+  }, []);
 
-  // Animation for new messages
+  // Message animation
   const animateMessage = () => {
+    fadeAnim.setValue(0);
+    slideAnim.setValue(30);
+    
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 500,
+        duration: 400,
         useNativeDriver: true,
       }),
       Animated.timing(slideAnim, {
         toValue: 0,
-        duration: 500,
+        duration: 400,
         useNativeDriver: true,
       }),
     ]).start();
   };
+
+  // Typing animation
+  useEffect(() => {
+    if (isTyping) {
+      const animate = () => {
+        Animated.sequence([
+          Animated.timing(typingAnim, {
+            toValue: 1,
+            duration: 600,
+            useNativeDriver: true,
+          }),
+          Animated.timing(typingAnim, {
+            toValue: 0.3,
+            duration: 600,
+            useNativeDriver: true,
+          }),
+        ]).start(() => {
+          if (isTyping) animate();
+        });
+      };
+      animate();
+    }
+  }, [isTyping]);
 
   const handleSendMessage = async (messageText = input.trim()) => {
     if (!messageText || loading) return;
@@ -102,7 +151,7 @@ const ChatBot = ({ route, navigation }) => {
         const errorMessage = {
           id: Date.now() + 1,
           sender: 'bot',
-          text: 'Sorry, I encountered an issue. Please try again!',
+          text: 'I apologize, but I encountered an issue. Please try again.',
           timestamp: new Date(),
         };
         setMessages(prev => [...prev, errorMessage]);
@@ -112,7 +161,7 @@ const ChatBot = ({ route, navigation }) => {
       const errorMessage = {
         id: Date.now() + 1,
         sender: 'bot',
-        text: 'Oops! Something went wrong. Please check your connection.',
+        text: 'I\'m having trouble connecting. Please check your internet connection.',
         timestamp: new Date(),
       };
       setMessages(prev => [...prev, errorMessage]);
@@ -130,8 +179,13 @@ const ChatBot = ({ route, navigation }) => {
     });
   };
 
+  const handleBackPress = () => {
+    navigation.navigate('Home');
+  };
+
   const MessageBubble = ({ message, index }) => {
     const isUser = message.sender === 'user';
+    const isLatest = index === messages.length - 1;
     
     return (
       <Animated.View
@@ -139,24 +193,21 @@ const ChatBot = ({ route, navigation }) => {
           styles.messageContainer,
           isUser ? styles.userMessageContainer : styles.botMessageContainer,
           {
-            opacity: index === messages.length - 1 ? fadeAnim : 1,
+            opacity: isLatest ? fadeAnim : 1,
             transform: [
               {
-                translateY: index === messages.length - 1 ? slideAnim : 0,
+                translateY: isLatest ? slideAnim : 0,
               },
             ],
           },
         ]}
       >
-        {/* Avatar */}
+        {/* Bot Avatar */}
         {!isUser && (
           <View style={styles.avatarContainer}>
-            <LinearGradient
-              colors={['#10B981', '#059669', '#047857']}
-              style={styles.avatarGradient}
-            >
-              <Text style={styles.avatarText}>🦜</Text>
-            </LinearGradient>
+            <View style={styles.botAvatar}>
+              <Icon name="support-agent" size={16} color="#059669" />
+            </View>
           </View>
         )}
 
@@ -165,18 +216,17 @@ const ChatBot = ({ route, navigation }) => {
           styles.messageBubble,
           isUser ? styles.userBubble : styles.botBubble,
         ]}>
-          {isUser ? (
-            <LinearGradient
-              colors={['#059669', '#047857', '#065F46']}
-              style={styles.userBubbleGradient}
-            >
-              <Text style={styles.userMessageText}>{message.text}</Text>
-            </LinearGradient>
-          ) : (
-            <View style={styles.botBubbleContent}>
-              <Text style={styles.botMessageText}>{message.text}</Text>
-            </View>
-          )}
+          <View style={[
+            styles.messageContent,
+            isUser ? styles.userMessageContent : styles.botMessageContent,
+          ]}>
+            <Text style={[
+              styles.messageText,
+              isUser ? styles.userMessageText : styles.botMessageText,
+            ]}>
+              {message.text}
+            </Text>
+          </View>
           
           {/* Timestamp */}
           <Text style={[
@@ -190,12 +240,9 @@ const ChatBot = ({ route, navigation }) => {
         {/* User Avatar */}
         {isUser && (
           <View style={styles.avatarContainer}>
-            <LinearGradient
-              colors={['#059669', '#047857', '#065F46']}
-              style={styles.avatarGradient}
-            >
-              <Text style={styles.avatarText}>👤</Text>
-            </LinearGradient>
+            <View style={styles.userAvatar}>
+              <Icon name="person" size={16} color="#ffffff" />
+            </View>
           </View>
         )}
       </Animated.View>
@@ -203,66 +250,90 @@ const ChatBot = ({ route, navigation }) => {
   };
 
   const TypingIndicator = () => (
-    <View style={styles.typingContainer}>
+    <Animated.View 
+      style={[
+        styles.typingContainer,
+        { opacity: typingAnim }
+      ]}
+    >
       <View style={styles.avatarContainer}>
-        <LinearGradient
-          colors={['#10B981', '#059669', '#047857']}
-          style={styles.avatarGradient}
-        >
-          <Text style={styles.avatarText}>🦜</Text>
-        </LinearGradient>
+        <View style={styles.botAvatar}>
+          <Icon name="support-agent" size={16} color="#059669" />
+        </View>
       </View>
       
       <View style={styles.typingBubble}>
-        <View style={styles.typingDotsContainer}>
-          {[0, 1, 2].map((index) => (
-            <Animated.View
-              key={index}
-              style={[
-                styles.typingDot,
-                {
-                  opacity: fadeAnim,
-                },
-              ]}
-            />
-          ))}
+        <View style={styles.typingContent}>
+          <View style={styles.typingDotsContainer}>
+            {[0, 1, 2].map((index) => (
+              <Animated.View
+                key={index}
+                style={[
+                  styles.typingDot,
+                  {
+                    opacity: typingAnim,
+                  },
+                ]}
+              />
+            ))}
+          </View>
+          <Text style={styles.typingText}>Parry is typing...</Text>
         </View>
-        <Text style={styles.typingText}>Parry is thinking...</Text>
       </View>
-    </View>
+    </Animated.View>
   );
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
+      <StatusBar backgroundColor="#059669" barStyle="light-content" />
+      
       {/* Header */}
-      <LinearGradient
-        colors={['#10B981', '#059669', '#047857']}
-        style={styles.header}
-      >
-        <View style={styles.headerContent}>
-          <View style={styles.headerLeft}>
-            <View style={styles.headerAvatar}>
-              <Text style={styles.headerAvatarText}>🦜</Text>
+      <SafeAreaView style={styles.headerSafeArea}>
+        <View style={styles.header}>
+          <View style={styles.headerContent}>
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={handleBackPress}
+              activeOpacity={0.7}
+            >
+              <Icon name="arrow-back" size={24} color="#059669" />
+            </TouchableOpacity>
+            
+            <View style={styles.headerCenter}>
+              <View style={styles.headerAvatarContainer}>
+                <View style={styles.headerAvatar}>
+                  <Icon name="support-agent" size={20} color="#059669" />
+                </View>
+                <View style={styles.onlineIndicator} />
+              </View>
+              
+              <View style={styles.headerTextContainer}>
+                <Text style={styles.headerTitle}>Parry</Text>
+                <Text style={styles.headerSubtitle}>AI Assistant</Text>
+              </View>
             </View>
-            <View>
-              <Text style={styles.headerTitle}>Parry</Text>
-              <Text style={styles.headerSubtitle}>AI Assistant</Text>
-            </View>
+            
+            <TouchableOpacity style={styles.moreButton} activeOpacity={0.7}>
+              <Icon name="more-vert" size={24} color="#64748B" />
+            </TouchableOpacity>
           </View>
-          <View style={styles.onlineIndicator} />
+          <View style={styles.headerBorder} />
         </View>
-      </LinearGradient>
+      </SafeAreaView>
 
-      {/* Messages */}
+      {/* Messages Container */}
       <KeyboardAvoidingView
         style={styles.chatContainer}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
       >
         <ScrollView
           ref={scrollViewRef}
           style={styles.messagesScrollView}
-          contentContainerStyle={styles.messagesContainer}
+          contentContainerStyle={[
+            styles.messagesContainer,
+            { paddingBottom: keyboardHeight > 0 ? 20 : 100 }
+          ]}
           showsVerticalScrollIndicator={false}
           onContentSizeChange={scrollToBottom}
         >
@@ -274,19 +345,28 @@ const ChatBot = ({ route, navigation }) => {
         </ScrollView>
 
         {/* Input Area */}
-        <View style={styles.inputContainer}>
+        <Animated.View
+          style={[
+            styles.inputContainer,
+            {
+              transform: [{ translateY: keyboardHeight > 0 ? -keyboardHeight : 0 }],
+            },
+          ]}
+        >
           <View style={styles.inputWrapper}>
-            <TextInput
-              style={styles.textInput}
-              value={input}
-              onChangeText={setInput}
-              placeholder="Type your message here..."
-              placeholderTextColor="#9CA3AF"
-              multiline
-              maxHeight={100}
-              onSubmitEditing={() => handleSendMessage()}
-              editable={!loading}
-            />
+            <View style={styles.textInputContainer}>
+              <TextInput
+                style={styles.textInput}
+                value={input}
+                onChangeText={setInput}
+                placeholder="Type your message..."
+                placeholderTextColor="#94A3B8"
+                multiline
+                maxHeight={100}
+                onSubmitEditing={() => handleSendMessage()}
+                editable={!loading}
+              />
+            </View>
             
             <TouchableOpacity
               style={[
@@ -295,26 +375,27 @@ const ChatBot = ({ route, navigation }) => {
               ]}
               onPress={() => handleSendMessage()}
               disabled={!input.trim() || loading}
+              activeOpacity={0.7}
             >
-              <LinearGradient
-                colors={
-                  !input.trim() || loading
-                    ? ['#9CA3AF', '#6B7280']
-                    : ['#10B981', '#059669', '#047857']
-                }
-                style={styles.sendButtonGradient}
-              >
+              <View style={[
+                styles.sendButtonContent,
+                (!input.trim() || loading) && styles.sendButtonContentDisabled,
+              ]}>
                 {loading ? (
                   <ActivityIndicator size="small" color="white" />
                 ) : (
-                  <Text style={styles.sendButtonText}>➤</Text>
+                  <Icon 
+                    name="send" 
+                    size={18} 
+                    color={!input.trim() ? '#94A3B8' : 'white'} 
+                  />
                 )}
-              </LinearGradient>
+              </View>
             </TouchableOpacity>
           </View>
-        </View>
+        </Animated.View>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </View>
   );
 };
 
@@ -325,52 +406,94 @@ const styles = StyleSheet.create({
   },
   
   // Header Styles
+  headerSafeArea: {
+    backgroundColor: '#ffffff',
+  },
   header: {
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    elevation: 4,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 8,
+    shadowRadius: 4,
   },
   headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  headerAvatar: {
-    width: 45,
-    height: 45,
-    borderRadius: 22.5,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F1F5F9',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
   },
-  headerAvatarText: {
-    fontSize: 20,
+  headerCenter: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: 'white',
+  headerAvatarContainer: {
+    position: 'relative',
+    marginRight: 12,
   },
-  headerSubtitle: {
-    fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.8)',
+  headerAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#D1FAE5',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
   },
   onlineIndicator: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
     width: 12,
     height: 12,
     borderRadius: 6,
-    backgroundColor: '#22C55E',
+    backgroundColor: '#10B981',
     borderWidth: 2,
-    borderColor: 'white',
+    borderColor: '#ffffff',
+  },
+  headerTextContainer: {
+    flex: 1,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1E293B',
+    marginBottom: 2,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
+  },
+  headerSubtitle: {
+    fontSize: 13,
+    color: '#64748B',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+  moreButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerBorder: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 2,
+    backgroundColor: '#10B981',
+    opacity: 0.6,
   },
 
   // Chat Container
@@ -379,16 +502,16 @@ const styles = StyleSheet.create({
   },
   messagesScrollView: {
     flex: 1,
+    backgroundColor: '#F8FAFC',
   },
   messagesContainer: {
     padding: 16,
-    paddingBottom: 20,
   },
 
   // Message Styles
   messageContainer: {
     flexDirection: 'row',
-    marginVertical: 8,
+    marginVertical: 4,
     alignItems: 'flex-end',
   },
   userMessageContainer: {
@@ -401,20 +524,23 @@ const styles = StyleSheet.create({
   avatarContainer: {
     marginHorizontal: 8,
   },
-  avatarGradient: {
-    width: 35,
-    height: 35,
-    borderRadius: 17.5,
+  botAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#D1FAE5',
     alignItems: 'center',
     justifyContent: 'center',
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
   },
-  avatarText: {
-    fontSize: 16,
+  userAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#059669',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   messageBubble: {
@@ -425,57 +551,59 @@ const styles = StyleSheet.create({
   userBubble: {
     alignSelf: 'flex-end',
   },
-  userBubbleGradient: {
+  userMessageContent: {
+    backgroundColor: '#059669',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    borderRadius: 20,
-    borderBottomRightRadius: 8,
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    borderRadius: 18,
+    borderBottomRightRadius: 4,
   },
   userMessageText: {
-    color: 'white',
-    fontSize: 16,
-    lineHeight: 22,
+    color: '#ffffff',
+    fontSize: 15,
+    lineHeight: 20,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
   
   botBubble: {
     alignSelf: 'flex-start',
   },
-  botBubbleContent: {
-    backgroundColor: 'white',
+  botMessageContent: {
+    backgroundColor: '#ffffff',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    borderRadius: 20,
-    borderBottomLeftRadius: 8,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
+    borderRadius: 18,
+    borderBottomLeftRadius: 4,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: '#E2E8F0',
+    elevation: 1,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
   },
   botMessageText: {
-    color: '#374151',
-    fontSize: 16,
-    lineHeight: 22,
+    color: '#334155',
+    fontSize: 15,
+    lineHeight: 20,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+
+  messageContent: {
+    marginBottom: 2,
   },
 
   timestamp: {
     fontSize: 11,
-    marginTop: 4,
     marginHorizontal: 4,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
   userTimestamp: {
     color: '#059669',
     textAlign: 'right',
   },
   botTimestamp: {
-    color: '#9CA3AF',
+    color: '#94A3B8',
     textAlign: 'left',
   },
 
@@ -483,21 +611,23 @@ const styles = StyleSheet.create({
   typingContainer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    marginVertical: 8,
+    marginVertical: 4,
   },
   typingBubble: {
-    backgroundColor: 'white',
+    backgroundColor: '#ffffff',
+    borderRadius: 18,
+    borderBottomLeftRadius: 4,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    elevation: 1,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+  },
+  typingContent: {
     paddingHorizontal: 16,
     paddingVertical: 12,
-    borderRadius: 20,
-    borderBottomLeftRadius: 8,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
     flexDirection: 'row',
     alignItems: 'center',
   },
@@ -513,65 +643,77 @@ const styles = StyleSheet.create({
     marginHorizontal: 1,
   },
   typingText: {
-    color: '#6B7280',
-    fontSize: 14,
+    color: '#64748B',
+    fontSize: 13,
     fontStyle: 'italic',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
 
   // Input Styles
   inputContainer: {
-    backgroundColor: 'white',
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#ffffff',
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: '#E2E8F0',
     elevation: 8,
-    shadowColor: '#000',
+    shadowColor: '#000000',
     shadowOffset: { width: 0, height: -2 },
     shadowOpacity: 0.1,
-    shadowRadius: 8,
-    marginBottom: 50,
+    shadowRadius: 4,
   },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    backgroundColor: '#F9FAFB',
-    borderRadius: 25,
+    paddingBottom: Platform.OS === 'ios' ? 20 : 0,
+  },
+  textInputContainer: {
+    flex: 1,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 24,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: '#E2E8F0',
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 10,
+    marginRight: 12,
+    minHeight: 44,
+    justifyContent: 'center',
   },
   textInput: {
-    flex: 1,
-    fontSize: 16,
-    color: '#374151',
-    maxHeight: 100,
-    paddingVertical: 8,
-    textAlignVertical: 'top',
+    fontSize: 15,
+    color: '#334155',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+    textAlignVertical: 'center',
+    minHeight: 24,
+    maxHeight: 80,
   },
   sendButton: {
-    marginLeft: 8,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    marginBottom: 0,
   },
-  sendButtonGradient: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  sendButtonContent: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#059669',
     alignItems: 'center',
     justifyContent: 'center',
-    elevation: 4,
-    shadowColor: '#000',
+    elevation: 2,
+    shadowColor: '#059669',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 4,
   },
-  sendButtonDisabled: {
-    opacity: 0.5,
-  },
-  sendButtonText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
+  sendButtonContentDisabled: {
+    backgroundColor: '#E2E8F0',
+    elevation: 0,
+    shadowOpacity: 0,
   },
 });
 

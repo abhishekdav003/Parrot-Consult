@@ -1,5 +1,5 @@
 // src/components/Dashboard/DashboardSection.jsx
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,38 +7,101 @@ import {
   StyleSheet,
   ScrollView,
   RefreshControl,
+  Dimensions,
+  Platform,
+  Animated,
+  Alert,
+  Image,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import { useNavigation } from '@react-navigation/native';
 
-const StatCard = React.memo(({ icon, title, value, color, subtitle }) => (
-  <View style={styles.statCard}>
-    <View style={[styles.statIcon, { backgroundColor: color }]}>
-      <Ionicons name={icon} size={24} color="#fff" />
-    </View>
-    <View style={styles.statContent}>
-      <Text style={styles.statTitle}>{title}</Text>
-      <Text style={styles.statValue}>{value}</Text>
-      {subtitle && (
-        <Text style={styles.statSubtitle}>{subtitle}</Text>
+const { width: screenWidth } = Dimensions.get('window');
+
+const StatCard = React.memo(({ icon, title, value, color, subtitle, onPress, isClickable }) => {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  const handlePress = () => {
+    if (!isClickable) return;
+    
+    Animated.sequence([
+      Animated.timing(scaleAnim, {
+        toValue: 0.95,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+      Animated.timing(scaleAnim, {
+        toValue: 1,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      onPress && onPress();
+    });
+  };
+
+  const StatCardContent = (
+    <Animated.View style={[styles.statCard, { transform: [{ scale: scaleAnim }] }]}>
+      <View style={[styles.statIcon, { backgroundColor: color }]}>
+        <Ionicons name={icon} size={24} color="#fff" />
+      </View>
+      <View style={styles.statContent}>
+        <Text style={styles.statTitle}>{title}</Text>
+        <Text style={styles.statValue}>{value}</Text>
+        {subtitle && (
+          <Text style={styles.statSubtitle}>{subtitle}</Text>
+        )}
+      </View>
+      {isClickable && (
+        <View style={styles.statArrow}>
+          <Ionicons name="chevron-forward" size={16} color="#94A3B8" />
+        </View>
       )}
-    </View>
-  </View>
-));
+    </Animated.View>
+  );
 
-const UpcomingSessionCard = React.memo(({ session }) => {
+  if (isClickable) {
+    return (
+      <TouchableOpacity onPress={handlePress} activeOpacity={0.9}>
+        {StatCardContent}
+      </TouchableOpacity>
+    );
+  }
+
+  return StatCardContent;
+});
+
+const UpcomingSessionCard = React.memo(({ session, onPress }) => {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+
   const getSessionStatusColor = (status) => {
     switch (status) {
-      case 'scheduled': return '#4CAF50';
-      case 'completed': return '#2196F3';
-      case 'cancelled': return '#FF6B6B';
-      default: return '#666';
+      case 'scheduled': return '#10B981';
+      case 'completed': return '#3B82F6';
+      case 'cancelled': return '#EF4444';
+      case 'ongoing': return '#F59E0B';
+      default: return '#6B7280';
+    }
+  };
+
+  const getSessionStatusBg = (status) => {
+    switch (status) {
+      case 'scheduled': return '#D1FAE5';
+      case 'completed': return '#DBEAFE';
+      case 'cancelled': return '#FEE2E2';
+      case 'ongoing': return '#FEF3C7';
+      default: return '#F3F4F6';
     }
   };
 
   const formatDate = (dateString) => {
     try {
       const date = new Date(dateString);
-      return date.toLocaleDateString();
+      return date.toLocaleDateString('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+      });
     } catch (error) {
       return 'Invalid Date';
     }
@@ -56,30 +119,139 @@ const UpcomingSessionCard = React.memo(({ session }) => {
     }
   };
 
+  const handlePress = () => {
+    Animated.sequence([
+      Animated.timing(scaleAnim, {
+        toValue: 0.98,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+      Animated.timing(scaleAnim, {
+        toValue: 1,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      onPress && onPress(session);
+    });
+  };
+
   return (
-    <View style={styles.sessionCard}>
-      <View style={styles.sessionInfo}>
-        <Text style={styles.sessionTitle}>
-          {session.consultant?.name || 'Consultant Session'}
-        </Text>
-        <Text style={styles.sessionTime}>
-          {formatDate(session.datetime)} at {formatTime(session.datetime)}
-        </Text>
-        <Text style={[styles.sessionStatus, { color: getSessionStatusColor(session.status) }]}>
-          Status: {session.status?.charAt(0).toUpperCase() + session.status?.slice(1)}
-        </Text>
-      </View>
-      <TouchableOpacity style={styles.sessionAction}>
-        <Ionicons name="chevron-forward" size={20} color="#666" />
-      </TouchableOpacity>
-    </View>
+    <TouchableOpacity onPress={handlePress} activeOpacity={0.9}>
+      <Animated.View style={[styles.sessionCard, { transform: [{ scale: scaleAnim }] }]}>
+        <View style={styles.sessionContent}>
+          <View style={styles.sessionHeader}>
+            <View style={styles.sessionInfo}>
+              <Text style={styles.sessionTitle} numberOfLines={1}>
+                {session.consultant?.fullName || session.consultant?.name || 'Consultant Session'}
+              </Text>
+              <Text style={styles.sessionCategory} numberOfLines={1}>
+                {session.consultant?.consultantRequest?.consultantProfile?.category || 'Consultation'}
+              </Text>
+            </View>
+            <View style={[
+              styles.statusBadge,
+              { backgroundColor: getSessionStatusBg(session.status) }
+            ]}>
+              <Text style={[
+                styles.statusText,
+                { color: getSessionStatusColor(session.status) }
+              ]}>
+                {session.status?.charAt(0).toUpperCase() + session.status?.slice(1)}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.sessionDetails}>
+            <View style={styles.sessionDetailItem}>
+              <Ionicons name="calendar-outline" size={14} color="#6B7280" />
+              <Text style={styles.sessionDetailText}>{formatDate(session.datetime)}</Text>
+            </View>
+            <View style={styles.sessionDetailItem}>
+              <Ionicons name="time-outline" size={14} color="#6B7280" />
+              <Text style={styles.sessionDetailText}>{formatTime(session.datetime)}</Text>
+            </View>
+            <View style={styles.sessionDetailItem}>
+              <Ionicons 
+                name={session.sessionType === 'video' ? 'videocam-outline' : 'chatbubble-outline'} 
+                size={14} 
+                color="#6B7280" 
+              />
+              <Text style={styles.sessionDetailText}>
+                {session.sessionType?.charAt(0).toUpperCase() + session.sessionType?.slice(1) || 'Chat'}
+              </Text>
+            </View>
+          </View>
+        </View>
+        
+        <View style={styles.sessionAction}>
+          <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
+        </View>
+      </Animated.View>
+    </TouchableOpacity>
   );
 });
 
-const DashboardSection = ({ user, dashboardData, onRefresh, loading }) => {
+const QuickActionButton = React.memo(({ icon, title, color, onPress, disabled }) => {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  const handlePress = () => {
+    if (disabled) return;
+    
+    Animated.sequence([
+      Animated.timing(scaleAnim, {
+        toValue: 0.95,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+      Animated.timing(scaleAnim, {
+        toValue: 1,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      onPress && onPress();
+    });
+  };
+
+  return (
+    <TouchableOpacity 
+      onPress={handlePress} 
+      activeOpacity={0.8}
+      disabled={disabled}
+      style={styles.quickActionContainer}
+    >
+      <Animated.View style={[
+        styles.quickAction, 
+        { transform: [{ scale: scaleAnim }] },
+        disabled && styles.quickActionDisabled
+      ]}>
+        <View style={[styles.quickActionIcon, { backgroundColor: disabled ? '#F3F4F6' : color }]}>
+          <Ionicons 
+            name={icon} 
+            size={24} 
+            color={disabled ? '#9CA3AF' : '#ffffff'} 
+          />
+        </View>
+        <Text style={[styles.quickActionText, disabled && styles.quickActionTextDisabled]}>
+          {title}
+        </Text>
+      </Animated.View>
+    </TouchableOpacity>
+  );
+});
+
+const DashboardSection = ({ user, dashboardData, onRefresh, loading, onSectionChange }) => {
   const [refreshing, setRefreshing] = useState(false);
+  const navigation = useNavigation();
 
   console.log('[DASHBOARD_SECTION] Rendering with data:', dashboardData);
+  console.log('[DASHBOARD_SECTION] User data:', user);
+
+  // Check if user is consultant
+  const isConsultant = useMemo(() => {
+    return user?.role === 'consultant' || user?.consultantRequest?.status === 'approved';
+  }, [user?.role, user?.consultantRequest?.status]);
 
   // Memoize refresh handler
   const handleRefresh = useCallback(async () => {
@@ -104,56 +276,219 @@ const DashboardSection = ({ user, dashboardData, onRefresh, loading }) => {
     return now.toLocaleDateString('en-US', options);
   }, []);
 
-  // Memoize stats data
+  // Navigation handlers with proper section switching
+  const handleProfileClick = useCallback(() => {
+    console.log('[DASHBOARD_SECTION] Navigating to profile section');
+    if (onSectionChange) {
+      onSectionChange('profile');
+    } else {
+      // Fallback navigation
+      navigation.navigate('Dashboard', { section: 'profile' });
+    }
+  }, [onSectionChange, navigation]);
+
+  const handleScheduledSessionsClick = useCallback(() => {
+    console.log('[DASHBOARD_SECTION] Navigating to sessions section');
+    if (onSectionChange) {
+      onSectionChange('mysessions');
+    } else {
+      navigation.navigate('Dashboard', { section: 'mysessions' });
+    }
+  }, [onSectionChange, navigation]);
+
+  const handleSessionClick = useCallback((session) => {
+    Alert.alert(
+      'Session Details',
+      `Session with ${session.consultant?.fullName || 'Consultant'}\n` +
+      `Date: ${new Date(session.datetime).toLocaleDateString()}\n` +
+      `Time: ${new Date(session.datetime).toLocaleTimeString()}\n` +
+      `Status: ${session.status}\n` +
+      `Type: ${session.sessionType || 'Chat'}`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'View Details', 
+          onPress: () => {
+            if (onSectionChange) {
+              onSectionChange('mysessions');
+            }
+          }
+        }
+      ]
+    );
+  }, [onSectionChange]);
+
+  const handleFindConsultant = useCallback(() => {
+    console.log('[DASHBOARD_SECTION] Navigating to Categories');
+    navigation.navigate('Categories');
+  }, [navigation]);
+
+  const handleBookSession = useCallback(() => {
+    console.log('[DASHBOARD_SECTION] Navigating to Home for booking');
+    navigation.navigate('Home');
+  }, [navigation]);
+
+  const handleUploadReel = useCallback(() => {
+    Alert.alert(
+      'Upload Reel', 
+      'This feature will allow you to upload consultation reels.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Coming Soon', style: 'default' }
+      ]
+    );
+  }, []);
+
+  const handleBecomeConsultant = useCallback(() => {
+    Alert.alert(
+      'Become a Consultant', 
+      'Would you like to apply to become a consultant on our platform?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Apply Now', 
+          onPress: () => {
+            if (onSectionChange) {
+              onSectionChange('upgrade');
+            }
+          }
+        }
+      ]
+    );
+  }, [onSectionChange]);
+
+  const handleHelpSupport = useCallback(() => {
+    console.log('[DASHBOARD_SECTION] Navigating to ChatBot');
+    navigation.navigate('ChatBot', { query: 'I need help and support' });
+  }, [navigation]);
+
+  const handleWalletClick = useCallback(() => {
+    console.log('[DASHBOARD_SECTION] Navigating to wallet section');
+    if (onSectionChange) {
+      onSectionChange('wallet');
+    }
+  }, [onSectionChange]);
+
+  const handleBookedSessionsClick = useCallback(() => {
+    console.log('[DASHBOARD_SECTION] Navigating to booked sessions');
+    if (onSectionChange) {
+      onSectionChange('booked');
+    }
+  }, [onSectionChange]);
+
+  // Memoize stats data with click handlers (2 columns layout)
   const statsData = useMemo(() => [
     {
       icon: "person",
       title: "Profile",
       value: `${dashboardData?.profileCompletion || 0}%`,
-      color: "#FF6B35",
-      subtitle: "Completion"
+      color: "#F59E0B",
+      subtitle: "Completion",
+      onPress: handleProfileClick,
+      isClickable: true,
     },
     {
       icon: "calendar",
       title: "Scheduled",
       value: dashboardData?.scheduledSessions || 0,
-      color: "#4CAF50",
-      subtitle: "Sessions"
+      color: "#10B981",
+      subtitle: "Sessions",
+      onPress: handleScheduledSessionsClick,
+      isClickable: dashboardData?.scheduledSessions > 0,
     },
     {
       icon: "layers",
       title: "Total",
       value: dashboardData?.totalSessions || 0,
-      color: "#2196F3",
-      subtitle: "Sessions"
+      color: "#3B82F6",
+      subtitle: "Sessions",
+      isClickable: false,
     },
     {
       icon: "checkmark-circle",
       title: "Completed",
       value: dashboardData?.completedSessions || 0,
-      color: "#9C27B0",
-      subtitle: "Sessions"
+      color: "#8B5CF6",
+      subtitle: "Sessions",
+      isClickable: false,
     }
-  ], [dashboardData]);
+  ], [dashboardData, handleProfileClick, handleScheduledSessionsClick]);
 
   // Memoize status items
   const statusItems = useMemo(() => [
     {
       icon: user?.aadharVerified ? "checkmark-circle" : "alert-circle",
-      color: user?.aadharVerified ? "#4CAF50" : "#FFA726",
-      text: `KYC ${user?.aadharVerified ? 'Verified' : 'Pending'}`
+      color: user?.aadharVerified ? "#10B981" : "#F59E0B",
+      text: `KYC ${user?.aadharVerified ? 'Verified' : 'Pending'}`,
+      bgColor: user?.aadharVerified ? "#D1FAE5" : "#FEF3C7",
     },
     {
       icon: user?.videoFreeTrial ? "close-circle" : "gift",
-      color: user?.videoFreeTrial ? "#FF6B6B" : "#4CAF50",
-      text: `Video Trial ${user?.videoFreeTrial ? 'Used' : 'Available'}`
+      color: user?.videoFreeTrial ? "#EF4444" : "#10B981",
+      text: `Video Trial ${user?.videoFreeTrial ? 'Used' : 'Available'}`,
+      bgColor: user?.videoFreeTrial ? "#FEE2E2" : "#D1FAE5",
     },
     {
       icon: user?.chatFreeTrial ? "close-circle" : "gift",
-      color: user?.chatFreeTrial ? "#FF6B6B" : "#4CAF50",
-      text: `Chat Trial ${user?.chatFreeTrial ? 'Used' : 'Available'}`
+      color: user?.chatFreeTrial ? "#EF4444" : "#10B981",
+      text: `Chat Trial ${user?.chatFreeTrial ? 'Used' : 'Available'}`,
+      bgColor: user?.chatFreeTrial ? "#FEE2E2" : "#D1FAE5",
     }
   ], [user?.aadharVerified, user?.videoFreeTrial, user?.chatFreeTrial]);
+
+  // Memoize quick actions based on user role (2 columns layout)
+  const quickActions = useMemo(() => {
+    const baseActions = [
+      {
+        icon: "search",
+        title: "Find Consultant",
+        color: "#10B981",
+        onPress: handleFindConsultant,
+      },
+      {
+        icon: "calendar",
+        title: "Book Session",
+        color: "#3B82F6",
+        onPress: handleBookSession,
+      },
+      {
+        icon: "help-circle",
+        title: "Help & Support",
+        color: "#EF4444",
+        onPress: handleHelpSupport,
+      },
+    ];
+
+    if (isConsultant) {
+      baseActions.push({
+        icon: "videocam",
+        title: "Upload Reel",
+        color: "#8B5CF6",
+        onPress: handleUploadReel,
+      });
+      baseActions.push({
+        icon: "wallet",
+        title: "Wallet",
+        color: "#F59E0B",
+        onPress: handleWalletClick,
+      });
+      baseActions.push({
+        icon: "bookmark",
+        title: "Booked Sessions",
+        color: "#6366F1",
+        onPress: handleBookedSessionsClick,
+      });
+    } else {
+      baseActions.push({
+        icon: "person-add",
+        title: "Become Consultant",
+        color: "#F59E0B",
+        onPress: handleBecomeConsultant,
+      });
+    }
+
+    return baseActions;
+  }, [isConsultant, handleFindConsultant, handleBookSession, handleUploadReel, handleHelpSupport, handleWalletClick, handleBookedSessionsClick, handleBecomeConsultant]);
 
   return (
     <ScrollView
@@ -162,38 +497,64 @@ const DashboardSection = ({ user, dashboardData, onRefresh, loading }) => {
         <RefreshControl 
           refreshing={refreshing || loading} 
           onRefresh={handleRefresh} 
-          colors={['#4CAF50']}
+          colors={['#10B981']}
+          tintColor="#10B981"
         />
       }
       showsVerticalScrollIndicator={false}
     >
-      {/* Welcome Section */}
+      {/* Welcome Section with Profile Photo */}
       <View style={styles.welcomeSection}>
-        <Text style={styles.welcomeText}>
-          Welcome back, {user?.fullName || 'User'}!
-        </Text>
-        <Text style={styles.dateText}>{formattedDate}</Text>
+        <View style={styles.welcomeContent}>
+          <View style={styles.welcomeHeader}>
+            <View style={styles.welcomeTextContainer}>
+              <Text style={styles.welcomeText}>
+                Welcome back, {user?.fullName || 'User'}! 👋
+              </Text>
+              <Text style={styles.dateText}>{formattedDate}</Text>
+            </View>
+            <TouchableOpacity onPress={handleProfileClick} activeOpacity={0.8}>
+              <View style={styles.profileImageContainer}>
+                <Image
+                  source={{
+                    uri: user?.profileImage || 'https://via.placeholder.com/60x60/10B981/ffffff?text=U',
+                  }}
+                  style={styles.profileImage}
+                />
+                <View style={styles.profileImageBorder} />
+              </View>
+            </TouchableOpacity>
+          </View>
+        </View>
+        <View style={styles.welcomeAccent} />
       </View>
 
-      {/* Stats Grid */}
-      <View style={styles.statsGrid}>
-        {statsData.map((stat, index) => (
-          <StatCard
-            key={index}
-            icon={stat.icon}
-            title={stat.title}
-            value={stat.value}
-            color={stat.color}
-            subtitle={stat.subtitle}
-          />
-        ))}
+      {/* Stats Grid - 2 columns */}
+      <View style={styles.statsSection}>
+        <Text style={styles.sectionTitle}>Quick Overview</Text>
+        <View style={styles.statsGrid}>
+          {statsData.map((stat, index) => (
+            <StatCard
+              key={index}
+              icon={stat.icon}
+              title={stat.title}
+              value={stat.value}
+              color={stat.color}
+              subtitle={stat.subtitle}
+              onPress={stat.onPress}
+              isClickable={stat.isClickable}
+            />
+          ))}
+        </View>
       </View>
 
       {/* Profile Completion Alert */}
       {dashboardData?.profileCompletion < 100 && (
         <View style={styles.alertSection}>
           <View style={styles.alertCard}>
-            <Ionicons name="information-circle" size={24} color="#FF6B35" />
+            <View style={styles.alertIcon}>
+              <Ionicons name="information-circle" size={24} color="#F59E0B" />
+            </View>
             <View style={styles.alertContent}>
               <Text style={styles.alertTitle}>Complete Your Profile</Text>
               <Text style={styles.alertText}>
@@ -201,6 +562,9 @@ const DashboardSection = ({ user, dashboardData, onRefresh, loading }) => {
                 Add more information to improve your experience.
               </Text>
             </View>
+            <TouchableOpacity style={styles.alertAction} onPress={handleProfileClick}>
+              <Ionicons name="arrow-forward" size={16} color="#F59E0B" />
+            </TouchableOpacity>
           </View>
         </View>
       )}
@@ -208,61 +572,79 @@ const DashboardSection = ({ user, dashboardData, onRefresh, loading }) => {
       {/* Upcoming Sessions */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Upcoming Sessions</Text>
-          <TouchableOpacity>
-            <Text style={styles.seeAllText}>See All</Text>
-          </TouchableOpacity>
+          <View style={styles.sectionHeaderLeft}>
+            <Text style={styles.sectionTitle}>Upcoming Sessions</Text>
+            <View style={styles.sectionTitleUnderline} />
+          </View>
+          {dashboardData?.upcomingBookings?.length > 0 && (
+            <TouchableOpacity style={styles.seeAllButton} onPress={handleScheduledSessionsClick}>
+              <Text style={styles.seeAllText}>See All</Text>
+              <Ionicons name="arrow-forward" size={14} color="#10B981" />
+            </TouchableOpacity>
+          )}
         </View>
         
         {dashboardData?.upcomingBookings?.length > 0 ? (
-          dashboardData.upcomingBookings.map((session, index) => (
-            <UpcomingSessionCard key={session._id || index} session={session} />
-          ))
+          <View style={styles.sessionsContainer}>
+            {dashboardData.upcomingBookings.slice(0, 3).map((session, index) => (
+              <UpcomingSessionCard 
+                key={session._id || index} 
+                session={session} 
+                onPress={handleSessionClick}
+              />
+            ))}
+          </View>
         ) : (
           <View style={styles.emptyState}>
-            <Ionicons name="calendar-outline" size={48} color="#ccc" />
+            <View style={styles.emptyStateIcon}>
+              <Ionicons name="calendar-outline" size={48} color="#D1D5DB" />
+            </View>
             <Text style={styles.emptyStateText}>No upcoming sessions</Text>
             <Text style={styles.emptyStateSubtext}>
-              Book a session to get started
+              Book a session to get started with expert consultations
             </Text>
+            <TouchableOpacity 
+              style={styles.emptyStateAction} 
+              onPress={handleFindConsultant}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="search" size={16} color="#ffffff" />
+              <Text style={styles.emptyStateActionText}>Find Consultant</Text>
+            </TouchableOpacity>
           </View>
         )}
       </View>
 
-      {/* Quick Actions */}
+      {/* Quick Actions - 2 columns */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Quick Actions</Text>
+        <View style={styles.sectionHeaderLeft}>
+          <Text style={styles.sectionTitle}>Quick Actions</Text>
+          <View style={styles.sectionTitleUnderline} />
+        </View>
         
         <View style={styles.quickActionsGrid}>
-          <TouchableOpacity style={styles.quickAction}>
-            <Ionicons name="search" size={24} color="#4CAF50" />
-            <Text style={styles.quickActionText}>Find Consultant</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity style={styles.quickAction}>
-            <Ionicons name="calendar" size={24} color="#2196F3" />
-            <Text style={styles.quickActionText}>Book Session</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity style={styles.quickAction}>
-            <Ionicons name="person-add" size={24} color="#FF6B35" />
-            <Text style={styles.quickActionText}>Become Consultant</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity style={styles.quickAction}>
-            <Ionicons name="help-circle" size={24} color="#9C27B0" />
-            <Text style={styles.quickActionText}>Help & Support</Text>
-          </TouchableOpacity>
+          {quickActions.map((action, index) => (
+            <QuickActionButton
+              key={index}
+              icon={action.icon}
+              title={action.title}
+              color={action.color}
+              onPress={action.onPress}
+            />
+          ))}
         </View>
       </View>
 
-      {/* Account Status Section */}
+      {/* Account Status */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Account Status</Text>
+        <View style={styles.sectionHeaderLeft}>
+          <Text style={styles.sectionTitle}>Account Status</Text>
+          <View style={styles.sectionTitleUnderline} />
+        </View>
         
         <View style={styles.statusGrid}>
           {statusItems.map((item, index) => (
-            <View key={index} style={styles.statusItem}>
+            <View key={index} style={[styles.statusItem, { backgroundColor: item.bgColor }]}>
               <Ionicons 
                 name={item.icon} 
                 size={20} 
@@ -279,14 +661,22 @@ const DashboardSection = ({ user, dashboardData, onRefresh, loading }) => {
       {/* Recent Activity */}
       {dashboardData?.totalSessions > 0 && (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Recent Activity</Text>
+          <View style={styles.sectionHeaderLeft}>
+            <Text style={styles.sectionTitle}>Recent Activity</Text>
+            <View style={styles.sectionTitleUnderline} />
+          </View>
           <View style={styles.activityCard}>
-            <Text style={styles.activityText}>
-              You have completed {dashboardData.completedSessions} out of {dashboardData.totalSessions} sessions
-            </Text>
-            <Text style={styles.activitySubtext}>
-              {dashboardData.completedSessions > 0 ? 'Keep up the great work!' : 'Start your first session today!'}
-            </Text>
+            <View style={styles.activityIcon}>
+              <Ionicons name="trending-up" size={24} color="#10B981" />
+            </View>
+            <View style={styles.activityContent}>
+              <Text style={styles.activityText}>
+                You have completed {dashboardData.completedSessions} out of {dashboardData.totalSessions} sessions
+              </Text>
+              <Text style={styles.activitySubtext}>
+                {dashboardData.completedSessions > 0 ? 'Keep up the great work!' : 'Start your first session today!'}
+              </Text>
+            </View>
           </View>
         </View>
       )}
@@ -297,43 +687,101 @@ const DashboardSection = ({ user, dashboardData, onRefresh, loading }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#F8FAFC',
   },
+
+  // Welcome Section
   welcomeSection: {
-    backgroundColor: '#fff',
+    backgroundColor: '#ffffff',
+    margin: 16,
+    marginBottom: 20,
+    borderRadius: 16,
+    overflow: 'hidden',
+    elevation: 2,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+  },
+  welcomeContent: {
     padding: 20,
-    marginBottom: 15,
+  },
+  welcomeHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  welcomeTextContainer: {
+    flex: 1,
+    marginRight: 16,
   },
   welcomeText: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: '600',
-    color: '#333',
-    marginBottom: 5,
+    color: '#1E293B',
+    marginBottom: 6,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
+    letterSpacing: -0.2,
   },
   dateText: {
     fontSize: 14,
-    color: '#666',
+    color: '#64748B',
+    fontWeight: '400',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+  profileImageContainer: {
+    position: 'relative',
+  },
+  profileImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#F1F5F9',
+  },
+  profileImageBorder: {
+    position: 'absolute',
+    top: -2,
+    left: -2,
+    right: -2,
+    bottom: -2,
+    borderRadius: 32,
+    borderWidth: 2,
+    borderColor: '#10B981',
+    opacity: 0.3,
+  },
+  welcomeAccent: {
+    height: 4,
+    backgroundColor: '#10B981',
+    marginHorizontal: 20,
+    borderRadius: 2,
+    marginBottom: 16,
+  },
+
+  // Stats Section - 2 columns
+  statsSection: {
+    paddingHorizontal: 16,
+    marginBottom: 20,
   },
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    paddingHorizontal: 20,
-    marginBottom: 15,
-    gap: 10,
+    gap: 12,
   },
   statCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    padding: 15,
+    backgroundColor: '#ffffff',
+    padding: 16,
     borderRadius: 12,
-    width: '48%',
+    width: (screenWidth - 44) / 2, // 2 columns with margins
     minHeight: 80,
     elevation: 2,
-    shadowColor: '#000',
+    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   statIcon: {
     width: 40,
@@ -348,167 +796,326 @@ const styles = StyleSheet.create({
   },
   statTitle: {
     fontSize: 12,
-    color: '#666',
+    color: '#64748B',
     marginBottom: 2,
+    fontWeight: '500',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
   statValue: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '600',
-    color: '#333',
+    color: '#1E293B',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
   },
   statSubtitle: {
     fontSize: 10,
-    color: '#888',
+    color: '#94A3B8',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
+  statArrow: {
+    marginLeft: 8,
+  },
+
+  // Alert Section
   alertSection: {
-    paddingHorizontal: 20,
-    marginBottom: 15,
+    paddingHorizontal: 16,
+    marginBottom: 20,
   },
   alertCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFF3E0',
-    padding: 15,
+    backgroundColor: '#FEF3C7',
+    padding: 16,
     borderRadius: 12,
     borderLeftWidth: 4,
-    borderLeftColor: '#FF6B35',
+    borderLeftColor: '#F59E0B',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  alertIcon: {
+    marginRight: 12,
   },
   alertContent: {
     flex: 1,
-    marginLeft: 12,
   },
   alertTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#E65100',
+    color: '#92400E',
     marginBottom: 4,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
   alertText: {
     fontSize: 12,
-    color: '#BF360C',
+    color: '#78350F',
+    lineHeight: 16,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
+  alertAction: {
+    padding: 4,
+    marginLeft: 8,
+  },
+
+  // Section Styles
   section: {
-    backgroundColor: '#fff',
-    margin: 20,
-    marginTop: 0,
+    backgroundColor: '#ffffff',
+    marginHorizontal: 16,
+    marginBottom: 20,
     padding: 20,
-    borderRadius: 12,
+    borderRadius: 16,
     elevation: 2,
-    shadowColor: '#000',
+    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 15,
+    alignItems: 'flex-start',
+    marginBottom: 16,
+  },
+  sectionHeaderLeft: {
+    flex: 1,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#333',
+    color: '#1E293B',
+    marginBottom: 4,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
+    letterSpacing: -0.1,
+  },
+  sectionTitleUnderline: {
+    width: 30,
+    height: 2,
+    backgroundColor: '#10B981',
+    borderRadius: 1,
+  },
+  seeAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0FDF4',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#D1FAE5',
   },
   seeAllText: {
-    fontSize: 14,
-    color: '#4CAF50',
+    fontSize: 12,
+    color: '#10B981',
     fontWeight: '500',
+    marginRight: 4,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+
+  // Session Styles
+  sessionsContainer: {
+    gap: 12,
   },
   sessionCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    backgroundColor: '#F8FAFC',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  sessionContent: {
+    flex: 1,
+  },
+  sessionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 8,
   },
   sessionInfo: {
     flex: 1,
+    marginRight: 12,
   },
   sessionTitle: {
     fontSize: 16,
     fontWeight: '500',
-    color: '#333',
-    marginBottom: 4,
-  },
-  sessionTime: {
-    fontSize: 14,
-    color: '#666',
+    color: '#1E293B',
     marginBottom: 2,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
   },
-  sessionStatus: {
-    fontSize: 12,
+  sessionCategory: {
+    fontSize: 13,
+    color: '#10B981',
     fontWeight: '500',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  statusText: {
+    fontSize: 11,
+    fontWeight: '600',
     textTransform: 'capitalize',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+  sessionDetails: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  sessionDetailItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  sessionDetailText: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginLeft: 4,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
   sessionAction: {
     padding: 8,
+    marginLeft: 8,
   },
+
+  // Empty State
   emptyState: {
     alignItems: 'center',
-    paddingVertical: 40,
+    paddingVertical: 32,
+  },
+  emptyStateIcon: {
+    marginBottom: 16,
   },
   emptyStateText: {
     fontSize: 16,
-    color: '#666',
-    marginTop: 12,
+    color: '#374151',
+    marginBottom: 4,
+    fontWeight: '500',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
   },
   emptyStateSubtext: {
     fontSize: 14,
-    color: '#999',
-    marginTop: 4,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginBottom: 20,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
+  emptyStateAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#10B981',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    gap: 6,
+  },
+  emptyStateActionText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+
+  // Quick Actions - 2 columns
   quickActionsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 15,
+    gap: 12,
+    marginTop: 12,
+  },
+  quickActionContainer: {
+    width: (screenWidth - 76) / 2, // 2 columns with proper spacing
   },
   quickAction: {
     alignItems: 'center',
-    width: '22%',
-    paddingVertical: 15,
+    backgroundColor: '#F8FAFC',
+    paddingVertical: 20,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    minHeight: 100,
+  },
+  quickActionDisabled: {
+    opacity: 0.5,
+    backgroundColor: '#F3F4F6',
+  },
+  quickActionIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
   },
   quickActionText: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: 8,
+    fontSize: 13,
+    color: '#374151',
     textAlign: 'center',
+    fontWeight: '500',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+    lineHeight: 16,
   },
+  quickActionTextDisabled: {
+    color: '#9CA3AF',
+  },
+
+  // Status Grid
   statusGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 15,
+    gap: 12,
+    marginTop: 12,
   },
   statusItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f8f9fa',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    flex: 1,
-    minWidth: '45%',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
   },
   statusText: {
-    fontSize: 12,
-    color: '#333',
-    marginLeft: 8,
+    fontSize: 14,
+    color: '#374151',
+    marginLeft: 12,
+    fontWeight: '500',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
+
+  // Activity Card
   activityCard: {
-    backgroundColor: '#f8f9fa',
-    padding: 15,
-    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0FDF4',
+    padding: 16,
+    borderRadius: 12,
     borderLeftWidth: 4,
-    borderLeftColor: '#4CAF50',
+    borderLeftColor: '#10B981',
+    borderWidth: 1,
+    borderColor: '#D1FAE5',
+    marginTop: 12,
+  },
+  activityIcon: {
+    marginRight: 12,
+  },
+  activityContent: {
+    flex: 1,
   },
   activityText: {
     fontSize: 14,
-    color: '#333',
+    color: '#065F46',
     marginBottom: 4,
+    fontWeight: '500',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
   activitySubtext: {
     fontSize: 12,
-    color: '#666',
+    color: '#047857',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
 });
 

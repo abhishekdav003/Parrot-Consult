@@ -1,11 +1,22 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, ActivityIndicator, Alert, Dimensions } from 'react-native';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  FlatList, 
+  TouchableOpacity, 
+  Image, 
+  ActivityIndicator, 
+  Dimensions,
+  Platform,
+  Animated
+} from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 import ApiService from '../../services/ApiService';
-import UnifiedBookingModal from '../../screens/UnifiedBookingModal'; // Add this import
 
 const { width: screenWidth } = Dimensions.get('window');
-const CARD_WIDTH = screenWidth * 0.8;
+const CARD_WIDTH = screenWidth * 0.85;
 const CARD_SPACING = 16;
 
 const ExpertsSection = ({ onBookNow }) => {
@@ -13,11 +24,10 @@ const ExpertsSection = ({ onBookNow }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [currentIndex, setCurrentIndex] = useState(0);
-  // Add these states for the booking modal
-
   
   const flatListRef = useRef(null);
   const navigation = useNavigation();
+  const scaleAnims = useRef({}).current;
 
   useEffect(() => {
     fetchExperts();
@@ -32,9 +42,14 @@ const ExpertsSection = ({ onBookNow }) => {
       
       if (result.success) {
         const approvedExperts = result.data.filter(user => 
-  user.role === 'consultant'
-);
+          user.role === 'consultant'
+        );
         setExperts(approvedExperts);
+        
+        // Initialize scale animations for each expert
+        approvedExperts.forEach((expert, index) => {
+          scaleAnims[expert._id] = new Animated.Value(1);
+        });
       } else {
         setError(result.error || 'Failed to fetch experts');
       }
@@ -47,24 +62,51 @@ const ExpertsSection = ({ onBookNow }) => {
     }
   };
 
+  const handleViewAllExperts = () => {
+    navigation.navigate('ExpertsList');
+  };
+
   const handleViewProfile = (expert) => {
-    // Navigate to ExpertProfile screen
+    // Animate button press
+    if (scaleAnims[expert._id]) {
+      Animated.sequence([
+        Animated.timing(scaleAnims[expert._id], {
+          toValue: 0.95,
+          duration: 100,
+          useNativeDriver: true,
+        }),
+        Animated.timing(scaleAnims[expert._id], {
+          toValue: 1,
+          duration: 100,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+    
     navigation.navigate('ExpertProfile', { expert });
   };
 
   const handleBookNow = (expert) => {
-    // Set the selected expert and show the booking modal
-    // setSelectedExpert(expert);
-    // setBookingModalVisible(true);
-     if (onBookNow) {
-    onBookNow(expert);
-     }
+    // Animate button press
+    if (scaleAnims[expert._id]) {
+      Animated.sequence([
+        Animated.timing(scaleAnims[expert._id], {
+          toValue: 0.95,
+          duration: 100,
+          useNativeDriver: true,
+        }),
+        Animated.timing(scaleAnims[expert._id], {
+          toValue: 1,
+          duration: 100,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+
+    if (onBookNow) {
+      onBookNow(expert);
+    }
   };
-
-
-  
-
- 
 
   const onViewableItemsChanged = useRef(({ viewableItems }) => {
     if (viewableItems.length > 0) {
@@ -76,85 +118,116 @@ const ExpertsSection = ({ onBookNow }) => {
     itemVisiblePercentThreshold: 50,
   }).current;
 
+  const getImageSource = (expert) => {
+    if (!expert.profileImage || 
+        expert.profileImage === '' || 
+        expert.profileImage.includes('amar-jha.dev') || 
+        expert.profileImage.includes('MyImg-BjWvYtsb.svg')) {
+      return { uri: 'https://via.placeholder.com/80x80/D1FAE5/059669?text=' + encodeURIComponent(expert.fullName.charAt(0)) };
+    }
+    
+    if (expert.profileImage.startsWith('http')) {
+      return { uri: expert.profileImage };
+    }
+    
+    if (expert.profileImage.includes('cloudinary')) {
+      return { uri: expert.profileImage };
+    }
+    
+    if (expert.profileImage.startsWith('/uploads/')) {
+      return { uri: `http://192.168.0.177:8011${expert.profileImage}` };
+    }
+    
+    return { uri: 'https://via.placeholder.com/80x80/D1FAE5/059669?text=' + encodeURIComponent(expert.fullName.charAt(0)) };
+  };
+
   const renderExpert = ({ item }) => {
     const profile = item.consultantRequest.consultantProfile;
     const languages = profile.languages?.join(', ') || 'English';
     
-    // Handle profile image URI properly
-    const getImageSource = () => {
-      // Always use placeholder if no profileImage or if it's the problematic URL
-      if (!item.profileImage || 
-          item.profileImage === '' || 
-          item.profileImage.includes('amar-jha.dev') || 
-          item.profileImage.includes('MyImg-BjWvYtsb.svg')) {
-        return { uri: 'https://via.placeholder.com/80x80/f0f0f0/999999?text=' + encodeURIComponent(item.fullName.charAt(0)) };
-      }
-      
-      // If it's a full URL (starts with http/https) and not the problematic one
-      if (item.profileImage.startsWith('http')) {
-        return { uri: item.profileImage };
-      }
-      
-      // If it's a Cloudinary URL
-      if (item.profileImage.includes('cloudinary')) {
-        return { uri: item.profileImage };
-      }
-      
-      // If it's a relative path, prepend base URL
-      if (item.profileImage.startsWith('/uploads/')) {
-        return { uri: `http://192.168.0.177:8011${item.profileImage}` };
-      }
-      
-      // Default fallback with user's first letter
-      return { uri: 'https://via.placeholder.com/80x80/f0f0f0/999999?text=' + encodeURIComponent(item.fullName.charAt(0)) };
-    };
-    
     return (
-      <View style={[styles.expertCard, { width: CARD_WIDTH }]}>
-        {/* Profile Image */}
-        <View style={styles.imageContainer}>
-          <Image
-            source={getImageSource()}
-            style={styles.expertImage}
-            onError={(error) => {
-              console.log('Image load error for:', item.fullName, error.nativeEvent.error);
-            }}
-            onLoad={() => {
-              console.log('Image loaded successfully for:', item.fullName);
-            }}
-          />
-          <View style={styles.onlineIndicator} />
+      <Animated.View 
+        style={[
+          styles.expertCard, 
+          { width: CARD_WIDTH },
+          { transform: [{ scale: scaleAnims[item._id] || 1 }] }
+        ]}
+      >
+        {/* Card Header */}
+        <View style={styles.cardHeader}>
+          <View style={styles.expertImageContainer}>
+            <Image
+              source={getImageSource(item)}
+              style={styles.expertImage}
+              onError={(error) => {
+                console.log('Image load error for:', item.fullName, error.nativeEvent.error);
+              }}
+            />
+            <View style={styles.onlineIndicator} />
+            <View style={styles.verifiedBadge}>
+              <Icon name="verified" size={16} color="#10B981" />
+            </View>
+          </View>
+          
+          <View style={styles.expertInfo}>
+            <Text style={styles.expertName} numberOfLines={1}>
+              {item.fullName}
+            </Text>
+            <Text style={styles.expertCategory} numberOfLines={1}>
+              {profile.category || profile.fieldOfStudy}
+            </Text>
+            <View style={styles.ratingContainer}>
+              <Icon name="star" size={14} color="#FBBF24" />
+              <Text style={styles.ratingText}>4.8</Text>
+              <Text style={styles.reviewsText}>(124 reviews)</Text>
+            </View>
+          </View>
         </View>
-        
-        {/* Expert Name */}
-        <Text style={styles.expertName} numberOfLines={1}>
-          {item.fullName}
-        </Text>
-        
-        {/* Category */}
-        <Text style={styles.expertCategory} numberOfLines={1}>
-          {profile.category || profile.fieldOfStudy}
-        </Text>
+
+        {/* Expertise Tags */}
+        <View style={styles.tagsContainer}>
+          <View style={styles.tag}>
+            <Text style={styles.tagText}>Expert</Text>
+          </View>
+          <View style={styles.tag}>
+            <Text style={styles.tagText}>Available</Text>
+          </View>
+          <View style={styles.tag}>
+            <Text style={styles.tagText}>Verified</Text>
+          </View>
+        </View>
         
         {/* Details Section */}
         <View style={styles.detailsSection}>
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Languages</Text>
+            <View style={styles.detailItem}>
+              <Icon name="language" size={16} color="#059669" />
+              <Text style={styles.detailLabel}>Languages</Text>
+            </View>
             <Text style={styles.detailValue} numberOfLines={1}>{languages}</Text>
           </View>
           
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Available:</Text>
-            <Text style={styles.detailValue} numberOfLines={1}>Mail and Video</Text>
+            <View style={styles.detailItem}>
+              <Icon name="video-call" size={16} color="#059669" />
+              <Text style={styles.detailLabel}>Available</Text>
+            </View>
+            <Text style={styles.detailValue} numberOfLines={1}>Video & Chat</Text>
           </View>
           
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Mode:</Text>
-            <Text style={styles.detailValue} numberOfLines={1}>Available Online</Text>
+            <View style={styles.detailItem}>
+              <Icon name="access-time" size={16} color="#059669" />
+              <Text style={styles.detailLabel}>Response</Text>
+            </View>
+            <Text style={styles.detailValue} numberOfLines={1}>Within 2 hours</Text>
           </View>
           
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Location:</Text>
+            <View style={styles.detailItem}>
+              <Icon name="location-on" size={16} color="#059669" />
+              <Text style={styles.detailLabel}>Location</Text>
+            </View>
             <Text style={styles.detailValue} numberOfLines={1}>{item.location || 'Online'}</Text>
           </View>
         </View>
@@ -164,58 +237,106 @@ const ExpertsSection = ({ onBookNow }) => {
           <TouchableOpacity 
             style={styles.viewProfileBtn}
             onPress={() => handleViewProfile(item)}
-            activeOpacity={0.7}
+            activeOpacity={0.8}
           >
+            <Icon name="person" size={16} color="#059669" />
             <Text style={styles.viewProfileText}>View Profile</Text>
           </TouchableOpacity>
           
           <TouchableOpacity 
             style={styles.bookNowBtn}
             onPress={() => handleBookNow(item)}
-            activeOpacity={0.7}
+            activeOpacity={0.8}
           >
+            <Icon name="calendar-today" size={16} color="#ffffff" />
             <Text style={styles.bookNowText}>Book Now</Text>
           </TouchableOpacity>
         </View>
-      </View>
+
+        {/* Bottom accent */}
+        <View style={styles.bottomAccent} />
+      </Animated.View>
     );
   };
 
   if (loading) {
     return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#2E7D32" />
-        <Text style={styles.loadingText}>Loading experts...</Text>
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <View style={styles.headerLeft}>
+            <Text style={styles.sectionTitle}>Meet Our Experts</Text>
+            <View style={styles.titleUnderline} />
+          </View>
+        </View>
+        <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color="#059669" />
+          <Text style={styles.loadingText}>Loading experts...</Text>
+        </View>
       </View>
     );
   }
 
   if (error) {
     return (
-      <View style={styles.centerContainer}>
-        <Text style={styles.errorText}>{error}</Text>
-        <TouchableOpacity style={styles.retryBtn} onPress={fetchExperts} activeOpacity={0.7}>
-          <Text style={styles.retryText}>Retry</Text>
-        </TouchableOpacity>
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <View style={styles.headerLeft}>
+            <Text style={styles.sectionTitle}>Meet Our Experts</Text>
+            <View style={styles.titleUnderline} />
+          </View>
+        </View>
+        <View style={styles.centerContainer}>
+          <Icon name="error-outline" size={48} color="#EF4444" />
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity style={styles.retryBtn} onPress={fetchExperts} activeOpacity={0.7}>
+            <Icon name="refresh" size={16} color="#ffffff" />
+            <Text style={styles.retryText}>Try Again</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
 
   if (experts.length === 0) {
     return (
-      <View style={styles.centerContainer}>
-        <Text style={styles.noExpertsText}>No experts available at the moment</Text>
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <View style={styles.headerLeft}>
+            <Text style={styles.sectionTitle}>Meet Our Experts</Text>
+            <View style={styles.titleUnderline} />
+          </View>
+        </View>
+        <View style={styles.centerContainer}>
+          <Icon name="people-outline" size={48} color="#94A3B8" />
+          <Text style={styles.noExpertsText}>No experts available at the moment</Text>
+          <Text style={styles.noExpertsSubtext}>Check back later for available consultants</Text>
+        </View>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
+      {/* Header Section - Unified with CategorySection */}
       <View style={styles.header}>
-        <Text style={styles.title}>Meet Our Experts</Text>
-        <Text style={styles.subtitle}>Connect with verified professionals</Text>
+        <View style={styles.headerLeft}>
+          <Text style={styles.sectionTitle}>Meet Our Experts</Text>
+          <View style={styles.titleUnderline} />
+        </View>
+        <TouchableOpacity 
+          style={styles.viewAllButton}
+          onPress={handleViewAllExperts}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.viewAllText}>View All</Text>
+          <Icon name="arrow-forward" size={16} color="#059669" />
+        </TouchableOpacity>
       </View>
       
+      {/* Subtitle */}
+      <Text style={styles.subtitle}>Connect with verified professionals</Text>
+      
+      {/* Experts Carousel */}
       <FlatList
         ref={flatListRef}
         data={experts}
@@ -233,10 +354,9 @@ const ExpertsSection = ({ onBookNow }) => {
         initialNumToRender={2}
         maxToRenderPerBatch={2}
         windowSize={3}
-        pagingEnabled={false}
       />
       
-      {/* Simplified Dots Indicator */}
+      {/* Dots Indicator */}
       {experts.length > 1 && (
         <View style={styles.indicatorContainer}>
           {experts.map((_, index) => (
@@ -245,7 +365,7 @@ const ExpertsSection = ({ onBookNow }) => {
               style={[
                 styles.dot,
                 {
-                  backgroundColor: index === currentIndex ? '#2E7D32' : '#E0E0E0',
+                  backgroundColor: index === currentIndex ? '#10B981' : '#E2E8F0',
                   width: index === currentIndex ? 20 : 8,
                 }
               ]}
@@ -254,152 +374,283 @@ const ExpertsSection = ({ onBookNow }) => {
         </View>
       )}
 
-      
+      {/* Section bottom border */}
+      <View style={styles.sectionBorder} />
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    backgroundColor: '#FAFAFA',
-    paddingVertical: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 20,
+    backgroundColor: '#ffffff',
   },
+
+  // Header Styles - Unified with CategorySection
   header: {
-    alignItems: 'center',
-    marginBottom: 20,
-    paddingHorizontal: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 8,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#1A1A1A',
+  headerLeft: {
+    flex: 1,
+  },
+  sectionTitle: {
+    fontSize: 22,
+    fontWeight: '600',
+    color: '#1E293B',
     marginBottom: 4,
-    textAlign: 'center',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
+    letterSpacing: -0.2,
+  },
+  titleUnderline: {
+    width: 40,
+    height: 2,
+    backgroundColor: '#10B981',
+    borderRadius: 1,
+  },
+  viewAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0FDF4',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#D1FAE5',
+  },
+  viewAllText: {
+    fontSize: 14,
+    color: '#059669',
+    fontWeight: '500',
+    marginRight: 4,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
   subtitle: {
     fontSize: 14,
-    color: '#666666',
-    fontWeight: '400',
-    textAlign: 'center',
+    color: '#64748B',
+    marginBottom: 20,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
+
+  // Carousel Styles
   carouselContent: {
-    paddingHorizontal: (screenWidth - CARD_WIDTH) / 2,
+    paddingHorizontal: 8,
     paddingBottom: 20,
   },
+
+  // Expert Card Styles - Enhanced
   expertCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#ffffff',
     borderRadius: 12,
-    padding: 20,
     marginHorizontal: CARD_SPACING / 2,
-    alignItems: 'center',
-    shadowColor: '#000',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    elevation: 2,
+    shadowColor: '#000000',
     shadowOffset: {
       width: 0,
-      height: 2,
+      height: 1,
     },
     shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-    borderWidth: 1,
-    borderColor: '#F0F0F0',
-  },
-  imageContainer: {
+    shadowRadius: 3,
+    overflow: 'hidden',
     position: 'relative',
-    marginBottom: 12,
+  },
+
+  // Card Header
+  cardHeader: {
+    flexDirection: 'row',
+    padding: 16,
+    paddingBottom: 12,
+  },
+  expertImageContainer: {
+    position: 'relative',
+    marginRight: 12,
   },
   expertImage: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#F8F8F8',
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 2,
+    borderColor: '#D1FAE5',
   },
   onlineIndicator: {
     position: 'absolute',
     bottom: 2,
     right: 2,
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: '#4CAF50',
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#10B981',
     borderWidth: 2,
-    borderColor: '#FFFFFF',
+    borderColor: '#ffffff',
+  },
+  verifiedBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#ffffff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#D1FAE5',
+  },
+  expertInfo: {
+    flex: 1,
+    justifyContent: 'center',
   },
   expertName: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#000000',
-    textAlign: 'center',
-    marginBottom: 4,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1E293B',
+    marginBottom: 2,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
+    letterSpacing: -0.1,
   },
   expertCategory: {
-    fontSize: 14,
-    color: '#FF8C00',
-    textAlign: 'center',
-    fontWeight: '600',
-    marginBottom: 16,
+    fontSize: 13,
+    color: '#059669',
+    fontWeight: '500',
+    marginBottom: 4,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
+  ratingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  ratingText: {
+    fontSize: 12,
+    color: '#1E293B',
+    fontWeight: '600',
+    marginLeft: 2,
+    marginRight: 4,
+  },
+  reviewsText: {
+    fontSize: 11,
+    color: '#64748B',
+  },
+
+  // Tags Container
+  tagsContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    gap: 6,
+  },
+  tag: {
+    backgroundColor: '#D1FAE5',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+  },
+  tagText: {
+    fontSize: 10,
+    color: '#059669',
+    fontWeight: '500',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+
+  // Details Section
   detailsSection: {
-    width: '100%',
-    marginBottom: 20,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
   },
   detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
-    paddingVertical: 2,
+    marginBottom: 10,
+  },
+  detailItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
   },
   detailLabel: {
     fontSize: 13,
-    color: '#000000',
-    fontWeight: '600',
-    flex: 1,
+    color: '#1E293B',
+    fontWeight: '500',
+    marginLeft: 6,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
   detailValue: {
     fontSize: 13,
-    color: '#666666',
+    color: '#64748B',
     fontWeight: '400',
     flex: 1,
     textAlign: 'right',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
+
+  // Action Buttons
   buttonContainer: {
     flexDirection: 'row',
-    width: '100%',
+    padding: 16,
+    paddingTop: 0,
     gap: 10,
   },
   viewProfileBtn: {
     flex: 1,
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: '#CCCCCC',
-    borderRadius: 6,
-    paddingVertical: 10,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#D1FAE5',
+    borderRadius: 8,
+    paddingVertical: 10,
+    gap: 6,
   },
   viewProfileText: {
-    color: '#666666',
+    color: '#059669',
     fontSize: 14,
     fontWeight: '500',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
   bookNowBtn: {
     flex: 1,
-    backgroundColor: '#2E7D32',
-    borderRadius: 6,
-    paddingVertical: 10,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#059669',
+    borderRadius: 8,
+    paddingVertical: 10,
+    gap: 6,
   },
   bookNowText: {
-    color: '#FFFFFF',
+    color: '#ffffff',
     fontSize: 14,
     fontWeight: '600',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
+
+  // Bottom Accent
+  bottomAccent: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 3,
+    backgroundColor: '#10B981',
+    opacity: 0.6,
+  },
+
+  // Dots Indicator
   indicatorContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 16,
-    paddingHorizontal: 20,
+    marginBottom: 8,
   },
   dot: {
     height: 8,
@@ -407,43 +658,65 @@ const styles = StyleSheet.create({
     marginHorizontal: 3,
     transition: 'width 0.3s ease',
   },
+
+  // Loading & Error States
   centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FAFAFA',
-    paddingHorizontal: 20,
+    paddingVertical: 40,
   },
   loadingText: {
     marginTop: 12,
-    fontSize: 16,
-    color: '#666666',
+    fontSize: 14,
+    color: '#64748B',
     fontWeight: '500',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
   errorText: {
-    fontSize: 16,
-    color: '#E53E3E',
+    fontSize: 14,
+    color: '#EF4444',
     textAlign: 'center',
+    marginTop: 12,
     marginBottom: 16,
     fontWeight: '500',
-    lineHeight: 22,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
   retryBtn: {
-    backgroundColor: '#2E7D32',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#059669',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
     borderRadius: 8,
+    gap: 6,
   },
   retryText: {
-    color: '#FFFFFF',
+    color: '#ffffff',
     fontWeight: '600',
     fontSize: 14,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
   noExpertsText: {
     fontSize: 16,
-    color: '#666666',
+    color: '#1E293B',
     textAlign: 'center',
     fontWeight: '500',
+    marginTop: 12,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
+  },
+  noExpertsSubtext: {
+    fontSize: 14,
+    color: '#64748B',
+    textAlign: 'center',
+    marginTop: 4,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+
+  // Section Border
+  sectionBorder: {
+    marginTop: 20,
+    height: 1,
+    backgroundColor: '#E2E8F0',
+    marginHorizontal: -16,
   },
 });
 

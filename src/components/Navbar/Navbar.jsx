@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,8 @@ import {
   Dimensions,
   SafeAreaView,
   Image,
+  Animated,
+  Platform,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useAuth } from '../../context/AuthContext';
@@ -18,13 +20,37 @@ const Navbar = ({ state, descriptors, navigation }) => {
   const [hasNotifications, setHasNotifications] = useState(true);
   const [isVisible, setIsVisible] = useState(true);
   const { isAuthenticated, user } = useAuth();
+  
+  // Animation refs
+  const fadeAnim = useRef(new Animated.Value(1)).current;
+  const slideAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnims = useRef(
+    Array.from({ length: 5 }, () => new Animated.Value(1))
+  ).current;
 
-  // Hide navbar on Reels screen
+  // Hide navbar on specific screens
   useFocusEffect(
     React.useCallback(() => {
       const currentRoute = state.routes[state.index].name;
-      setIsVisible(currentRoute !== 'Reels');
-    }, [state])
+      const shouldHide = ['Reels', 'ChatBot'].includes(currentRoute);
+      
+      if (shouldHide !== !isVisible) {
+        Animated.parallel([
+          Animated.timing(fadeAnim, {
+            toValue: shouldHide ? 0 : 1,
+            duration: 250,
+            useNativeDriver: true,
+          }),
+          Animated.timing(slideAnim, {
+            toValue: shouldHide ? 80 : 0,
+            duration: 250,
+            useNativeDriver: true,
+          }),
+        ]).start(() => {
+          setIsVisible(!shouldHide);
+        });
+      }
+    }, [state, fadeAnim, slideAnim])
   );
 
   const navItems = [
@@ -32,49 +58,64 @@ const Navbar = ({ state, descriptors, navigation }) => {
       name: 'Home', 
       icon: 'home', 
       route: 'Home',
-      activeColor: '#4A7C59',
-      inactiveColor: '#666'
+      activeColor: '#059669',
+      inactiveColor: '#64748B'
     },
     { 
-      name: 'Search', 
-      icon: 'search', 
-      route: 'Search',
-      activeColor: '#4A7C59',
-      inactiveColor: '#666'
+      name: 'Assistant', 
+      icon: 'support-agent', 
+      route: 'ChatBot',
+      activeColor: '#059669',
+      inactiveColor: '#64748B',
+      isAssistant: true
     },
     { 
-      name: 'Reels', 
-      icon: 'add-box', 
+      name: 'Media', 
+      icon: 'play-circle-outline', 
       route: 'Reels',
-      activeColor: '#4A7C59',
-      inactiveColor: '#666'
+      activeColor: '#059669',
+      inactiveColor: '#64748B'
     },
     { 
-      name: 'Notifications', 
-      icon: 'favorite-border', 
+      name: 'Activity', 
+      icon: 'notifications-none', 
       route: 'Notifications',
-      activeColor: '#4A7C59',
-      inactiveColor: '#666',
+      activeColor: '#059669',
+      inactiveColor: '#64748B',
       hasNotification: hasNotifications
     },
-    // Conditionally show Login or Dashboard
+    // Conditionally show Login or Profile
     isAuthenticated ? {
-      name: 'Dashboard', 
-      icon: 'dashboard', 
+      name: 'Profile', 
+      icon: 'person-outline', 
       route: 'Dashboard',
-      activeColor: '#4A7C59',
-      inactiveColor: '#666',
+      activeColor: '#059669',
+      inactiveColor: '#64748B',
       isProfile: true
     } : {
       name: 'Login', 
-      icon: 'person', 
+      icon: 'login', 
       route: 'Login',
-      activeColor: '#4A7C59',
-      inactiveColor: '#666'
+      activeColor: '#059669',
+      inactiveColor: '#64748B'
     },
   ];
 
   const handleNavigation = (routeName, index) => {
+    // Simple scale animation for feedback
+    Animated.sequence([
+      Animated.timing(scaleAnims[index], {
+        toValue: 0.92,
+        duration: 80,
+        useNativeDriver: true,
+      }),
+      Animated.timing(scaleAnims[index], {
+        toValue: 1,
+        duration: 120,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
     const event = navigation.emit({
       type: 'tabPress',
       target: state.routes[index].key,
@@ -82,48 +123,80 @@ const Navbar = ({ state, descriptors, navigation }) => {
     });
 
     if (!event.defaultPrevented) {
-      navigation.navigate(routeName);
+      // Special handling for Assistant -> ChatBot
+      if (routeName === 'ChatBot') {
+        navigation.navigate('ChatBot', { query: 'hello' });
+      } else {
+        navigation.navigate(routeName);
+      }
     }
   };
 
   const NavButton = ({ item, index, isActive }) => (
-    <TouchableOpacity
+    <Animated.View
       style={[
-        styles.navButton,
-        isActive && styles.activeNavButton
+        styles.navButtonContainer,
+        {
+          transform: [{ scale: scaleAnims[index] }],
+        },
       ]}
-      onPress={() => handleNavigation(item.route, index)}
-      activeOpacity={0.7}
     >
-      <View style={styles.iconContainer}>
-        {item.isProfile && user?.profileImage ? (
-          <Image 
-            source={{ uri: user.profileImage }} 
-            style={styles.profileImage}
-          />
-        ) : (
-          <Icon
-            name={item.icon}
-            size={24}
-            color={isActive ? item.activeColor : item.inactiveColor}
-          />
-        )}
-        {item.hasNotification && (
-          <View style={styles.notificationDot} />
-        )}
-      </View>
-      <Text
-        style={[
-          styles.navText,
-          {
-            color: isActive ? item.activeColor : item.inactiveColor,
-            fontWeight: isActive ? '600' : '400'
-          }
-        ]}
+      <TouchableOpacity
+        style={styles.navButton}
+        onPress={() => handleNavigation(item.route, index)}
+        activeOpacity={0.6}
       >
-        {item.name}
-      </Text>
-    </TouchableOpacity>
+        <View style={styles.iconContainer}>
+          {/* Active indicator background */}
+          {isActive && (
+            <View style={styles.activeIndicatorBg} />
+          )}
+          
+          {item.isProfile && user?.profileImage ? (
+            <View style={styles.profileImageContainer}>
+              <Image 
+                source={{ uri: user.profileImage }} 
+                style={[
+                  styles.profileImage,
+                  isActive && styles.profileImageActive
+                ]}
+              />
+            </View>
+          ) : (
+            <Icon
+              name={item.icon}
+              size={24}
+              color={isActive ? item.activeColor : item.inactiveColor}
+              style={styles.icon}
+            />
+          )}
+          
+          {/* Notification badge */}
+          {item.hasNotification && (
+            <View style={styles.notificationBadge}>
+              <View style={styles.notificationDot} />
+            </View>
+          )}
+
+          {/* Active indicator dot */}
+          {isActive && (
+            <View style={styles.activeIndicatorDot} />
+          )}
+        </View>
+        
+        <Text
+          style={[
+            styles.navText,
+            {
+              color: isActive ? item.activeColor : item.inactiveColor,
+              fontWeight: isActive ? '600' : '500'
+            }
+          ]}
+        >
+          {item.name}
+        </Text>
+      </TouchableOpacity>
+    </Animated.View>
   );
 
   // Don't render navbar if not visible
@@ -132,89 +205,168 @@ const Navbar = ({ state, descriptors, navigation }) => {
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.navbar}>
-        {navItems.map((item, index) => {
-          const isActive = state.index === index;
-          return (
-            <NavButton 
-              key={index} 
-              item={item} 
-              index={index}
-              isActive={isActive}
-            />
-          );
-        })}
-      </View>
-    </SafeAreaView>
+    <Animated.View
+      style={[
+        styles.container,
+        {
+          opacity: fadeAnim,
+          transform: [{ translateY: slideAnim }],
+        },
+      ]}
+    >
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.navbar}>
+          <View style={styles.topBorder} />
+          {navItems.map((item, index) => {
+            const isActive = state.index === index;
+            return (
+              <NavButton 
+                key={`${item.route}-${index}`} 
+                item={item} 
+                index={index}
+                isActive={isActive}
+              />
+            );
+          })}
+        </View>
+      </SafeAreaView>
+    </Animated.View>
   );
 };
 
 const styles = StyleSheet.create({
-  safeArea: {
+  container: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    zIndex: 1000,
+  },
+  safeArea: {
+    backgroundColor: '#ffffff',
   },
   navbar: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
     alignItems: 'center',
     paddingVertical: 8,
-    paddingHorizontal: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    backdropFilter: 'blur(10px)',
+    paddingHorizontal: 4,
+    backgroundColor: '#ffffff',
     borderTopWidth: 1,
-    borderTopColor: 'rgba(0, 0, 0, 0.1)',
-    shadowColor: '#000',
+    borderTopColor: '#E2E8F0',
+    elevation: 12,
+    shadowColor: '#000000',
     shadowOffset: {
       width: 0,
       height: -2,
     },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.08,
     shadowRadius: 8,
-    elevation: 10,
+    position: 'relative',
+  },
+  topBorder: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 2,
+    backgroundColor: '#10B981',
+    opacity: 0.6,
+  },
+  
+  // Nav Button Styles
+  navButtonContainer: {
+    flex: 1,
   },
   navButton: {
-    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 8,
     paddingHorizontal: 4,
-    borderRadius: 12,
-    minHeight: 60,
+    minHeight: 64,
+    position: 'relative',
   },
-  activeNavButton: {
-    backgroundColor: 'rgba(74, 124, 89, 0.1)',
-  },
+  
+  // Icon Styles
   iconContainer: {
     position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 40,
+    height: 40,
     marginBottom: 4,
   },
-  profileImage: {
-    width: 24,
-    height: 24,
+  activeIndicatorBg: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#D1FAE5',
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#4A7C59',
+    opacity: 0.8,
   },
-  notificationDot: {
+  icon: {
+    zIndex: 1,
+  },
+  activeIndicatorDot: {
     position: 'absolute',
     top: -2,
     right: -2,
     width: 8,
     height: 8,
-    backgroundColor: '#FF6B6B',
+    backgroundColor: '#10B981',
     borderRadius: 4,
-    borderWidth: 1,
-    borderColor: '#fff',
+    borderWidth: 1.5,
+    borderColor: '#ffffff',
   },
+  
+  // Profile Image
+  profileImageContainer: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    overflow: 'hidden',
+  },
+  profileImage: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+  },
+  profileImageActive: {
+    borderWidth: 2,
+    borderColor: '#10B981',
+  },
+  
+  // Notification Badge
+  notificationBadge: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    width: 14,
+    height: 14,
+    backgroundColor: '#ffffff',
+    borderRadius: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 2,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+  },
+  notificationDot: {
+    width: 8,
+    height: 8,
+    backgroundColor: '#EF4444',
+    borderRadius: 4,
+  },
+
+  // Text Styles
   navText: {
-    fontSize: 12,
+    fontSize: 11,
     textAlign: 'center',
-    marginTop: 2,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+    letterSpacing: 0.2,
   },
 });
 

@@ -815,6 +815,8 @@ async createBooking(bookingData) {
       return { success: false, error: 'Server is not reachable' };
     }
   }
+
+  
   async getChatBotResponse(prompt) {
   console.log('[API] Getting chatbot response for prompt:', prompt);
   
