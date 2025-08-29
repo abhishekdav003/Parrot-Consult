@@ -11,6 +11,8 @@ import {
   TextInput,
   Image,
   ActivityIndicator,
+  Platform,
+  Dimensions,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import ApiService from '../services/ApiService';
@@ -18,6 +20,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import PaymentScreen from './PaymentScreen';
 import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
+
+const { width: screenWidth } = Dimensions.get('window');
 
 const UnifiedBookingModal = ({ visible, onClose, expert }) => {
   const navigation = useNavigation();
@@ -99,7 +103,6 @@ const availableDayIndexes = useMemo(() => {
   return set;
 }, [expert]);
 
-
   const months = [
     'January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December'
@@ -123,7 +126,6 @@ const availableDayIndexes = useMemo(() => {
       const currentViewYear = currentMonth.getFullYear();
       
       if (selectedMonth !== currentViewMonth || selectedYear !== currentViewYear) {
-        
         setSelectedDate(null);
         setSelectedTime(null);
         setAvailableTimeSlots([]);
@@ -381,9 +383,9 @@ const availableDayIndexes = useMemo(() => {
     const days = [];
     
     // Previous month days
-   const prevMonthLastDay = new Date(year, month, 0);
-for (let i = firstDayWeekday - 1; i >= 0; i--) {
-  const date = new Date(year, month - 1, prevMonthLastDay.getDate() - i);
+    const prevMonthLastDay = new Date(year, month, 0);
+    for (let i = firstDayWeekday - 1; i >= 0; i--) {
+      const date = new Date(year, month - 1, prevMonthLastDay.getDate() - i);
       days.push({
         date,
         isCurrentMonth: false,
@@ -535,17 +537,23 @@ for (let i = firstDayWeekday - 1; i >= 0; i--) {
 
   // Render different steps
   const renderHowItWorks = () => (
-    <>
-      <View style={styles.content}>
-        <Text style={styles.title}>Book a consultation</Text>
-        <Text style={styles.subtitle}>How it works</Text>
+    <View style={styles.stepContainer}>
+      <View style={styles.stepContent}>
+        <View style={styles.titleSection}>
+          <Text style={styles.mainTitle}>Book a Consultation</Text>
+          <Text style={styles.subtitle}>How it works</Text>
+          <View style={styles.titleUnderline} />
+        </View>
 
         <View style={styles.stepsContainer}>
           <View style={styles.stepItem}>
-            <View style={styles.stepNumber}>
-              <Text style={styles.stepNumberText}>1</Text>
+            <View style={styles.stepIconContainer}>
+              <View style={styles.stepNumber}>
+                <Text style={styles.stepNumberText}>1</Text>
+              </View>
+              <View style={styles.stepLine} />
             </View>
-            <View style={styles.stepContent}>
+            <View style={styles.stepContentRight}>
               <Text style={styles.stepTitle}>Choose your consultant</Text>
               <Text style={styles.stepDescription}>
                 Select the consultant who best fits your needs
@@ -554,10 +562,13 @@ for (let i = firstDayWeekday - 1; i >= 0; i--) {
           </View>
 
           <View style={styles.stepItem}>
-            <View style={styles.stepNumber}>
-              <Text style={styles.stepNumberText}>2</Text>
+            <View style={styles.stepIconContainer}>
+              <View style={styles.stepNumber}>
+                <Text style={styles.stepNumberText}>2</Text>
+              </View>
+              <View style={styles.stepLine} />
             </View>
-            <View style={styles.stepContent}>
+            <View style={styles.stepContentRight}>
               <Text style={styles.stepTitle}>Select date & time</Text>
               <Text style={styles.stepDescription}>
                 Pick an available slot that works for you
@@ -566,10 +577,12 @@ for (let i = firstDayWeekday - 1; i >= 0; i--) {
           </View>
 
           <View style={styles.stepItem}>
-            <View style={styles.stepNumber}>
-              <Text style={styles.stepNumberText}>3</Text>
+            <View style={styles.stepIconContainer}>
+              <View style={styles.stepNumber}>
+                <Text style={styles.stepNumberText}>3</Text>
+              </View>
             </View>
-            <View style={styles.stepContent}>
+            <View style={styles.stepContentRight}>
               <Text style={styles.stepTitle}>Let's connect</Text>
               <Text style={styles.stepDescription}>
                 Meet with your consultant and get the guidance you seek
@@ -587,38 +600,42 @@ for (let i = firstDayWeekday - 1; i >= 0; i--) {
         >
           <View style={[styles.checkbox, dontShowAgain && styles.checkboxChecked]}>
             {dontShowAgain && (
-              <Icon name="check" size={14} color="#fff" />
+              <Icon name="check" size={12} color="#fff" />
             )}
           </View>
           <Text style={styles.checkboxText}>Don't show again</Text>
         </TouchableOpacity>
 
         <TouchableOpacity 
-          style={styles.getStartedButton}
+          style={styles.primaryButton}
           onPress={goToNextStep}
           activeOpacity={0.8}
         >
-          <Text style={styles.getStartedText}>Get started</Text>
+          <Text style={styles.primaryButtonText}>Get Started</Text>
+          <Icon name="arrow-forward" size={18} color="#fff" />
         </TouchableOpacity>
       </View>
-    </>
+    </View>
   );
 
   const renderDurationSelection = () => (
-    <>
-      <View style={styles.content}>
-        <View style={styles.meetingSection}>
-          <Text style={styles.sectionTitle}>During our meeting</Text>
+    <View style={styles.stepContainer}>
+      <ScrollView style={styles.stepContent} showsVerticalScrollIndicator={false}>
+        <View style={styles.consultantSection}>
+          <Text style={styles.sectionLabel}>During our meeting</Text>
           
-          <View style={styles.consultantInfo}>
-            <Image
-              source={getImageSource()}
-              style={styles.consultantAvatar}
-              onError={(error) => {
-                console.log('Consultant image load error:', error.nativeEvent.error);
-              }}
-            />
-            <View style={styles.consultantText}>
+          <View style={styles.consultantCard}>
+            <View style={styles.consultantImageContainer}>
+              <Image
+                source={getImageSource()}
+                style={styles.consultantImage}
+                onError={(error) => {
+                  console.log('Consultant image load error:', error.nativeEvent.error);
+                }}
+              />
+              <View style={styles.onlineIndicator} />
+            </View>
+            <View style={styles.consultantInfo}>
               <Text style={styles.consultantMessage}>
                 {expert?.consultantRequest?.consultantProfile?.shortBio || 
                  "Let's discuss your project requirements and how I can help you achieve your goals."}
@@ -628,7 +645,7 @@ for (let i = firstDayWeekday - 1; i >= 0; i--) {
         </View>
 
         <View style={styles.durationSection}>
-          <Text style={styles.durationTitle}>How long would you like to meet for?</Text>
+          <Text style={styles.sectionTitle}>How long would you like to meet?</Text>
           
           <View style={styles.durationOptions}>
             {/* Free 5-minute trial if available */}
@@ -641,12 +658,35 @@ for (let i = firstDayWeekday - 1; i >= 0; i--) {
                 onPress={() => setSelectedDuration('5')}
                 activeOpacity={0.7}
               >
-                <Text style={[
-                  styles.durationText,
-                  selectedDuration === '5' && styles.selectedDurationText
-                ]}>
-                  5 minutes (Free Trial)
-                </Text>
+                <View style={styles.durationContent}>
+                  <View style={styles.durationLeft}>
+                    <Text style={[
+                      styles.durationTime,
+                      selectedDuration === '5' && styles.selectedDurationTime
+                    ]}>
+                      5 min
+                    </Text>
+                    <Text style={[
+                      styles.durationLabel,
+                      selectedDuration === '5' && styles.selectedDurationLabel
+                    ]}>
+                      Free Trial
+                    </Text>
+                  </View>
+                  <View style={styles.durationRight}>
+                    <Text style={[
+                      styles.durationPrice,
+                      selectedDuration === '5' && styles.selectedDurationPrice
+                    ]}>
+                      FREE
+                    </Text>
+                  </View>
+                </View>
+                {selectedDuration === '5' && (
+                  <View style={styles.selectedIndicator}>
+                    <Icon name="check-circle" size={20} color="#059669" />
+                  </View>
+                )}
               </TouchableOpacity>
             )}
 
@@ -658,12 +698,35 @@ for (let i = firstDayWeekday - 1; i >= 0; i--) {
               onPress={() => setSelectedDuration('30')}
               activeOpacity={0.7}
             >
-              <Text style={[
-                styles.durationText,
-                selectedDuration === '30' && styles.selectedDurationText
-              ]}>
-                30 minutes (₹{getSessionFee('30').toLocaleString()})
-              </Text>
+              <View style={styles.durationContent}>
+                <View style={styles.durationLeft}>
+                  <Text style={[
+                    styles.durationTime,
+                    selectedDuration === '30' && styles.selectedDurationTime
+                  ]}>
+                    30 min
+                  </Text>
+                  <Text style={[
+                    styles.durationLabel,
+                    selectedDuration === '30' && styles.selectedDurationLabel
+                  ]}>
+                    Standard
+                  </Text>
+                </View>
+                <View style={styles.durationRight}>
+                  <Text style={[
+                    styles.durationPrice,
+                    selectedDuration === '30' && styles.selectedDurationPrice
+                  ]}>
+                    ₹{getSessionFee('30').toLocaleString()}
+                  </Text>
+                </View>
+              </View>
+              {selectedDuration === '30' && (
+                <View style={styles.selectedIndicator}>
+                  <Icon name="check-circle" size={20} color="#059669" />
+                </View>
+              )}
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -674,124 +737,171 @@ for (let i = firstDayWeekday - 1; i >= 0; i--) {
               onPress={() => setSelectedDuration('60')}
               activeOpacity={0.7}
             >
-              <Text style={[
-                styles.durationText,
-                selectedDuration === '60' && styles.selectedDurationText
-              ]}>
-                60 minutes (₹{getSessionFee('60').toLocaleString()})
-              </Text>
+              <View style={styles.durationContent}>
+                <View style={styles.durationLeft}>
+                  <Text style={[
+                    styles.durationTime,
+                    selectedDuration === '60' && styles.selectedDurationTime
+                  ]}>
+                    60 min
+                  </Text>
+                  <Text style={[
+                    styles.durationLabel,
+                    selectedDuration === '60' && styles.selectedDurationLabel
+                  ]}>
+                    Extended
+                  </Text>
+                </View>
+                <View style={styles.durationRight}>
+                  <Text style={[
+                    styles.durationPrice,
+                    selectedDuration === '60' && styles.selectedDurationPrice
+                  ]}>
+                    ₹{getSessionFee('60').toLocaleString()}
+                  </Text>
+                  <Text style={styles.durationSavings}>Save 10%</Text>
+                </View>
+              </View>
+              {selectedDuration === '60' && (
+                <View style={styles.selectedIndicator}>
+                  <Icon name="check-circle" size={20} color="#059669" />
+                </View>
+              )}
             </TouchableOpacity>
           </View>
 
           {/* Show consultant availability info */}
           {expert?.consultantRequest?.consultantProfile && (
-            <View style={styles.availabilityInfo}>
-              <Text style={styles.availabilityTitle}>Consultant Availability:</Text>
-              <Text style={styles.availabilityText}>
-                Available {expert.consultantRequest.consultantProfile.daysPerWeek || '5'} days per week
-              </Text>
-              <Text style={styles.availabilityText}>
-                {expert.consultantRequest.consultantProfile.availableTimePerDay || '8 hours'} per day
-              </Text>
-              <Text style={styles.availabilityText}>
-                {expert.consultantRequest.consultantProfile.yearsOfExperience} years of experience
-              </Text>
-              <Text style={styles.availabilityText}>
-                Days: {expert.consultantRequest.consultantProfile.days?.join(', ') || 'Not specified'}
-              </Text>
+            <View style={styles.availabilityCard}>
+              <View style={styles.availabilityHeader}>
+                <Icon name="info-outline" size={16} color="#059669" />
+                <Text style={styles.availabilityTitle}>Consultant Availability</Text>
+              </View>
+              <View style={styles.availabilityContent}>
+                <View style={styles.availabilityItem}>
+                  <Icon name="schedule" size={14} color="#64748B" />
+                  <Text style={styles.availabilityText}>
+                    {expert.consultantRequest.consultantProfile.availableTimePerDay || '8 hours'} per day
+                  </Text>
+                </View>
+                <View style={styles.availabilityItem}>
+                  <Icon name="calendar-today" size={14} color="#64748B" />
+                  <Text style={styles.availabilityText}>
+                    {expert.consultantRequest.consultantProfile.daysPerWeek || '5'} days per week
+                  </Text>
+                </View>
+                <View style={styles.availabilityItem}>
+                  <Icon name="star" size={14} color="#64748B" />
+                  <Text style={styles.availabilityText}>
+                    {expert.consultantRequest.consultantProfile.yearsOfExperience} years experience
+                  </Text>
+                </View>
+              </View>
             </View>
           )}
         </View>
-      </View>
+      </ScrollView>
 
       <View style={styles.bottomSection}>
         <TouchableOpacity 
-          style={styles.continueButton}
+          style={styles.primaryButton}
           onPress={goToNextStep}
           activeOpacity={0.8}
         >
-          <Text style={styles.continueText}>Continue</Text>
+          <Text style={styles.primaryButtonText}>Continue</Text>
+          <Icon name="arrow-forward" size={18} color="#fff" />
         </TouchableOpacity>
       </View>
-    </>
+    </View>
   );
 
   const renderDateTimeSelection = () => {
     const isBookingReady = selectedDate && selectedTime;
     
     return (
-      <>
+      <View style={styles.stepContainer}>
         <ScrollView 
-          style={styles.content} 
+          style={styles.stepContent} 
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
         >
-          <Text style={styles.question}>When would you like to meet?</Text>
-
-          {/* Available days info */}
-          {expert?.consultantRequest?.consultantProfile?.days && (
-            <View style={styles.availableDaysInfo}>
-              <Text style={styles.availableDaysTitle}>Available Days:</Text>
-              <Text style={styles.availableDaysText}>
-                {expert.consultantRequest.consultantProfile.days.join(', ')}
-              </Text>
-            </View>
-          )}
-
-          {/* Calendar Header */}
-          <View style={styles.calendarHeader}>
-            <TouchableOpacity 
-              style={styles.navButton}
-              onPress={() => navigateMonth(-1)}
-            >
-              <Icon name="chevron-left" size={24} color="#666" />
-            </TouchableOpacity>
+          <View style={styles.dateTimeHeader}>
+            <Text style={styles.sectionTitle}>When would you like to meet?</Text>
             
-            <Text style={styles.monthYear}>
-              {months[currentMonth.getMonth()]} {currentMonth.getFullYear()}
-            </Text>
-            
-            <TouchableOpacity 
-              style={styles.navButton}
-              onPress={() => navigateMonth(1)}
-            >
-              <Icon name="chevron-right" size={24} color="#666" />
-            </TouchableOpacity>
+            {/* Available days info */}
+            {expert?.consultantRequest?.consultantProfile?.days && (
+              <View style={styles.infoCard}>
+                <Icon name="info-outline" size={16} color="#059669" />
+                <View style={styles.infoContent}>
+                  <Text style={styles.infoTitle}>Available Days:</Text>
+                  <Text style={styles.infoText}>
+                    {expert.consultantRequest.consultantProfile.days.join(', ')}
+                  </Text>
+                </View>
+              </View>
+            )}
           </View>
 
-          {/* Weekday Headers */}
-          <View style={styles.weekdaysContainer}>
-            {weekdays.map(day => (
-              <Text key={day} style={styles.weekdayHeader}>{day}</Text>
-            ))}
-          </View>
-
-          {/* Calendar Grid */}
-          <View style={styles.calendarGrid}>
-            {calendarDays.map((dayInfo, index) => (
-              <TouchableOpacity
-                key={`${dayInfo.date.getTime()}-${index}`}
-                style={[
-                  styles.dayCell,
-                  dayInfo.isSelected && styles.selectedDay,
-                  dayInfo.isToday && !dayInfo.isSelected && styles.todayDay,
-                  dayInfo.isDisabled && styles.disabledDay,
-                ]}
-                onPress={() => handleDateSelect(dayInfo.date)}
-                disabled={dayInfo.isDisabled}
-                activeOpacity={dayInfo.isDisabled ? 1 : 0.7}
+          {/* Calendar Section */}
+          <View style={styles.calendarSection}>
+            <View style={styles.calendarHeader}>
+              <TouchableOpacity 
+                style={styles.navButton}
+                onPress={() => navigateMonth(-1)}
+                activeOpacity={0.7}
               >
-                <Text style={[
-                  styles.dayText,
-                  !dayInfo.isCurrentMonth && styles.inactiveDayText,
-                  dayInfo.isSelected && styles.selectedDayText,
-                  dayInfo.isToday && !dayInfo.isSelected && styles.todayDayText,
-                  dayInfo.isDisabled && dayInfo.isCurrentMonth && styles.disabledDayText,
-                ]}>
-                  {dayInfo.date.getDate()}
-                </Text>
+                <Icon name="chevron-left" size={20} color="#64748B" />
               </TouchableOpacity>
-            ))}
+              
+              <Text style={styles.monthYear}>
+                {months[currentMonth.getMonth()]} {currentMonth.getFullYear()}
+              </Text>
+              
+              <TouchableOpacity 
+                style={styles.navButton}
+                onPress={() => navigateMonth(1)}
+                activeOpacity={0.7}
+              >
+                <Icon name="chevron-right" size={20} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Weekday Headers */}
+            <View style={styles.weekdaysRow}>
+              {weekdays.map(day => (
+                <Text key={day} style={styles.weekdayHeader}>{day}</Text>
+              ))}
+            </View>
+
+            {/* Calendar Grid */}
+            <View style={styles.calendarGrid}>
+              {calendarDays.map((dayInfo, index) => (
+                <TouchableOpacity
+                  key={`${dayInfo.date.getTime()}-${index}`}
+                  style={[
+                    styles.dayCell,
+                    dayInfo.isSelected && styles.selectedDayCell,
+                    dayInfo.isToday && !dayInfo.isSelected && styles.todayDayCell,
+                    dayInfo.isDisabled && styles.disabledDayCell,
+                  ]}
+                  onPress={() => handleDateSelect(dayInfo.date)}
+                  disabled={dayInfo.isDisabled}
+                  activeOpacity={dayInfo.isDisabled ? 1 : 0.7}
+                >
+                  <Text style={[
+                    styles.dayText,
+                    !dayInfo.isCurrentMonth && styles.inactiveDayText,
+                    dayInfo.isSelected && styles.selectedDayText,
+                    dayInfo.isToday && !dayInfo.isSelected && styles.todayDayText,
+                    dayInfo.isDisabled && dayInfo.isCurrentMonth && styles.disabledDayText,
+                  ]}>
+                    {dayInfo.date.getDate()}
+                  </Text>
+                  {dayInfo.isToday && !dayInfo.isSelected && (
+                    <View style={styles.todayDot} />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
 
           {/* Time Selection */}
@@ -803,11 +913,12 @@ for (let i = firstDayWeekday - 1; i >= 0; i--) {
               
               {loadingAvailability ? (
                 <View style={styles.loadingContainer}>
-                  <ActivityIndicator size="small" color="#2E7D32" />
+                  <ActivityIndicator size="small" color="#059669" />
                   <Text style={styles.loadingText}>Loading available slots...</Text>
                 </View>
               ) : availableTimeSlots.length === 0 ? (
                 <View style={styles.noSlotsContainer}>
+                  <Icon name="event-busy" size={32} color="#94A3B8" />
                   <Text style={styles.noSlotsText}>
                     No available time slots for this date
                   </Text>
@@ -818,7 +929,7 @@ for (let i = firstDayWeekday - 1; i >= 0; i--) {
                   )}
                 </View>
               ) : (
-                <View style={styles.timeSlotsContainer}>
+                <View style={styles.timeSlotsGrid}>
                   {availableTimeSlots.map((slot) => (
                     <TouchableOpacity
                       key={slot.id}
@@ -835,6 +946,11 @@ for (let i = firstDayWeekday - 1; i >= 0; i--) {
                       ]}>
                         {slot.label}
                       </Text>
+                      {selectedTime === slot.id && (
+                        <View style={styles.timeSlotCheck}>
+                          <Icon name="check" size={12} color="#fff" />
+                        </View>
+                      )}
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -846,16 +962,20 @@ for (let i = firstDayWeekday - 1; i >= 0; i--) {
           {isBookingReady && (
             <View style={styles.projectSection}>
               <Text style={styles.projectTitle}>Add your project details</Text>
-              <TextInput
-                style={styles.projectInput}
-                placeholder="Please share your project details (requirements, budget, timelines, etc)"
-                multiline={true}
-                numberOfLines={4}
-                value={projectDetails}
-                onChangeText={setProjectDetails}
-                textAlignVertical="top"
-                placeholderTextColor="#999"
-              />
+              <Text style={styles.projectSubtitle}>Help us prepare for a better consultation</Text>
+              <View style={styles.inputContainer}>
+                <TextInput
+                  style={styles.projectInput}
+                  placeholder="Please share your project details (requirements, budget, timelines, etc)"
+                  multiline={true}
+                  numberOfLines={4}
+                  value={projectDetails}
+                  onChangeText={setProjectDetails}
+                  textAlignVertical="top"
+                  placeholderTextColor="#94A3B8"
+                />
+                <Icon name="edit" size={16} color="#94A3B8" style={styles.inputIcon} />
+              </View>
             </View>
           )}
         </ScrollView>
@@ -863,51 +983,109 @@ for (let i = firstDayWeekday - 1; i >= 0; i--) {
         {/* Book Meeting Button */}
         {isBookingReady && (
           <View style={styles.bottomSection}>
+            <View style={styles.bookingSummary}>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Duration:</Text>
+                <Text style={styles.summaryValue}>{selectedDuration} minutes</Text>
+              </View>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Amount:</Text>
+                <Text style={styles.summaryPrice}>
+                  {selectedDuration === '5' ? 'FREE' : `₹${getSessionFee(selectedDuration).toLocaleString()}`}
+                </Text>
+              </View>
+            </View>
             <TouchableOpacity 
-              style={[styles.bookButton, loading && styles.disabledButton]}
+              style={[styles.primaryButton, loading && styles.disabledButton]}
               onPress={goToNextStep}
               disabled={loading}
               activeOpacity={0.8}
             >
               {loading ? (
-                <ActivityIndicator color="#fff" />
+                <ActivityIndicator color="#fff" size="small" />
               ) : (
-                <Text style={styles.bookButtonText}>Book meeting</Text>
+                <>
+                  <Text style={styles.primaryButtonText}>Book Meeting</Text>
+                  <Icon name="event" size={18} color="#fff" />
+                </>
               )}
             </TouchableOpacity>
           </View>
         )}
-      </>
+      </View>
     );
   };
 
   const renderConfirmation = () => (
     <View style={styles.confirmationContainer}>
-      <Icon name="check-circle" size={80} color="#2E7D32" />
-      <Text style={styles.confirmationTitle}>Booking Confirmed!</Text>
-      <Text style={styles.confirmationText}>
-        Your consultation with {expert?.fullName} has been scheduled.
-      </Text>
-      
-      <View style={styles.confirmationDetails}>
-        <Text style={styles.confirmationDetail}>
-          Date: {selectedDate?.toLocaleDateString()}
+      <View style={styles.confirmationContent}>
+        <View style={styles.successIcon}>
+          <Icon name="check-circle" size={64} color="#059669" />
+        </View>
+        
+        <Text style={styles.confirmationTitle}>Booking Confirmed!</Text>
+        <Text style={styles.confirmationSubtitle}>
+          Your consultation with {expert?.fullName} has been scheduled successfully.
         </Text>
-        <Text style={styles.confirmationDetail}>
-          Time: {availableTimeSlots.find(slot => slot.id === selectedTime)?.label}
-        </Text>
-        <Text style={styles.confirmationDetail}>
-          Duration: {selectedDuration} minutes
-        </Text>
-      </View>
+        
+        <View style={styles.confirmationCard}>
+          <View style={styles.confirmationHeader}>
+            <Image source={getImageSource()} style={styles.confirmationImage} />
+            <View>
+              <Text style={styles.confirmationExpertName}>{expert?.fullName}</Text>
+              <Text style={styles.confirmationExpertRole}>
+                {expert?.consultantRequest?.consultantProfile?.category}
+              </Text>
+            </View>
+          </View>
+          
+          <View style={styles.confirmationDetails}>
+            <View style={styles.confirmationDetailRow}>
+              <Icon name="calendar-today" size={16} color="#059669" />
+              <Text style={styles.confirmationDetailText}>
+                {selectedDate?.toLocaleDateString('en-US', { 
+                  weekday: 'long',
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric'
+                })}
+              </Text>
+            </View>
+            <View style={styles.confirmationDetailRow}>
+              <Icon name="access-time" size={16} color="#059669" />
+              <Text style={styles.confirmationDetailText}>
+                {availableTimeSlots.find(slot => slot.id === selectedTime)?.label}
+              </Text>
+            </View>
+            <View style={styles.confirmationDetailRow}>
+              <Icon name="schedule" size={16} color="#059669" />
+              <Text style={styles.confirmationDetailText}>
+                {selectedDuration} minutes session
+              </Text>
+            </View>
+          </View>
+        </View>
 
-      <TouchableOpacity 
-        style={styles.doneButton}
-        onPress={handleClose}
-        activeOpacity={0.8}
-      >
-        <Text style={styles.doneButtonText}>Done</Text>
-      </TouchableOpacity>
+        <View style={styles.confirmationActions}>
+          <TouchableOpacity 
+            style={styles.secondaryButton}
+            onPress={() => navigation.navigate('Dashboard')}
+            activeOpacity={0.8}
+          >
+            <Icon name="dashboard" size={16} color="#059669" />
+            <Text style={styles.secondaryButtonText}>View Dashboard</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={styles.primaryButton}
+            onPress={handleClose}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.primaryButtonText}>Done</Text>
+            <Icon name="check" size={18} color="#fff" />
+          </TouchableOpacity>
+        </View>
+      </View>
     </View>
   );
 
@@ -916,9 +1094,9 @@ for (let i = firstDayWeekday - 1; i >= 0; i--) {
       case 'howItWorks':
         return '';
       case 'duration':
-        return 'Book a consultation';
+        return 'Select Duration';
       case 'dateTime':
-        return '';
+        return 'Choose Date & Time';
       case 'confirmation':
         return '';
       default:
@@ -939,20 +1117,46 @@ for (let i = firstDayWeekday - 1; i >= 0; i--) {
         <SafeAreaView style={styles.container}>
           {/* Header */}
           <View style={styles.header}>
-            {canGoBack && (
-              <TouchableOpacity onPress={goToPreviousStep} style={styles.backButton}>
-                <Icon name="arrow-back" size={24} color="#333" />
+            {canGoBack ? (
+              <TouchableOpacity onPress={goToPreviousStep} style={styles.headerButton}>
+                <Icon name="arrow-back" size={20} color="#1E293B" />
               </TouchableOpacity>
+            ) : (
+              <View style={styles.headerButton} />
             )}
             
             {getHeaderTitle() && (
-              <Text style={styles.headerTitle}>{getHeaderTitle()}</Text>
+              <View style={styles.headerTitleContainer}>
+                <Text style={styles.headerTitle}>{getHeaderTitle()}</Text>
+                <View style={styles.headerTitleUnderline} />
+              </View>
             )}
             
-            <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
-              <Icon name="close" size={24} color="#333" />
+            <TouchableOpacity onPress={handleClose} style={styles.headerButton}>
+              <Icon name="close" size={20} color="#1E293B" />
             </TouchableOpacity>
           </View>
+
+          {/* Progress Indicator */}
+          {currentStep !== 'confirmation' && (
+            <View style={styles.progressContainer}>
+              <View style={styles.progressBar}>
+                <View 
+                  style={[
+                    styles.progressFill, 
+                    { 
+                      width: currentStep === 'howItWorks' ? '33%' : 
+                            currentStep === 'duration' ? '66%' : '100%' 
+                    }
+                  ]} 
+                />
+              </View>
+              <Text style={styles.progressText}>
+                Step {currentStep === 'howItWorks' ? '1' : 
+                      currentStep === 'duration' ? '2' : '3'} of 3
+              </Text>
+            </View>
+          )}
 
           {/* Content based on current step */}
           {currentStep === 'howItWorks' && renderHowItWorks()}
@@ -987,522 +1191,858 @@ for (let i = firstDayWeekday - 1; i >= 0; i--) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#ffffff',
   },
+  
+  // Header Styles
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: '#E2E8F0',
+    backgroundColor: '#ffffff',
+    elevation: 2,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
   },
-  backButton: {
+  headerButton: {
     padding: 8,
-    marginLeft: -8,
+    borderRadius: 8,
+    backgroundColor: '#F8FAFC',
+    minWidth: 36,
+    minHeight: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitleContainer: {
+    flex: 1,
+    alignItems: 'center',
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-    flex: 1,
-    textAlign: 'center',
-    marginRight: 32,
-  },
-  closeButton: {
-    padding: 8,
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: 24,
-    paddingTop: 20,
-  },
-  scrollContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-  },
-  
-  // How It Works styles
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#333',
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 18,
-    color: '#666',
-    marginBottom: 40,
-  },
-  stepsContainer: {
-    flex: 1,
-  },
-  stepItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 32,
-  },
-  stepNumber: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#2E7D32',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  stepNumberText: {
-    color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+    color: '#1E293B',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
+    letterSpacing: -0.1,
+  },
+  headerTitleUnderline: {
+    width: 24,
+    height: 2,
+    backgroundColor: '#059669',
+    borderRadius: 1,
+    marginTop: 2,
+  },
+  
+  // Progress Styles
+  progressContainer: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  progressBar: {
+    width: '100%',
+    height: 4,
+    backgroundColor: '#E2E8F0',
+    borderRadius: 2,
+    marginBottom: 8,
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: '#059669',
+    borderRadius: 2,
+  },
+  progressText: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '500',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+  
+  // Step Container
+  stepContainer: {
+    flex: 1,
   },
   stepContent: {
     flex: 1,
-    paddingTop: 2,
+    paddingHorizontal: 20,
+  },
+  
+  // How It Works Styles
+  titleSection: {
+    alignItems: 'center',
+    paddingVertical: 24,
+    paddingBottom: 40,
+  },
+  mainTitle: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#1E293B',
+    textAlign: 'center',
+    marginBottom: 8,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
+    letterSpacing: -0.5,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: '#64748B',
+    textAlign: 'center',
+    marginBottom: 12,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+  titleUnderline: {
+    width: 40,
+    height: 3,
+    backgroundColor: '#059669',
+    borderRadius: 2,
+  },
+  
+  // Steps Styles
+  stepsContainer: {
+    flex: 1,
+    paddingTop: 20,
+  },
+  stepItem: {
+    flexDirection: 'row',
+    marginBottom: 32,
+    alignItems: 'flex-start',
+  },
+  stepIconContainer: {
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  stepNumber: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#059669',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 2,
+    shadowColor: '#059669',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+  },
+  stepNumberText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '700',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
+  },
+  stepLine: {
+    width: 2,
+    height: 24,
+    backgroundColor: '#D1FAE5',
+    marginTop: 8,
+  },
+  stepContentRight: {
+    flex: 1,
+    paddingTop: 4,
   },
   stepTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#333',
-    marginBottom: 4,
+    color: '#1E293B',
+    marginBottom: 6,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
+    letterSpacing: -0.2,
   },
   stepDescription: {
-    fontSize: 15,
-    color: '#666',
-    lineHeight: 22,
+    fontSize: 14,
+    color: '#64748B',
+    lineHeight: 20,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
-  checkboxContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 24,
+  
+  // Duration Selection Styles
+  consultantSection: {
+    marginBottom: 32,
+    paddingTop: 16,
   },
-  checkbox: {
-    width: 20,
-    height: 20,
-    borderWidth: 2,
-    borderColor: '#ddd',
-    borderRadius: 4,
-    marginRight: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  checkboxChecked: {
-    backgroundColor: '#2E7D32',
-    borderColor: '#2E7D32',
-  },
-  checkboxText: {
-    fontSize: 16,
-    color: '#666',
-  },
-  getStartedButton: {
-    backgroundColor: '#2E7D32',
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-    shadowColor: '#2E7D32',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  getStartedText: {
-    color: '#fff',
-    fontSize: 18,
+  sectionLabel: {
+    fontSize: 14,
     fontWeight: '600',
+    color: '#059669',
+    marginBottom: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
-
-  // Duration Selection styles
-  meetingSection: {
-    marginBottom: 40,
+  consultantCard: {
+    flexDirection: 'row',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#333',
-    marginBottom: 16,
+  consultantImageContainer: {
+    position: 'relative',
+    marginRight: 12,
+  },
+  consultantImage: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#D1FAE5',
+    borderWidth: 2,
+    borderColor: '#059669',
+  },
+  onlineIndicator: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#10B981',
+    borderWidth: 2,
+    borderColor: '#ffffff',
   },
   consultantInfo: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-  },
-  consultantAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginRight: 12,
-    backgroundColor: '#f8f8f8',
-  },
-  consultantText: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
-    padding: 12,
-    borderRadius: 12,
-    borderBottomLeftRadius: 4,
+    justifyContent: 'center',
   },
   consultantMessage: {
     fontSize: 14,
-    color: '#333',
+    color: '#1E293B',
     lineHeight: 20,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
+  
   durationSection: {
     flex: 1,
   },
-  durationTitle: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#333',
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1E293B',
     marginBottom: 20,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
+    letterSpacing: -0.2,
   },
   durationOptions: {
-    gap: 12,
     marginBottom: 24,
   },
   durationOption: {
-    backgroundColor: '#fff',
+    backgroundColor: '#ffffff',
     borderWidth: 2,
-    borderColor: '#e9ecef',
+    borderColor: '#E2E8F0',
     borderRadius: 12,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    alignItems: 'center',
+    marginBottom: 12,
+    position: 'relative',
+    elevation: 1,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
   },
   selectedDurationOption: {
-    backgroundColor: '#2E7D32',
-    borderColor: '#2E7D32',
+    backgroundColor: '#F0FDF4',
+    borderColor: '#059669',
+    elevation: 2,
+    shadowColor: '#059669',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
-  durationText: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#333',
-  },
-  selectedDurationText: {
-    color: '#fff',
-  },
-  availabilityInfo: {
-    backgroundColor: '#f8f9fa',
+  durationContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     padding: 16,
+  },
+  durationLeft: {
+    flex: 1,
+  },
+  durationTime: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1E293B',
+    marginBottom: 2,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
+  },
+  selectedDurationTime: {
+    color: '#059669',
+  },
+  durationLabel: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '500',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+  selectedDurationLabel: {
+    color: '#047857',
+  },
+  durationRight: {
+    alignItems: 'flex-end',
+  },
+  durationPrice: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1E293B',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
+  },
+  selectedDurationPrice: {
+    color: '#059669',
+  },
+  durationSavings: {
+    fontSize: 10,
+    color: '#DC2626',
+    fontWeight: '600',
+    backgroundColor: '#FEE2E2',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginTop: 2,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+  selectedIndicator: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+  },
+  
+  // Availability Card
+  availabilityCard: {
+    backgroundColor: '#F0FDF4',
     borderRadius: 12,
-    borderLeftWidth: 4,
-    borderLeftColor: '#2E7D32',
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#D1FAE5',
+  },
+  availabilityHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
   },
   availabilityTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
+    color: '#059669',
+    marginLeft: 6,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+  availabilityContent: {
+    gap: 8,
+  },
+  availabilityItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   availabilityText: {
     fontSize: 13,
-    color: '#666',
-    marginBottom: 4,
+    color: '#047857',
+    marginLeft: 8,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
-  continueButton: {
-    backgroundColor: '#2E7D32',
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-    shadowColor: '#2E7D32',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+  
+  // Date Time Selection Styles
+  dateTimeHeader: {
+    paddingTop: 16,
+    marginBottom: 24,
   },
-  continueText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '600',
-  },
-
-  // Date/Time Selection styles
-  question: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 16,
-    marginTop: 16,
-  },
-  availableDaysInfo: {
-    backgroundColor: '#e8f5e8',
+  infoCard: {
+    flexDirection: 'row',
+    backgroundColor: '#F0FDF4',
     padding: 12,
     borderRadius: 8,
-    marginBottom: 20,
+    marginTop: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#D1FAE5',
   },
-  availableDaysTitle: {
-    fontSize: 14,
+  infoContent: {
+    marginLeft: 8,
+    flex: 1,
+  },
+  infoTitle: {
+    fontSize: 12,
     fontWeight: '600',
-    color: '#2E7D32',
-    marginBottom: 4,
+    color: '#059669',
+    marginBottom: 2,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
-  availableDaysText: {
-    fontSize: 13,
-    color: '#2E7D32',
+  infoText: {
+    fontSize: 12,
+    color: '#047857',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+  
+  // Calendar Styles
+  calendarSection: {
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    elevation: 1,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
   },
   calendarHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 20,
-    paddingHorizontal: 8,
+    paddingHorizontal: 4,
   },
   navButton: {
     padding: 8,
-    borderRadius: 20,
+    borderRadius: 8,
+    backgroundColor: '#F8FAFC',
   },
   monthYear: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
-    color: '#333',
+    color: '#1E293B',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
   },
-  weekdaysContainer: {
+  weekdaysRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 12,
     paddingHorizontal: 4,
   },
   weekdayHeader: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#666',
-    width: 40,
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#64748B',
+    width: 32,
     textAlign: 'center',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
   calendarGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
     paddingHorizontal: 4,
-    marginBottom: 30,
   },
   dayCell: {
-    width: 40,
-    height: 40,
+    width: 32,
+    height: 32,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 8,
-    borderRadius: 20,
+    borderRadius: 16,
+    position: 'relative',
   },
-  selectedDay: {
-    backgroundColor: '#2E7D32',
+  selectedDayCell: {
+    backgroundColor: '#059669',
+    elevation: 2,
+    shadowColor: '#059669',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
   },
-  todayDay: {
-    borderWidth: 2,
-    borderColor: '#2E7D32',
+  todayDayCell: {
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#059669',
   },
-  disabledDay: {
+  disabledDayCell: {
     opacity: 0.3,
   },
   dayText: {
-    fontSize: 16,
-    color: '#333',
+    fontSize: 14,
+    color: '#1E293B',
     fontWeight: '500',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
   inactiveDayText: {
-    color: '#ccc',
+    color: '#CBD5E1',
   },
   selectedDayText: {
-    color: '#fff',
-    fontWeight: '600',
+    color: '#ffffff',
+    fontWeight: '700',
   },
   todayDayText: {
-    color: '#2E7D32',
+    color: '#059669',
     fontWeight: '700',
   },
   disabledDayText: {
-    color: '#ccc',
+    color: '#CBD5E1',
   },
+  todayDot: {
+    position: 'absolute',
+    bottom: 2,
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#059669',
+  },
+  
+  // Time Selection Styles
   timeSection: {
     marginBottom: 24,
   },
   timeTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
+    color: '#1E293B',
     marginBottom: 16,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
   },
   loadingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 20,
+    paddingVertical: 32,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   loadingText: {
     marginLeft: 8,
     fontSize: 14,
-    color: '#666',
+    color: '#64748B',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
   noSlotsContainer: {
-    paddingVertical: 20,
     alignItems: 'center',
+    paddingVertical: 32,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   noSlotsText: {
     fontSize: 14,
-    color: '#666',
+    color: '#64748B',
     textAlign: 'center',
+    marginTop: 8,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
   noSlotsSubtext: {
     fontSize: 12,
-    color: '#999',
+    color: '#94A3B8',
     textAlign: 'center',
-    marginTop: 8,
+    marginTop: 4,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
-  timeSlotsContainer: {
+  timeSlotsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    gap: 8,
   },
   timeSlot: {
-    backgroundColor: '#fff',
-    borderWidth: 1.5,
-    borderColor: '#e0e0e0',
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
     borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    minWidth: 100,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    minWidth: 80,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.1,
+    position: 'relative',
+    elevation: 1,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
     shadowRadius: 2,
-    elevation: 2,
   },
   selectedTimeSlot: {
-    backgroundColor: '#2E7D32',
-    borderColor: '#2E7D32',
+    backgroundColor: '#059669',
+    borderColor: '#059669',
+    elevation: 2,
+    shadowColor: '#059669',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
   },
   timeSlotText: {
-    fontSize: 14,
-    color: '#333',
+    fontSize: 13,
+    color: '#1E293B',
     fontWeight: '500',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
   selectedTimeSlotText: {
-    color: '#fff',
+    color: '#ffffff',
     fontWeight: '600',
   },
+  timeSlotCheck: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#10B981',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#ffffff',
+  },
+  
+  // Project Details Styles
   projectSection: {
     marginBottom: 24,
   },
   projectTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
+    color: '#1E293B',
+    marginBottom: 4,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
+  },
+  projectSubtitle: {
+    fontSize: 13,
+    color: '#64748B',
     marginBottom: 12,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+  inputContainer: {
+    position: 'relative',
   },
   projectInput: {
-    borderWidth: 1.5,
-    borderColor: '#e0e0e0',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
     borderRadius: 12,
     padding: 16,
+    paddingRight: 40,
     fontSize: 14,
-    color: '#333',
-    backgroundColor: '#fff',
+    color: '#1E293B',
+    backgroundColor: '#ffffff',
     minHeight: 100,
     textAlignVertical: 'top',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
     elevation: 1,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
   },
-  bookButton: {
-    backgroundColor: '#2E7D32',
-    borderRadius: 12,
+  inputIcon: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+  },
+  
+  // Bottom Section Styles
+  bottomSection: {
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 20,
     paddingVertical: 16,
-    alignItems: 'center',
-    shadowColor: '#2E7D32',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+    elevation: 4,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.05,
     shadowRadius: 8,
-    elevation: 6,
+  },
+  
+  // Booking Summary
+  bookingSummary: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  summaryLabel: {
+    fontSize: 14,
+    color: '#64748B',
+    fontWeight: '500',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+  summaryValue: {
+    fontSize: 14,
+    color: '#1E293B',
+    fontWeight: '600',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+  summaryPrice: {
+    fontSize: 16,
+    color: '#059669',
+    fontWeight: '700',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
+  },
+  
+  // Checkbox Styles
+  checkboxContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+    paddingHorizontal: 4,
+  },
+  checkbox: {
+    width: 18,
+    height: 18,
+    borderWidth: 2,
+    borderColor: '#CBD5E1',
+    borderRadius: 4,
+    marginRight: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+  },
+  checkboxChecked: {
+    backgroundColor: '#059669',
+    borderColor: '#059669',
+  },
+  checkboxText: {
+    fontSize: 14,
+    color: '#64748B',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+  
+  // Button Styles
+  primaryButton: {
+    backgroundColor: '#059669',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 3,
+    shadowColor: '#059669',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    gap: 8,
   },
   disabledButton: {
-    opacity: 0.7,
+    opacity: 0.6,
+    elevation: 1,
+    shadowOpacity: 0.1,
   },
-  bookButtonText: {
-    color: '#fff',
+  primaryButtonText: {
+    color: '#ffffff',
     fontSize: 16,
-    fontWeight: '700',
-    letterSpacing: 0.5,
+    fontWeight: '600',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+    letterSpacing: 0.2,
   },
-
-  // Confirmation styles
+  secondaryButton: {
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#D1FAE5',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  secondaryButtonText: {
+    color: '#059669',
+    fontSize: 16,
+    fontWeight: '600',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+    letterSpacing: 0.2,
+  },
+  
+  // Confirmation Styles
   confirmationContainer: {
     flex: 1,
     justifyContent: 'center',
+    paddingHorizontal: 20,
+  },
+  confirmationContent: {
     alignItems: 'center',
-    paddingHorizontal: 40,
+  },
+  successIcon: {
+    marginBottom: 24,
   },
   confirmationTitle: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#333',
-    marginTop: 20,
-    marginBottom: 12,
+    color: '#1E293B',
     textAlign: 'center',
+    marginBottom: 8,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
+    letterSpacing: -0.3,
   },
-  confirmationText: {
+  confirmationSubtitle: {
     fontSize: 16,
-    color: '#666',
+    color: '#64748B',
     textAlign: 'center',
     lineHeight: 22,
-    marginBottom: 30,
+    marginBottom: 32,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
-  confirmationDetails: {
-    backgroundColor: '#f8f9fa',
-    borderRadius: 12,
+  confirmationCard: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
     padding: 20,
     width: '100%',
-    marginBottom: 40,
+    marginBottom: 32,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    elevation: 2,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
   },
-  confirmationDetail: {
-    fontSize: 16,
-    color: '#333',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  doneButton: {
-    backgroundColor: '#2E7D32',
-    borderRadius: 12,
-    paddingVertical: 16,
-    paddingHorizontal: 40,
+  confirmationHeader: {
+    flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: '#2E7D32',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
+    marginBottom: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
   },
-  doneButtonText: {
-    color: '#fff',
-    fontSize: 18,
+  confirmationImage: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    marginRight: 12,
+    backgroundColor: '#D1FAE5',
+    borderWidth: 2,
+    borderColor: '#059669',
+  },
+  confirmationExpertName: {
+    fontSize: 16,
     fontWeight: '600',
+    color: '#1E293B',
+    marginBottom: 2,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
   },
-
-  // Common styles
-  bottomSection: {
-    paddingHorizontal: 24,
-    paddingBottom: 40,
-    paddingTop: 20,
-    backgroundColor: '#fff',
+  confirmationExpertRole: {
+    fontSize: 13,
+    color: '#059669',
+    fontWeight: '500',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+  confirmationDetails: {
+    gap: 12,
+  },
+  confirmationDetailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  confirmationDetailText: {
+    fontSize: 14,
+    color: '#1E293B',
+    marginLeft: 12,
+    flex: 1,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+  confirmationActions: {
+    width: '100%',
   },
 });
 

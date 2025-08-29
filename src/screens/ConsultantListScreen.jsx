@@ -10,6 +10,7 @@ import {
   Image,
   ActivityIndicator,
   Alert,
+  Platform,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
@@ -40,7 +41,7 @@ const ConsultantListScreen = () => {
   const [filteredConsultants, setFilteredConsultants] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showBookingModal, setShowBookingModal] = useState(false);
-const [selectedConsultant, setSelectedConsultant] = useState(null);
+  const [selectedConsultant, setSelectedConsultant] = useState(null);
 
   useEffect(() => {
     fetchConsultants();
@@ -51,122 +52,115 @@ const [selectedConsultant, setSelectedConsultant] = useState(null);
   }, [searchQuery, consultants]);
 
   const fetchConsultants = async () => {
-  try {
-    setLoading(true);
-    console.log('[CONSULTANT_LIST] Starting fetch process...');
-    console.log('[CONSULTANT_LIST] Category being searched:', category?.title);
-    
-    // Create a timeout promise to prevent infinite loading
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('Request timeout - please check your connection')), 15000)
-    );
-    
-    console.log('[CONSULTANT_LIST] Making API call...');
-    
-    // Race between API call and timeout
-    const result = await Promise.race([
-      ApiService.getAllUsers(),
-      timeoutPromise
-    ]);
-    
-    console.log('[CONSULTANT_LIST] API Response received:', result);
-    
-    if (result.success) {
-      let allUsers = result.data || [];
-      console.log('[CONSULTANT_LIST] Fetched users:', allUsers.length);
+    try {
+      setLoading(true);
+      console.log('[CONSULTANT_LIST] Starting fetch process...');
+      console.log('[CONSULTANT_LIST] Category being searched:', category?.title);
       
-      // Log available categories in DB for debugging
-      const availableCategories = allUsers
-        .map(user => user.consultantRequest?.consultantProfile?.category)
-        .filter(Boolean);
-      console.log('[CONSULTANT_LIST] Available categories in DB:', [...new Set(availableCategories)]);
-      
-      // Filter only approved consultants
-      let approvedConsultants = allUsers.filter(user => 
-        user.consultantRequest && 
-        user.consultantRequest.status === 'approved' &&
-        user.consultantRequest.consultantProfile
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Request timeout - please check your connection')), 15000)
       );
-
-      console.log('[CONSULTANT_LIST] Approved consultants found:', approvedConsultants.length);
       
-      // Log approved consultants for debugging
-      if (approvedConsultants.length > 0) {
-        console.log('[CONSULTANT_LIST] Approved consultants details:', 
-          approvedConsultants.map(user => ({
-            name: user.fullName,
-            category: user.consultantRequest.consultantProfile.category,
-            status: user.consultantRequest.status
-          }))
+      console.log('[CONSULTANT_LIST] Making API call...');
+      
+      const result = await Promise.race([
+        ApiService.getAllUsers(),
+        timeoutPromise
+      ]);
+      
+      console.log('[CONSULTANT_LIST] API Response received:', result);
+      
+      if (result.success) {
+        let allUsers = result.data || [];
+        console.log('[CONSULTANT_LIST] Fetched users:', allUsers.length);
+        
+        const availableCategories = allUsers
+          .map(user => user.consultantRequest?.consultantProfile?.category)
+          .filter(Boolean);
+        console.log('[CONSULTANT_LIST] Available categories in DB:', [...new Set(availableCategories)]);
+        
+        let approvedConsultants = allUsers.filter(user => 
+          user.consultantRequest && 
+          user.consultantRequest.status === 'approved' &&
+          user.consultantRequest.consultantProfile
         );
+
+        console.log('[CONSULTANT_LIST] Approved consultants found:', approvedConsultants.length);
+        
+        if (approvedConsultants.length > 0) {
+          console.log('[CONSULTANT_LIST] Approved consultants details:', 
+            approvedConsultants.map(user => ({
+              name: user.fullName,
+              category: user.consultantRequest.consultantProfile.category,
+              status: user.consultantRequest.status
+            }))
+          );
+        }
+        
+        if (category?.title) {
+          const dbCategoryName = getCategoryMapping(category.title);
+          console.log('[CONSULTANT_LIST] Mapping frontend category:', category.title, '-> DB category:', dbCategoryName);
+          
+          approvedConsultants = approvedConsultants.filter(user => {
+            const consultantCategory = user.consultantRequest.consultantProfile.category;
+            const matches = consultantCategory === dbCategoryName;
+            console.log('[CONSULTANT_LIST] Consultant:', user.fullName, 'Category:', consultantCategory, 'Matches:', matches);
+            return matches;
+          });
+          
+          console.log('[CONSULTANT_LIST] Consultants after category filter:', approvedConsultants.length);
+        }
+        
+        const transformedConsultants = approvedConsultants.map(user => ({
+          _id: user._id,
+          name: user.fullName,
+          email: user.email,
+          phone: user.phone,
+          profilePicture: user.profileImage || null,
+          primaryCategory: user.consultantRequest.consultantProfile.category || category?.displayTitle || 'General Consulting',
+          specializedServices: user.consultantRequest.consultantProfile.keySkills || [],
+          keySkills: user.consultantRequest.consultantProfile.keySkills || [],
+          sessionFee: user.consultantRequest.consultantProfile.sessionFee,
+          yearsOfExperience: user.consultantRequest.consultantProfile.yearsOfExperience,
+          qualification: user.consultantRequest.consultantProfile.qualification,
+          university: user.consultantRequest.consultantProfile.university,
+          shortBio: user.consultantRequest.consultantProfile.shortBio,
+          languages: user.consultantRequest.consultantProfile.languages || [],
+          daysPerWeek: user.consultantRequest.consultantProfile.daysPerWeek,
+          availableTimePerDay: user.consultantRequest.consultantProfile.availableTimePerDay,
+          consultantType: user.consultantRequest.consultantProfile.consultantType,
+          rating: 4.5,
+          reviewCount: Math.floor(Math.random() * 50) + 1,
+          isApproved: true,
+          status: 'approved'
+        }));
+        
+        console.log('[CONSULTANT_LIST] Final transformed consultants:', transformedConsultants.length);
+        console.log('[CONSULTANT_LIST] Transformed consultants details:', 
+          transformedConsultants.map(c => ({ name: c.name, category: c.primaryCategory }))
+        );
+        
+        setConsultants(transformedConsultants);
+      } else {
+        console.error('[CONSULTANT_LIST] API Error:', result.error);
+        Alert.alert('Error', result.error || 'Failed to load consultants');
+        setConsultants([]);
+      }
+    } catch (error) {
+      console.error('[CONSULTANT_LIST] Exception fetching consultants:', error);
+      
+      if (error.message.includes('timeout')) {
+        Alert.alert('Timeout', 'Request timed out. Please check your internet connection and try again.');
+      } else {
+        Alert.alert('Error', error.message || 'Failed to load consultants');
       }
       
-      // Filter by category if provided
-      if (category?.title) {
-        const dbCategoryName = getCategoryMapping(category.title);
-        console.log('[CONSULTANT_LIST] Mapping frontend category:', category.title, '-> DB category:', dbCategoryName);
-        
-        approvedConsultants = approvedConsultants.filter(user => {
-          const consultantCategory = user.consultantRequest.consultantProfile.category;
-          const matches = consultantCategory === dbCategoryName;
-          console.log('[CONSULTANT_LIST] Consultant:', user.fullName, 'Category:', consultantCategory, 'Matches:', matches);
-          return matches;
-        });
-        
-        console.log('[CONSULTANT_LIST] Consultants after category filter:', approvedConsultants.length);
-      }
-      
-      // Transform user data to consultant format
-      const transformedConsultants = approvedConsultants.map(user => ({
-        _id: user._id,
-        name: user.fullName,
-        email: user.email,
-        phone: user.phone,
-        profilePicture: user.profileImage || null,
-        primaryCategory: user.consultantRequest.consultantProfile.category || category?.displayTitle || 'General Consulting',
-        specializedServices: user.consultantRequest.consultantProfile.keySkills || [],
-        keySkills: user.consultantRequest.consultantProfile.keySkills || [],
-        sessionFee: user.consultantRequest.consultantProfile.sessionFee,
-        yearsOfExperience: user.consultantRequest.consultantProfile.yearsOfExperience,
-        qualification: user.consultantRequest.consultantProfile.qualification,
-        university: user.consultantRequest.consultantProfile.university,
-        shortBio: user.consultantRequest.consultantProfile.shortBio,
-        languages: user.consultantRequest.consultantProfile.languages || [],
-        daysPerWeek: user.consultantRequest.consultantProfile.daysPerWeek,
-        availableTimePerDay: user.consultantRequest.consultantProfile.availableTimePerDay,
-        consultantType: user.consultantRequest.consultantProfile.consultantType,
-        rating: 4.5, // Default rating since no rating system in backend yet
-        reviewCount: Math.floor(Math.random() * 50) + 1, // Random review count for now
-        isApproved: true,
-        status: 'approved'
-      }));
-      
-      console.log('[CONSULTANT_LIST] Final transformed consultants:', transformedConsultants.length);
-      console.log('[CONSULTANT_LIST] Transformed consultants details:', 
-        transformedConsultants.map(c => ({ name: c.name, category: c.primaryCategory }))
-      );
-      
-      setConsultants(transformedConsultants);
-    } else {
-      console.error('[CONSULTANT_LIST] API Error:', result.error);
-      Alert.alert('Error', result.error || 'Failed to load consultants');
       setConsultants([]);
+    } finally {
+      console.log('[CONSULTANT_LIST] Setting loading to false');
+      setLoading(false);
     }
-  } catch (error) {
-    console.error('[CONSULTANT_LIST] Exception fetching consultants:', error);
-    
-    if (error.message.includes('timeout')) {
-      Alert.alert('Timeout', 'Request timed out. Please check your internet connection and try again.');
-    } else {
-      Alert.alert('Error', error.message || 'Failed to load consultants');
-    }
-    
-    setConsultants([]);
-  } finally {
-    console.log('[CONSULTANT_LIST] Setting loading to false');
-    setLoading(false);
-  }
-};
+  };
 
   const filterConsultants = () => {
     if (!searchQuery.trim()) {
@@ -197,7 +191,6 @@ const [selectedConsultant, setSelectedConsultant] = useState(null);
   };
 
   const handleViewProfile = (consultant) => {
-    // Transform consultant data back to the format expected by ExpertProfileScreen
     const expertData = {
       _id: consultant._id,
       fullName: consultant.name,
@@ -219,44 +212,46 @@ const [selectedConsultant, setSelectedConsultant] = useState(null);
           daysPerWeek: consultant.daysPerWeek,
           availableTimePerDay: consultant.availableTimePerDay,
           consultantType: consultant.consultantType,
-          fieldOfStudy: consultant.primaryCategory // Fallback for category display
+          fieldOfStudy: consultant.primaryCategory
         }
       }
     };
     
-    // Navigate to ExpertProfileScreen
     navigation.navigate('ExpertProfileScreen', { expert: expertData });
   };
 
   const handleBookNow = (consultant) => {
-  // Transform consultant data to expert format expected by UnifiedBookingModal
-  const expertData = {
-    _id: consultant._id,
-    fullName: consultant.name,
-    email: consultant.email,
-    phone: consultant.phone,
-    profileImage: consultant.profilePicture,
-    consultantRequest: {
-      status: 'approved',
-      consultantProfile: {
-        sessionFee: consultant.sessionFee,
-        category: consultant.primaryCategory,
-        keySkills: consultant.keySkills,
-        yearsOfExperience: consultant.yearsOfExperience,
-        qualification: consultant.qualification,
-        university: consultant.university,
-        shortBio: consultant.shortBio,
-        languages: consultant.languages,
-        daysPerWeek: consultant.daysPerWeek,
-        availableTimePerDay: consultant.availableTimePerDay,
-        consultantType: consultant.consultantType
+    const expertData = {
+      _id: consultant._id,
+      fullName: consultant.name,
+      email: consultant.email,
+      phone: consultant.phone,
+      profileImage: consultant.profilePicture,
+      consultantRequest: {
+        status: 'approved',
+        consultantProfile: {
+          sessionFee: consultant.sessionFee,
+          category: consultant.primaryCategory,
+          keySkills: consultant.keySkills,
+          yearsOfExperience: consultant.yearsOfExperience,
+          qualification: consultant.qualification,
+          university: consultant.university,
+          shortBio: consultant.shortBio,
+          languages: consultant.languages,
+          daysPerWeek: consultant.daysPerWeek,
+          availableTimePerDay: consultant.availableTimePerDay,
+          consultantType: consultant.consultantType
+        }
       }
-    }
+    };
+    
+    setSelectedConsultant(expertData);
+    setShowBookingModal(true);
   };
-  
-  setSelectedConsultant(expertData);
-  setShowBookingModal(true);
-};
+
+  const clearSearch = () => {
+    setSearchQuery('');
+  };
 
   const renderStars = (rating = 0) => {
     const stars = [];
@@ -265,20 +260,20 @@ const [selectedConsultant, setSelectedConsultant] = useState(null);
 
     for (let i = 0; i < fullStars; i++) {
       stars.push(
-        <Icon key={i} name="star" size={16} color="#FFD700" />
+        <Icon key={i} name="star" size={14} color="#FBBF24" />
       );
     }
 
     if (hasHalfStar) {
       stars.push(
-        <Icon key="half" name="star-half" size={16} color="#FFD700" />
+        <Icon key="half" name="star-half" size={14} color="#FBBF24" />
       );
     }
 
     const remainingStars = 5 - Math.ceil(rating);
     for (let i = 0; i < remainingStars; i++) {
       stars.push(
-        <Icon key={`empty-${i}`} name="star-border" size={16} color="#FFD700" />
+        <Icon key={`empty-${i}`} name="star-border" size={14} color="#FBBF24" />
       );
     }
 
@@ -287,7 +282,7 @@ const [selectedConsultant, setSelectedConsultant] = useState(null);
 
   const renderConsultantCard = (consultant) => (
     <View key={consultant._id} style={styles.consultantCard}>
-      <View style={styles.consultantHeader}>
+      <View style={styles.cardContent}>
         <View style={styles.profileSection}>
           <View style={styles.avatarContainer}>
             {consultant.profilePicture ? (
@@ -298,33 +293,39 @@ const [selectedConsultant, setSelectedConsultant] = useState(null);
               />
             ) : (
               <View style={styles.avatarPlaceholder}>
-                <Icon name="person" size={30} color="#666" />
+                <Icon name="person" size={28} color="#059669" />
               </View>
             )}
+            <View style={styles.onlineIndicator} />
           </View>
+          
           <View style={styles.consultantInfo}>
-            <View style={styles.nameContainer}>
+            <View style={styles.nameRow}>
               <Text style={styles.consultantName}>
                 {consultant.name || 'Unknown'}
               </Text>
               {consultant.isApproved && (
-                <View style={styles.vettedBadge}>
-                  <Text style={styles.vettedText}>Verified</Text>
+                <View style={styles.verifiedBadge}>
+                  <Icon name="verified" size={14} color="#22C55E" />
                 </View>
               )}
             </View>
-            <Text style={styles.specialization}>
+            
+            <Text style={styles.category}>
               {consultant.qualification && consultant.university 
                 ? `${consultant.qualification} - ${consultant.university}`
                 : consultant.primaryCategory
               }
             </Text>
+            
             {consultant.keySkills && consultant.keySkills.length > 0 && (
-              <Text style={styles.skillsText}>
-                Skills: {consultant.keySkills.join(', ')}
+              <Text style={styles.skills} numberOfLines={1}>
+                {consultant.keySkills.slice(0, 3).join(', ')}
+                {consultant.keySkills.length > 3 && '...'}
               </Text>
             )}
-            <View style={styles.ratingContainer}>
+            
+            <View style={styles.ratingRow}>
               <View style={styles.starsContainer}>
                 {renderStars(consultant.rating || 0)}
               </View>
@@ -335,38 +336,56 @@ const [selectedConsultant, setSelectedConsultant] = useState(null);
                 ({consultant.reviewCount || 0})
               </Text>
             </View>
-            {consultant.sessionFee && (
-              <Text style={styles.sessionFee}>
-                ₹{consultant.sessionFee}/session
-              </Text>
-            )}
-            {consultant.yearsOfExperience && (
-              <Text style={styles.experience}>
-                {consultant.yearsOfExperience} years experience
-              </Text>
-            )}
-            {consultant.languages && consultant.languages.length > 0 && (
-              <Text style={styles.languages}>
-                Languages: {consultant.languages.join(', ')}
-              </Text>
-            )}
           </View>
         </View>
-      </View>
 
-      <View style={styles.actionButtons}>
-        <TouchableOpacity
-          style={styles.viewProfileButton}
-          onPress={() => handleViewProfile(consultant)}
-        >
-          <Text style={styles.viewProfileText}>View Profile</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.bookNowButton}
-          onPress={() => handleBookNow(consultant)}
-        >
-          <Text style={styles.bookNowText}>Book Now</Text>
-        </TouchableOpacity>
+        {consultant.sessionFee && (
+          <View style={styles.feeContainer}>
+            <Text style={styles.sessionFee}>
+              ₹{consultant.sessionFee}/session
+            </Text>
+          </View>
+        )}
+
+        <View style={styles.detailsRow}>
+          {consultant.yearsOfExperience && (
+            <View style={styles.detailItem}>
+              <Icon name="work" size={14} color="#6B7280" />
+              <Text style={styles.detailText}>
+                {consultant.yearsOfExperience}y exp
+              </Text>
+            </View>
+          )}
+          
+          {consultant.languages && consultant.languages.length > 0 && (
+            <View style={styles.detailItem}>
+              <Icon name="language" size={14} color="#6B7280" />
+              <Text style={styles.detailText}>
+                {consultant.languages.slice(0, 2).join(', ')}
+              </Text>
+            </View>
+          )}
+        </View>
+
+        <View style={styles.actionButtons}>
+          <TouchableOpacity
+            style={styles.viewProfileButton}
+            onPress={() => handleViewProfile(consultant)}
+            activeOpacity={0.7}
+          >
+            <Icon name="person" size={16} color="#059669" />
+            <Text style={styles.viewProfileText}>View Profile</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={styles.bookNowButton}
+            onPress={() => handleBookNow(consultant)}
+            activeOpacity={0.7}
+          >
+            <Icon name="calendar-today" size={16} color="#ffffff" />
+            <Text style={styles.bookNowText}>Book Now</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
@@ -376,60 +395,91 @@ const [selectedConsultant, setSelectedConsultant] = useState(null);
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-          <Icon name="arrow-back" size={24} color="#333" />
+          <Icon name="arrow-back" size={24} color="#374151" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{category?.displayTitle || 'Consultants'}</Text>
-        <View style={styles.placeholder} />
+        
+        <Text style={styles.headerTitle}>
+          {category?.displayTitle || 'Consultants'}
+        </Text>
+        
+        <View style={styles.headerSpacer} />
       </View>
 
-      {/* Search Bar */}
-      <View style={styles.searchContainer}>
-        <View style={styles.searchInputContainer}>
-          <Icon name="search" size={20} color="#999" style={styles.searchIcon} />
+      {/* Search Section */}
+      <View style={styles.searchSection}>
+        <Text style={styles.subtitle}>
+          {filteredConsultants.length} experts available
+        </Text>
+        
+        <View style={styles.searchContainer}>
+          <Icon name="search" size={20} color="#9CA3AF" style={styles.searchIcon} />
           <TextInput
             style={styles.searchInput}
             placeholder="Search experts..."
             value={searchQuery}
             onChangeText={setSearchQuery}
-            placeholderTextColor="#999"
+            placeholderTextColor="#9CA3AF"
           />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={clearSearch} style={styles.clearButton}>
+              <Icon name="close" size={18} color="#9CA3AF" />
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
       {/* Content */}
       {loading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#2E7D32" />
+          <ActivityIndicator size="large" color="#22C55E" />
           <Text style={styles.loadingText}>Loading consultants...</Text>
         </View>
       ) : (
-        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        <ScrollView 
+          style={styles.scrollView} 
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+        >
           <View style={styles.consultantsList}>
             {filteredConsultants.length > 0 ? (
               filteredConsultants.map(renderConsultantCard)
             ) : (
               <View style={styles.noResultsContainer}>
-                <Icon name="search-off" size={48} color="#ccc" />
-                <Text style={styles.noResultsText}>No consultants found</Text>
-                <Text style={styles.noResultsSubtext}>
+                <View style={styles.noResultsIcon}>
+                  <Icon name="search-off" size={48} color="#9CA3AF" />
+                </View>
+                <Text style={styles.noResultsTitle}>No consultants found</Text>
+                <Text style={styles.noResultsText}>
                   {searchQuery.trim() 
                     ? 'Try searching with different keywords'
                     : `No consultants available for ${category?.displayTitle || 'this category'}`
                   }
                 </Text>
+                {searchQuery.trim() && (
+                  <TouchableOpacity 
+                    style={styles.clearSearchButton}
+                    onPress={clearSearch}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.clearSearchButtonText}>Clear Search</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             )}
           </View>
+          
+          <View style={styles.bottomPadding} />
         </ScrollView>
       )}
+      
       <UnifiedBookingModal
-  visible={showBookingModal}
-  onClose={() => {
-    setShowBookingModal(false);
-    setSelectedConsultant(null);
-  }}
-  expert={selectedConsultant}
-/>
+        visible={showBookingModal}
+        onClose={() => {
+          setShowBookingModal(false);
+          setSelectedConsultant(null);
+        }}
+        expert={selectedConsultant}
+      />
     </SafeAreaView>
   );
 };
@@ -437,39 +487,58 @@ const [selectedConsultant, setSelectedConsultant] = useState(null);
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#ffffff',
   },
+
+  // Header Styles
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: '#ffffff',
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: '#E5E7EB',
   },
   backButton: {
     padding: 8,
   },
   headerTitle: {
+    flex: 1,
     fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: '600',
+    color: '#111827',
+    textAlign: 'center',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
   },
-  placeholder: {
+  headerSpacer: {
     width: 40,
   },
-  searchContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+
+  // Search Section
+  searchSection: {
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
   },
-  searchInputContainer: {
+  subtitle: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginBottom: 16,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+  searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f8f9fa',
-    borderRadius: 25,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
     paddingHorizontal: 16,
-    height: 50,
+    height: 48,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
   searchIcon: {
     marginRight: 12,
@@ -477,182 +546,259 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 16,
-    color: '#333',
+    color: '#111827',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
+  clearButton: {
+    padding: 4,
+    marginLeft: 8,
+  },
+
+  // Loading
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#F9FAFB',
   },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    color: '#666',
+    color: '#6B7280',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
+
+  // Scroll View
   scrollView: {
     flex: 1,
+    backgroundColor: '#F9FAFB',
+  },
+  scrollContent: {
+    flexGrow: 1,
   },
   consultantsList: {
-    paddingHorizontal: 16,
-    paddingBottom: 20,
+    paddingHorizontal: 20,
+    paddingTop: 20,
   },
+
+  // Consultant Card Styles
   consultantCard: {
-    backgroundColor: '#fff',
+    backgroundColor: '#ffffff',
     borderRadius: 12,
-    padding: 16,
     marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 3.84,
-    elevation: 5,
     borderWidth: 1,
-    borderColor: '#f0f0f0',
+    borderColor: '#E5E7EB',
+    overflow: 'hidden',
   },
-  consultantHeader: {
-    marginBottom: 16,
+  cardContent: {
+    padding: 16,
   },
   profileSection: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    marginBottom: 12,
   },
   avatarContainer: {
-    marginRight: 16,
+    position: 'relative',
+    marginRight: 12,
   },
   avatar: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#F9FAFB',
   },
   avatarPlaceholder: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: '#f0f0f0',
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#F0FDF4',
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+  },
+  onlineIndicator: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#22C55E',
+    borderWidth: 2,
+    borderColor: '#ffffff',
   },
   consultantInfo: {
     flex: 1,
   },
-  nameContainer: {
+  nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 4,
   },
   consultantName: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
     marginRight: 8,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
   },
-  vettedBadge: {
-    backgroundColor: '#2E7D32',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
+  verifiedBadge: {
+    backgroundColor: '#F0FDF4',
+    borderRadius: 10,
+    width: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
   },
-  vettedText: {
-    color: '#fff',
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
-  specialization: {
+  category: {
     fontSize: 14,
-    color: '#666',
+    color: '#6B7280',
     marginBottom: 4,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
-  skillsText: {
+  skills: {
     fontSize: 12,
-    color: '#888',
-    marginBottom: 8,
-    fontStyle: 'italic',
+    color: '#22C55E',
+    fontWeight: '500',
+    marginBottom: 6,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
-  ratingContainer: {
+  ratingRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
   },
   starsContainer: {
     flexDirection: 'row',
-    marginRight: 8,
+    marginRight: 6,
   },
   ratingText: {
     fontSize: 14,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: '600',
+    color: '#111827',
     marginRight: 4,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
   reviewCount: {
-    fontSize: 14,
-    color: '#666',
+    fontSize: 12,
+    color: '#6B7280',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+  feeContainer: {
+    alignSelf: 'flex-end',
+    marginBottom: 12,
   },
   sessionFee: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '600',
-    color: '#2E7D32',
-    marginBottom: 4,
+    color: '#22C55E',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
-  experience: {
-    fontSize: 12,
-    color: '#666',
-    marginBottom: 4,
+  detailsRow: {
+    flexDirection: 'row',
+    marginBottom: 16,
+    gap: 16,
   },
-  languages: {
+  detailItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  detailText: {
     fontSize: 12,
-    color: '#666',
-    fontStyle: 'italic',
+    color: '#6B7280',
+    marginLeft: 4,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
   actionButtons: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     gap: 12,
   },
   viewProfileButton: {
     flex: 1,
-    backgroundColor: '#fff',
-    borderWidth: 2,
-    borderColor: '#2E7D32',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#D1FAE5',
     borderRadius: 8,
     paddingVertical: 12,
-    alignItems: 'center',
+    gap: 6,
   },
   viewProfileText: {
-    color: '#2E7D32',
+    color: '#059669',
     fontSize: 14,
-    fontWeight: 'bold',
+    fontWeight: '600',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
   bookNowButton: {
     flex: 1,
-    backgroundColor: '#2E7D32',
-    borderRadius: 8,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  bookNowText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  noResultsContainer: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 60,
+    backgroundColor: '#059669',
+    borderRadius: 8,
+    paddingVertical: 12,
+    gap: 6,
   },
-  noResultsText: {
+  bookNowText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+
+  // No Results State
+  noResultsContainer: {
+    alignItems: 'center',
+    paddingVertical: 60,
+    paddingHorizontal: 40,
+  },
+  noResultsIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#F9FAFB',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  noResultsTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#666',
-    marginTop: 16,
-  },
-  noResultsSubtext: {
-    fontSize: 14,
-    color: '#999',
-    marginTop: 8,
+    color: '#111827',
     textAlign: 'center',
+    marginBottom: 8,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
+  },
+  noResultsText: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginBottom: 24,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+  clearSearchButton: {
+    backgroundColor: '#22C55E',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  clearSearchButtonText: {
+    color: '#ffffff',
+    fontWeight: '600',
+    fontSize: 14,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+
+  // Bottom Padding
+  bottomPadding: {
+    height: 100,
   },
 });
 

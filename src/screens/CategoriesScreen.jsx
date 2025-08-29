@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,80 +7,117 @@ import {
   TouchableOpacity,
   ScrollView,
   SafeAreaView,
+  StatusBar,
+  Platform,
+  Animated,
+  Dimensions,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import { FullscreenOrientationType } from 'react-native-video';
+
+const { width: screenWidth } = Dimensions.get('window');
 
 const CategoriesScreen = () => {
   const navigation = useNavigation();
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState(null);
+  
+  // Animation refs
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+  const scaleAnims = useRef({}).current;
+
+  useEffect(() => {
+    // Initial animation
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
 
   const categories = [
-  {
-    id: 1,
-    title: 'tech', // Changed to match database
-    displayTitle: 'IT Consulting',
-    description: 'Get support and guidance on technology solutions',
-    icon: 'computer',
-  },
-  {
-    id: 2,
-    title: 'E-commerce', // Changed to match database
-    displayTitle: 'Ecommerce Consulting',
-    description: 'Spice up your online business for growth',
-    icon: 'shopping-cart',
-  },
-  {
-    id: 3,
-    title: 'Legal', // Changed to match database
-    displayTitle: 'Legal Consulting',
-    description: 'Navigate complex legal decisions with confidence and expertise',
-    icon: 'gavel',
-  },
-  {
-    id: 4,
-    title: 'Marketing', // Changed to match database
-    displayTitle: 'Marketing Consulting',
-    description: 'Boost your brand visibility and customer engagement',
-    icon: 'campaign',
-  },
-  {
-    id: 5,
-    title: 'Finance', // Changed to match database
-    displayTitle: 'Financial Consulting',
-    description: 'Expert advice on financial planning and investment strategies',
-    icon: 'account-balance',
-  },
-  {
-    id: 6,
-    title: 'HR', // Changed to match database
-    displayTitle: 'HR Consulting',
-    description: 'Human resource management and talent acquisition solutions',
-    icon: 'people',
-  },
-  {
-    id: 7,
-    title: 'Business', // Changed to match database
-    displayTitle: 'Business Consulting',
-    description: 'Strategic business advice for growth and optimization',
-    icon: 'business',
-  },
-  {
-    id: 8,
-    title: 'Other', // Changed to match database
-    displayTitle: 'Other Consulting',
-    description: 'Various other consulting services and expertise',
-    icon: 'miscellaneous-services',
-  },
-];
+    {
+      id: 1,
+      title: 'tech',
+      displayTitle: 'IT Consulting',
+      description: 'Get support and guidance on technology solutions',
+      icon: 'computer',
+    },
+    {
+      id: 2,
+      title: 'E-commerce',
+      displayTitle: 'Ecommerce Consulting',
+      description: 'Spice up your online business for growth',
+      icon: 'shopping-cart',
+    },
+    {
+      id: 3,
+      title: 'Legal',
+      displayTitle: 'Legal Consulting',
+      description: 'Navigate complex legal decisions with confidence',
+      icon: 'gavel',
+    },
+    {
+      id: 4,
+      title: 'Marketing',
+      displayTitle: 'Marketing Consulting',
+      description: 'Boost your brand visibility and engagement',
+      icon: 'campaign',
+    },
+    {
+      id: 5,
+      title: 'Finance',
+      displayTitle: 'Financial Consulting',
+      description: 'Expert advice on financial planning strategies',
+      icon: 'account-balance',
+    },
+    {
+      id: 6,
+      title: 'HR',
+      displayTitle: 'HR Consulting',
+      description: 'Human resource management solutions',
+      icon: 'people',
+    },
+    {
+      id: 7,
+      title: 'Business',
+      displayTitle: 'Business Consulting',
+      description: 'Strategic business advice for growth',
+      icon: 'business',
+    },
+    {
+      id: 8,
+      title: 'Other',
+      displayTitle: 'Other Consulting',
+      description: 'Various other consulting services',
+      icon: 'miscellaneous-services',
+    },
+  ];
 
   const filteredCategories = categories.filter(category =>
     category.displayTitle.toLowerCase().includes(searchQuery.toLowerCase()) ||
     category.description.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  // Initialize scale animations for filtered categories
+  useEffect(() => {
+    filteredCategories.forEach((category) => {
+      if (!scaleAnims[category.id]) {
+        scaleAnims[category.id] = new Animated.Value(1);
+      }
+    });
+  }, [filteredCategories]);
+
   const handleBack = () => {
-    console.log('Back button pressed'); // Debug log
     if (navigation.canGoBack()) {
       navigation.goBack();
     } else {
@@ -89,77 +126,185 @@ const CategoriesScreen = () => {
   };
 
   const handleCategorySelect = (category) => {
-  console.log('Navigating to consultant list for category:', category.displayTitle);
-  navigation.navigate('ConsultantList', { 
-    category: {
-      title: category.title, // This should match backend category field
-      displayTitle: category.displayTitle,
-      description: category.description,
-      icon: category.icon
+    setSelectedCategory(category.id);
+    
+    // Animate button press
+    if (scaleAnims[category.id]) {
+      Animated.sequence([
+        Animated.timing(scaleAnims[category.id], {
+          toValue: 0.98,
+          duration: 100,
+          useNativeDriver: true,
+        }),
+        Animated.timing(scaleAnims[category.id], {
+          toValue: 1,
+          duration: 100,
+          useNativeDriver: true,
+        }),
+        
+      ]).start();
     }
-  });
-};
+
+    setTimeout(() => {
+      navigation.navigate('ConsultantList', { 
+        category: {
+          title: category.title,
+          displayTitle: category.displayTitle,
+          description: category.description,
+          icon: category.icon,
+        }
+      });
+      setSelectedCategory(null);
+    }, 200);
+  };
+
+  const clearSearch = () => {
+    setSearchQuery('');
+  };
+
+  const CategoryCard = ({ category, index }) => (
+    <Animated.View
+      style={[
+        styles.categoryCard,
+        {
+          transform: [{ scale: scaleAnims[category.id] || 1 }],
+          opacity: fadeAnim,
+        },
+      ]}
+    >
+      <TouchableOpacity
+        style={[
+          styles.categoryButton,
+          selectedCategory === category.id && styles.selectedCategory,
+        ]}
+        onPress={() => handleCategorySelect(category)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.categoryContent}>
+          <View style={styles.iconContainer}>
+            <Icon name={category.icon} size={24} color="#22C55E" />
+          </View>
+          
+          <View style={styles.categoryInfo}>
+            <Text style={styles.categoryTitle}>{category.displayTitle}</Text>
+            <Text style={styles.categoryDescription} numberOfLines={2}>
+              {category.description}
+            </Text>
+          
+          </View>
+
+          <View style={styles.arrowContainer}>
+            <Icon name="chevron-right" size={20} color="#9CA3AF" />
+          </View>
+        </View>
+      </TouchableOpacity>
+    </Animated.View>
+  );
 
   return (
     <SafeAreaView style={styles.container}>
+      <StatusBar backgroundColor="#ffffff" barStyle="dark-content" />
+      
       {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-          <Icon name="arrow-back" size={24} color="#333" />
+      <Animated.View 
+        style={[
+          styles.header,
+          {
+            opacity: fadeAnim,
+            transform: [{ translateY: slideAnim }],
+          },
+        ]}
+      >
+        <TouchableOpacity 
+          onPress={handleBack} 
+          style={styles.backButton}
+          activeOpacity={0.7}
+        >
+          <Icon name="arrow-back" size={24} color="#374151" />
         </TouchableOpacity>
+        
         <Text style={styles.headerTitle}>Categories</Text>
-        <View style={styles.placeholder} />
-      </View>
+        
+        <View style={styles.headerSpacer} />
+      </Animated.View>
 
-      {/* Search Bar */}
-      <View style={styles.searchContainer}>
-        <View style={styles.searchInputContainer}>
+      {/* Search Section */}
+      <Animated.View 
+        style={[
+          styles.searchSection,
+          {
+            opacity: fadeAnim,
+            transform: [{ translateY: slideAnim }],
+          },
+        ]}
+      >
+        <Text style={styles.subtitle}>Find the right expertise for your needs</Text>
+        
+        <View style={styles.searchContainer}>
+          <Icon name="search" size={20} color="#9CA3AF" style={styles.searchIcon} />
           <TextInput
             style={styles.searchInput}
             placeholder="Search categories..."
             value={searchQuery}
             onChangeText={setSearchQuery}
-            placeholderTextColor="#999"
+            placeholderTextColor="#9CA3AF"
           />
-          <Icon name="search" size={20} color="#999" style={styles.searchIcon} />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={clearSearch} style={styles.clearButton}>
+              <Icon name="close" size={18} color="#9CA3AF" />
+            </TouchableOpacity>
+          )}
         </View>
-      </View>
+
+        {searchQuery.length > 0 && (
+          <Text style={styles.resultsText}>
+            {filteredCategories.length} categories found
+          </Text>
+        )}
+      </Animated.View>
 
       {/* Categories List */}
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.scrollView} 
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
         <View style={styles.categoriesContainer}>
-          {filteredCategories.map((category) => (
-            <TouchableOpacity
-              key={category.id}
-              style={styles.categoryItem}
-              onPress={() => handleCategorySelect(category)}
-              activeOpacity={0.7}
-            >
-              <View style={styles.categoryContent}>
-                <View style={styles.iconContainer}>
-                  <Icon name={category.icon} size={28} color="#2E7D32" />
-                </View>
-                <View style={styles.textContainer}>
-                  <Text style={styles.categoryTitle}>{category.displayTitle}</Text>
-                  <Text style={styles.categoryDescription}>
-                    {category.description}
-                  </Text>
-                </View>
-              </View>
-              <Icon name="chevron-right" size={24} color="#ccc" />
-            </TouchableOpacity>
+          {filteredCategories.map((category, index) => (
+            <CategoryCard 
+              key={category.id} 
+              category={category} 
+              index={index}
+            />
           ))}
         </View>
 
+        {/* No Results State */}
         {filteredCategories.length === 0 && (
-          <View style={styles.noResultsContainer}>
-            <Icon name="search-off" size={48} color="#ccc" />
-            <Text style={styles.noResultsText}>No categories found</Text>
-            <Text style={styles.noResultsSubtext}>
+          <Animated.View 
+            style={[
+              styles.noResultsContainer,
+              { opacity: fadeAnim }
+            ]}
+          >
+            <View style={styles.noResultsIcon}>
+              <Icon name="search-off" size={48} color="#9CA3AF" />
+            </View>
+            <Text style={styles.noResultsTitle}>No categories found</Text>
+            <Text style={styles.noResultsText}>
               Try searching with different keywords
             </Text>
-          </View>
+            <TouchableOpacity 
+              style={styles.clearSearchButton}
+              onPress={clearSearch}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.clearSearchButtonText}>Clear Search</Text>
+            </TouchableOpacity>
+          </Animated.View>
         )}
+
+        <View style={styles.bottomPadding} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -168,118 +313,198 @@ const CategoriesScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#ffffff',
   },
+
+  // Header Styles
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: '#ffffff',
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: '#E5E7EB',
   },
   backButton: {
     padding: 8,
   },
   headerTitle: {
+    flex: 1,
     fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: '600',
+    color: '#111827',
+    textAlign: 'center',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
   },
-  placeholder: {
+  headerSpacer: {
     width: 40,
   },
-  searchContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+
+  // Search Section
+  searchSection: {
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
   },
-  searchInputContainer: {
+  subtitle: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginBottom: 20,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+  searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f8f9fa',
-    borderRadius: 25,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
     paddingHorizontal: 16,
-    height: 50,
+    height: 48,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    marginBottom: 12,
+  },
+  searchIcon: {
+    marginRight: 12,
   },
   searchInput: {
     flex: 1,
     fontSize: 16,
-    color: '#333',
+    color: '#111827',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
-  searchIcon: {
+  clearButton: {
+    padding: 4,
     marginLeft: 8,
   },
+  resultsText: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+
+  // Scroll View
   scrollView: {
     flex: 1,
+    backgroundColor: '#F9FAFB',
+  },
+  scrollContent: {
+    flexGrow: 1,
   },
   categoriesContainer: {
-    paddingHorizontal: 16,
-    paddingBottom: 20,
+    paddingHorizontal: 20,
+    paddingTop: 20,
   },
-  categoryItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
+
+  // Category Card Styles
+  categoryCard: {
     marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 3.84,
-    elevation: 3,
+  },
+  categoryButton: {
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#f0f0f0',
+    borderColor: '#E5E7EB',
+    overflow: 'hidden',
+  },
+  selectedCategory: {
+    borderColor: '#22C55E',
+    borderWidth: 2,
   },
   categoryContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 1,
+    padding: 16,
   },
   iconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#e8f5e8',
-    justifyContent: 'center',
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: '#F0FDF4',
     alignItems: 'center',
+    justifyContent: 'center',
     marginRight: 16,
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
   },
-  textContainer: {
+  categoryInfo: {
     flex: 1,
   },
   categoryTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
     marginBottom: 4,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
   },
   categoryDescription: {
     fontSize: 14,
-    color: '#666',
-    lineHeight: 20,
+    color: '#6B7280',
+    lineHeight: 18,
+    marginBottom: 4,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
+  consultantCount: {
+    fontSize: 12,
+    color: '#22C55E',
+    fontWeight: '500',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+  arrowContainer: {
+    padding: 4,
+  },
+
+  // No Results State
   noResultsContainer: {
     alignItems: 'center',
-    justifyContent: 'center',
     paddingVertical: 60,
+    paddingHorizontal: 40,
   },
-  noResultsText: {
+  noResultsIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#F9FAFB',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  noResultsTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#666',
-    marginTop: 16,
-  },
-  noResultsSubtext: {
-    fontSize: 14,
-    color: '#999',
-    marginTop: 8,
+    color: '#111827',
     textAlign: 'center',
+    marginBottom: 8,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
+  },
+  noResultsText: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginBottom: 24,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+  clearSearchButton: {
+    backgroundColor: '#22C55E',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  clearSearchButtonText: {
+    color: '#ffffff',
+    fontWeight: '600',
+    fontSize: 14,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+
+  // Bottom Padding
+  bottomPadding: {
+    height: 100,
   },
 });
 

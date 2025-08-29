@@ -32,7 +32,13 @@ const Navbar = ({ state, descriptors, navigation }) => {
   useFocusEffect(
     React.useCallback(() => {
       const currentRoute = state.routes[state.index].name;
-      const shouldHide = ['Reels', 'ChatBot'].includes(currentRoute);
+      // Updated list to ensure ExpertProfileScreen is hidden
+      const shouldHide = [
+        'Reels', 
+        'ChatBot', 
+        'ExpertProfile', 
+        'ExpertProfileScreen'
+      ].includes(currentRoute);
       
       if (shouldHide !== !isVisible) {
         Animated.parallel([
@@ -42,7 +48,7 @@ const Navbar = ({ state, descriptors, navigation }) => {
             useNativeDriver: true,
           }),
           Animated.timing(slideAnim, {
-            toValue: shouldHide ? 80 : 0,
+            toValue: shouldHide ? 100 : 0, // Increased slide distance
             duration: 250,
             useNativeDriver: true,
           }),
@@ -50,7 +56,7 @@ const Navbar = ({ state, descriptors, navigation }) => {
           setIsVisible(!shouldHide);
         });
       }
-    }, [state, fadeAnim, slideAnim])
+    }, [state, fadeAnim, slideAnim, isVisible])
   );
 
   const navItems = [
@@ -123,9 +129,15 @@ const Navbar = ({ state, descriptors, navigation }) => {
     });
 
     if (!event.defaultPrevented) {
-      // Special handling for Assistant -> ChatBot
+      // Special handling for different routes
       if (routeName === 'ChatBot') {
         navigation.navigate('ChatBot', { query: 'hello' });
+      } else if (routeName === 'Home') {
+        // Reset to Home screen and clear any nested navigation
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'Home' }],
+        });
       } else {
         navigation.navigate(routeName);
       }
@@ -240,7 +252,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    zIndex: 1000,
+    zIndex: 999, // Reduced z-index to be below ExpertProfileScreen header
   },
   safeArea: {
     backgroundColor: '#ffffff',

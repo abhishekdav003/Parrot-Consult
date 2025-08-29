@@ -74,6 +74,11 @@ const DashboardScreen = ({ navigation }) => {
     };
   }, [calculateProfileCompletion]);
 
+  const handleSectionChange = useCallback((newSection) => {
+  console.log('[DASHBOARD] Section changing from', activeSection, 'to', newSection);
+  setActiveSection(newSection);
+}, [activeSection]);
+
   // Fetch dashboard data function
   const fetchDashboardData = useCallback(async (showLoading = true) => {
     if (!user) {
@@ -272,6 +277,7 @@ const DashboardScreen = ({ navigation }) => {
             {...commonProps}
             dashboardData={dashboardData}
             onRefresh={handleRefresh}
+            onSectionChange={handleSectionChange}
           />
         );
       case 'profile':
@@ -308,6 +314,7 @@ const DashboardScreen = ({ navigation }) => {
             {...commonProps}
             dashboardData={dashboardData}
             onRefresh={handleRefresh}
+            onSectionChange={handleSectionChange}
           />
         );
     }

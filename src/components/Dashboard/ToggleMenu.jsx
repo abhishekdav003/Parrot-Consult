@@ -22,7 +22,7 @@ const ToggleMenu = ({
 }) => {
   // Check if user is consultant
   const isConsultant = useMemo(() => {
-    return user?.role === 'consultant';
+    return user?.role === 'consultant'  || user?.consultantRequest?.status === 'approved';
   }, [user?.role, user?.consultantRequest?.status]);
 
   // Base menu (visible to all)
