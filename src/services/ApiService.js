@@ -3,13 +3,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import RNBlobUtil from 'react-native-blob-util';
 
-// const BASE_URL = 'http://192.168.0.177:8011/api/v1';
+const BASE_URL = 'http://192.168.0.177:8011/api/v1';
 // const BASE_URL = 'http://10.0.2.2:8011/api/v1';
 
 
 // const BASE_URL = 'http://192.168.0.177:8011/api/v1';
 
-const BASE_URL = 'https://api.parrotconsult.com/api/v1';
+// const BASE_URL = 'https://api.parrotconsult.com/api/v1';
 
 
 const toLocalDateOnly = (date) => {
