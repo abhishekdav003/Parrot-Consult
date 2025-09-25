@@ -14,7 +14,6 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import { FullscreenOrientationType } from 'react-native-video';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -44,62 +43,28 @@ const CategoriesScreen = () => {
     ]).start();
   }, []);
 
+  // Categories based on your backend model
   const categories = [
     {
       id: 1,
-      title: 'tech',
+      title: 'IT',
       displayTitle: 'IT Consulting',
-      description: 'Get support and guidance on technology solutions',
+      description: 'Get expert guidance on technology solutions, software development, and digital transformation',
       icon: 'computer',
     },
     {
       id: 2,
-      title: 'E-commerce',
-      displayTitle: 'Ecommerce Consulting',
-      description: 'Spice up your online business for growth',
-      icon: 'shopping-cart',
+      title: 'StartUp',
+      displayTitle: 'StartUp Consulting',
+      description: 'Build and scale your startup with expert guidance on business strategy and growth',
+      icon: 'rocket-launch',
     },
     {
       id: 3,
       title: 'Legal',
       displayTitle: 'Legal Consulting',
-      description: 'Navigate complex legal decisions with confidence',
+      description: 'Navigate complex legal decisions with confidence from verified legal professionals',
       icon: 'gavel',
-    },
-    {
-      id: 4,
-      title: 'Marketing',
-      displayTitle: 'Marketing Consulting',
-      description: 'Boost your brand visibility and engagement',
-      icon: 'campaign',
-    },
-    {
-      id: 5,
-      title: 'Finance',
-      displayTitle: 'Financial Consulting',
-      description: 'Expert advice on financial planning strategies',
-      icon: 'account-balance',
-    },
-    {
-      id: 6,
-      title: 'HR',
-      displayTitle: 'HR Consulting',
-      description: 'Human resource management solutions',
-      icon: 'people',
-    },
-    {
-      id: 7,
-      title: 'Business',
-      displayTitle: 'Business Consulting',
-      description: 'Strategic business advice for growth',
-      icon: 'business',
-    },
-    {
-      id: 8,
-      title: 'Other',
-      displayTitle: 'Other Consulting',
-      description: 'Various other consulting services',
-      icon: 'miscellaneous-services',
     },
   ];
 
@@ -141,7 +106,6 @@ const CategoriesScreen = () => {
           duration: 100,
           useNativeDriver: true,
         }),
-        
       ]).start();
     }
 
@@ -190,7 +154,6 @@ const CategoriesScreen = () => {
             <Text style={styles.categoryDescription} numberOfLines={2}>
               {category.description}
             </Text>
-          
           </View>
 
           <View style={styles.arrowContainer}>
@@ -445,12 +408,6 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     lineHeight: 18,
     marginBottom: 4,
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
-  },
-  consultantCount: {
-    fontSize: 12,
-    color: '#22C55E',
-    fontWeight: '500',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
   arrowContainer: {

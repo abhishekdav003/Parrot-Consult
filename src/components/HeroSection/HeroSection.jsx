@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity, TextInput, FlatList, Animated } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 
 const HeroSection = () => {
+  const navigation = useNavigation();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [showRecommendations, setShowRecommendations] = useState(true);
@@ -10,25 +12,14 @@ const HeroSection = () => {
 
   const handleSearch = () => {
     if (searchQuery.trim()) {
-      console.log('Searching for:', searchQuery);
-      setSearchResults([
-        { id: 1, title: "Expert found for your query", description: "Connecting you with the right advisor..." },
-        { id: 2, title: "Related consultations", description: "Similar questions from other users" }
-      ]);
-      setShowRecommendations(false);
-      
-      // Add search animation
-      Animated.spring(searchAnimation, {
-        toValue: 1,
-        useNativeDriver: true,
-        tension: 50,
-        friction: 8,
-      }).start();
+      // Navigate to ChatBot with the search query
+      navigation.navigate('ChatBot', { query: searchQuery.trim() });
     }
   };
 
   const handleSearchFocus = () => {
     setIsSearchFocused(true);
+    // Don't show recommendations on focus
     Animated.timing(searchAnimation, {
       toValue: 0.5,
       duration: 200,
@@ -47,18 +38,7 @@ const HeroSection = () => {
     }
   };
 
-  const searchRecommendations = [
-    { id: 1, text: "Career guidance for software engineers", icon: "💼" },
-    { id: 2, text: "Investment advice for beginners", icon: "💰" },
-    { id: 3, text: "Health and wellness tips", icon: "🏥" },
-    { id: 4, text: "Business strategy consulting", icon: "📊" },
-    { id: 5, text: "Legal advice for startups", icon: "⚖️" }
-  ];
 
-  const handleRecommendationPress = (recommendation) => {
-    setSearchQuery(recommendation.text);
-    setIsSearchFocused(true);
-  };
 
   const renderSearchResult = ({ item }) => (
     <TouchableOpacity style={styles.searchResultItem}>
@@ -72,15 +52,7 @@ const HeroSection = () => {
     </TouchableOpacity>
   );
 
-  const renderRecommendation = ({ item }) => (
-    <TouchableOpacity 
-      style={styles.recommendationItem}
-      onPress={() => handleRecommendationPress(item)}
-    >
-      <Text style={styles.recommendationIcon}>{item.icon}</Text>
-      <Text style={styles.recommendationText}>{item.text}</Text>
-    </TouchableOpacity>
-  );
+
 
   return (
     <View style={styles.container}>
@@ -135,6 +107,8 @@ const HeroSection = () => {
                 onChangeText={setSearchQuery}
                 onFocus={handleSearchFocus}
                 onBlur={handleSearchBlur}
+                onSubmitEditing={handleSearch}
+                returnKeyType="search"
                 multiline={true}
                 numberOfLines={2}
               />
@@ -172,15 +146,6 @@ const HeroSection = () => {
               />
             </View>
           )}
-
-        
-          {/* Call-to-action Button */}
-          <TouchableOpacity style={styles.ctaButton}>
-            <Text style={styles.ctaIcon}>🤔</Text>
-            <Text style={styles.ctaText}>
-              Not sure who to consult? Let us guide you!
-            </Text>
-          </TouchableOpacity>
         </View>
       </View>
     </View>
@@ -204,8 +169,8 @@ const styles = StyleSheet.create({
     marginBottom: 30,
   },
   parrotLogo: {
-    width: 120,
-    height: 150,
+    width: 140,
+    height: 170,
   },
   contentContainer: {
     alignItems: 'center',
@@ -357,76 +322,7 @@ const styles = StyleSheet.create({
     color: '#28A745',
     fontWeight: 'bold',
   },
-  recommendationsContainer: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 15,
-    padding: 15,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 3.84,
-    elevation: 3,
-    minWidth: 320,
-  },
-  recommendationsTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#2C5530',
-    marginBottom: 10,
-  },
-  recommendationItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 15,
-    backgroundColor: '#F8F9FA',
-    borderRadius: 12,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: 'transparent',
-  },
-  recommendationIcon: {
-    fontSize: 18,
-    marginRight: 12,
-  },
-  recommendationText: {
-    fontSize: 14,
-    color: '#333',
-    flex: 1,
-  },
-  ctaButton: {
-    backgroundColor: '#28A745',
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    borderRadius: 25,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    minWidth: 300,
-    shadowColor: '#28A745',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  ctaIcon: {
-    fontSize: 20,
-    marginRight: 10,
-  },
-  ctaText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-    textAlign: 'center',
-    flex: 1,
-  },
+
 });
 
 export default HeroSection;

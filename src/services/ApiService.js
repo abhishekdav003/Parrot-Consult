@@ -3,7 +3,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import RNBlobUtil from 'react-native-blob-util';
 
-const BASE_URL = 'http://192.168.0.177:8011/api/v1';
+// const BASE_URL = 'http://192.168.0.177:8011/api/v1';
+const BASE_URL = 'http://10.0.2.2:8011/api/v1';
+// const BASE_URL = 'http://10.0.2.2:8011/api/v1';
+// const BASE_URL = 'http://10.33.116.48:8011/api/v1';
+// const BASE_URL = 'http://192.168.0.116:8011/api/v1';
+// const BASE_URL = 'http://10.224.232.48:8011/api/v1';
 // const BASE_URL = 'http://10.0.2.2:8011/api/v1';
 
 
@@ -825,7 +830,59 @@ async createBooking(bookingData) {
   console.log('[API] ChatBot response result:', result);
   return result;
 }
+
+
+
+
+
+// Chat API Methods
+async getChatInbox() {
+  console.log('[API] Getting chat inbox...');
+  
+  const result = await this.apiCall('/chat/inbox', {
+    method: 'GET',
+  });
+  
+  console.log('[API] Chat inbox result:', result);
+  return result;
 }
 
+async getChatHistory(peer1Id, peer2Id, chatId = 'null') {
+  console.log('[API] Getting chat history for:', peer1Id, peer2Id, chatId);
+  
+  const result = await this.apiCall(`/chat/${peer1Id}/${peer2Id}/${chatId}`, {
+    method: 'GET',
+  });
+  
+  console.log('[API] Chat history result:', result);
+  return result;
+}
+
+async sendChatMessage(chatData) {
+  console.log('[API] Sending chat message:', chatData);
+  
+  const result = await this.apiCall('/chat/send-message', {
+    method: 'POST',
+    body: JSON.stringify(chatData),
+  });
+  
+  console.log('[API] Send message result:', result);
+  return result;
+}
+
+async markMessagesAsRead(chatId, userId) {
+  console.log('[API] Marking messages as read:', { chatId, userId });
+  
+  const result = await this.apiCall('/chat/mark-read', {
+    method: 'POST',
+    body: JSON.stringify({ chatId, userId }),
+  });
+  
+  console.log('[API] Mark as read result:', result);
+  return result;
+}
+}
+
+// export const API_BASE_URL = BASE_URL;
 export default new ApiService();
 

@@ -6,32 +6,7 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 const CategorySection = () => {
   const navigation = useNavigation();
 
-  const categories = [
-    {
-      id: 1,
-      title: 'IT Consulting',
-      description: 'Get support and guidance for your technology',
-      icon: 'computer',
-    },
-    {
-      id: 2,
-      title: 'Ecommerce Consulting',
-      description: 'Spice up the profitability of your online business',
-      icon: 'shopping-cart',
-    },
-    {
-      id: 3,
-      title: 'Legal Consulting',
-      description: 'Navigate complex legal decisions with confidence and expertise',
-      icon: 'gavel',
-    },
-  ];
-
-  const handleCategoryPress = (category) => {
-    navigation.navigate('Categories');
-  };
-
-  const handleViewAllCategories = () => {
+  const handleExploreCategories = () => {
     navigation.navigate('Categories');
   };
 
@@ -43,52 +18,42 @@ const CategorySection = () => {
           <View style={styles.titleUnderline} />
         </View>
         <TouchableOpacity 
-          style={styles.viewAllButton}
-          onPress={handleViewAllCategories}
+          style={styles.exploreButton}
+          onPress={handleExploreCategories}
           activeOpacity={0.7}
         >
-          <Text style={styles.viewAllText}>View All</Text>
+          <Text style={styles.exploreText}>Explore Categories</Text>
           <Icon name="arrow-forward" size={16} color="#059669" />
         </TouchableOpacity>
       </View>
       
-      <View style={styles.categoriesContainer}>
-        {categories.map((category, index) => (
-          <TouchableOpacity
-            key={category.id}
-            style={[
-              styles.categoryCard,
-              index === categories.length - 1 && styles.lastCard
-            ]}
-            onPress={() => handleCategoryPress(category)}
-            activeOpacity={0.8}
-          >
-            <View style={styles.cardContent}>
-              <View style={styles.iconContainer}>
-                <View style={styles.iconBackground}>
-                  <Icon name={category.icon} size={22} color="#059669" />
-                </View>
-              </View>
-              
-              <View style={styles.textContent}>
-                <Text style={styles.categoryTitle}>{category.title}</Text>
-                <Text style={styles.categoryDescription}>
-                  {category.description}
-                </Text>
-              </View>
-              
-              <View style={styles.arrowContainer}>
-                <Icon name="arrow-forward-ios" size={14} color="#94A3B8" />
-              </View>
+      <TouchableOpacity
+        style={styles.mainCategoryCard}
+        onPress={handleExploreCategories}
+        activeOpacity={0.8}
+      >
+        <View style={styles.cardContent}>
+          <View style={styles.iconContainer}>
+            <View style={styles.iconBackground}>
+              <Icon name="explore" size={24} color="#059669" />
             </View>
-            
-            {/* Bottom border accent */}
-            <View style={styles.bottomAccent} />
-          </TouchableOpacity>
-        ))}
-      </View>
+          </View>
+          
+          <View style={styles.textContent}>
+            <Text style={styles.categoryTitle}>Expert Consulting Services</Text>
+            <Text style={styles.categoryDescription}>
+              Connect with verified experts across IT, StartUp, and Legal domains
+            </Text>
+          </View>
+          
+          <View style={styles.arrowContainer}>
+            <Icon name="arrow-forward-ios" size={14} color="#94A3B8" />
+          </View>
+        </View>
+        
+        <View style={styles.bottomAccent} />
+      </TouchableOpacity>
       
-      {/* Section bottom border */}
       <View style={styles.sectionBorder} />
     </View>
   );
@@ -101,7 +66,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
   },
   
-  // Header Styles
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -125,7 +89,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#10B981',
     borderRadius: 1,
   },
-  viewAllButton: {
+  exploreButton: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#F0FDF4',
@@ -135,7 +99,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#D1FAE5',
   },
-  viewAllText: {
+  exploreText: {
     fontSize: 14,
     color: '#059669',
     fontWeight: '500',
@@ -143,16 +107,9 @@ const styles = StyleSheet.create({
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
   
-  // Categories Container
-  categoriesContainer: {
-    gap: 12,
-  },
-  
-  // Category Card Styles
-  categoryCard: {
+  mainCategoryCard: {
     backgroundColor: '#ffffff',
     borderRadius: 12,
-    marginBottom: 12,
     borderWidth: 1,
     borderColor: '#E2E8F0',
     elevation: 2,
@@ -166,16 +123,12 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     position: 'relative',
   },
-  lastCard: {
-    marginBottom: 0,
-  },
   cardContent: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
   },
   
-  // Icon Styles
   iconContainer: {
     marginRight: 16,
   },
@@ -190,7 +143,6 @@ const styles = StyleSheet.create({
     borderColor: '#A7F3D0',
   },
   
-  // Text Content
   textContent: {
     flex: 1,
     paddingRight: 12,
@@ -210,7 +162,6 @@ const styles = StyleSheet.create({
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
   
-  // Arrow Container
   arrowContainer: {
     width: 24,
     height: 24,
@@ -222,7 +173,6 @@ const styles = StyleSheet.create({
     borderColor: '#E2E8F0',
   },
   
-  // Accent Elements
   bottomAccent: {
     position: 'absolute',
     bottom: 0,
@@ -233,7 +183,6 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   
-  // Section Border
   sectionBorder: {
     marginTop: 20,
     height: 1,

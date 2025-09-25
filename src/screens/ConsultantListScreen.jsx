@@ -17,16 +17,13 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import ApiService from '../services/ApiService';
 import UnifiedBookingModal from './UnifiedBookingModal';
 
+// Category mapping - Frontend categories to Backend categories
 const getCategoryMapping = (frontendCategory) => {
+  // Direct mapping since we're using backend categories directly
   const mappings = {
-    'it-consultant': 'tech',
-    'e-commerce': 'E-commerce',
-    'legal-consultant': 'Legal',
-    'marketing-consultant': 'Marketing',
-    'financial-consultant': 'Finance',
-    'hr-consultant': 'HR',
-    'Business': 'strategy',
-    'other': 'Other'
+    'IT': 'IT',
+    'StartUp': 'StartUp',
+    'Legal': 'Legal'
   };
   return mappings[frontendCategory] || frontendCategory;
 };
@@ -70,91 +67,103 @@ const ConsultantListScreen = () => {
       
       console.log('[CONSULTANT_LIST] API Response received:', result);
       
-      if (result.success) {
+      if (result?.success) {
         let allUsers = result.data || [];
         console.log('[CONSULTANT_LIST] Fetched users:', allUsers.length);
         
-        const availableCategories = allUsers
-          .map(user => user.consultantRequest?.consultantProfile?.category)
-          .filter(Boolean);
-        console.log('[CONSULTANT_LIST] Available categories in DB:', [...new Set(availableCategories)]);
-        
+        // Get all approved consultants first
         let approvedConsultants = allUsers.filter(user => 
-          user.consultantRequest && 
-          user.consultantRequest.status === 'approved' &&
-          user.consultantRequest.consultantProfile
+          user?.consultantRequest?.status === 'approved' &&
+          user?.consultantRequest?.consultantProfile &&
+          !user?.suspended
         );
 
         console.log('[CONSULTANT_LIST] Approved consultants found:', approvedConsultants.length);
         
-        if (approvedConsultants.length > 0) {
-          console.log('[CONSULTANT_LIST] Approved consultants details:', 
-            approvedConsultants.map(user => ({
-              name: user.fullName,
-              category: user.consultantRequest.consultantProfile.category,
-              status: user.consultantRequest.status
-            }))
-          );
-        }
+        // Log available categories for debugging
+        const availableCategories = approvedConsultants
+          .map(user => user.consultantRequest?.consultantProfile?.category)
+          .filter(Boolean);
+        console.log('[CONSULTANT_LIST] Available categories in DB:', [...new Set(availableCategories)]);
         
+        // Filter by category if provided
         if (category?.title) {
           const dbCategoryName = getCategoryMapping(category.title);
-          console.log('[CONSULTANT_LIST] Mapping frontend category:', category.title, '-> DB category:', dbCategoryName);
+          console.log('[CONSULTANT_LIST] Filtering by category:', dbCategoryName);
           
           approvedConsultants = approvedConsultants.filter(user => {
-            const consultantCategory = user.consultantRequest.consultantProfile.category;
+            const consultantCategory = user.consultantRequest?.consultantProfile?.category;
             const matches = consultantCategory === dbCategoryName;
-            console.log('[CONSULTANT_LIST] Consultant:', user.fullName, 'Category:', consultantCategory, 'Matches:', matches);
+            if (matches) {
+              console.log('[CONSULTANT_LIST] Match found - Consultant:', user.fullName, 'Category:', consultantCategory);
+            }
             return matches;
           });
           
           console.log('[CONSULTANT_LIST] Consultants after category filter:', approvedConsultants.length);
         }
         
-        const transformedConsultants = approvedConsultants.map(user => ({
-          _id: user._id,
-          name: user.fullName,
-          email: user.email,
-          phone: user.phone,
-          profilePicture: user.profileImage || null,
-          primaryCategory: user.consultantRequest.consultantProfile.category || category?.displayTitle || 'General Consulting',
-          specializedServices: user.consultantRequest.consultantProfile.keySkills || [],
-          keySkills: user.consultantRequest.consultantProfile.keySkills || [],
-          sessionFee: user.consultantRequest.consultantProfile.sessionFee,
-          yearsOfExperience: user.consultantRequest.consultantProfile.yearsOfExperience,
-          qualification: user.consultantRequest.consultantProfile.qualification,
-          university: user.consultantRequest.consultantProfile.university,
-          shortBio: user.consultantRequest.consultantProfile.shortBio,
-          languages: user.consultantRequest.consultantProfile.languages || [],
-          daysPerWeek: user.consultantRequest.consultantProfile.daysPerWeek,
-          availableTimePerDay: user.consultantRequest.consultantProfile.availableTimePerDay,
-          consultantType: user.consultantRequest.consultantProfile.consultantType,
-          rating: 4.5,
-          reviewCount: Math.floor(Math.random() * 50) + 1,
-          isApproved: true,
-          status: 'approved'
-        }));
+        // Transform consultants data for display
+        const transformedConsultants = approvedConsultants.map(user => {
+          const profile = user.consultantRequest.consultantProfile;
+          return {
+            _id: user._id,
+            name: user.fullName || 'Unknown',
+            email: user.email,
+            phone: user.phone,
+            profilePicture: user.profileImage || null,
+            location: user.location || 'Available Online',
+            primaryCategory: profile.category || category?.displayTitle || 'General Consulting',
+            specializedServices: profile.Specialized || profile.keySkills || [],
+            keySkills: profile.keySkills || [],
+            sessionFee: profile.sessionFee || null,
+            yearsOfExperience: profile.yearsOfExperience || 0,
+            qualification: profile.qualification || '',
+            fieldOfStudy: profile.fieldOfStudy || '',
+            university: profile.university || '',
+            graduationYear: profile.graduationYear || null,
+            shortBio: profile.shortBio || '',
+            languages: profile.languages || ['English'],
+            daysPerWeek: profile.daysPerWeek || '',
+            days: profile.days || [],
+            availableTimePerDay: profile.availableTimePerDay || '',
+            profileHealth: profile.profileHealth || 0,
+            wallet: profile.wallet || 0,
+            // Mock rating data - in production, this would come from reviews
+            rating: Math.random() * (5.0 - 4.0) + 4.0, // Random rating between 4.0-5.0
+            reviewCount: Math.floor(Math.random() * 50) + 1,
+            isApproved: true,
+            status: 'approved',
+            isOnline: Math.random() > 0.3, // Mock online status
+          };
+        });
+        
+        // Sort consultants by rating and experience
+        transformedConsultants.sort((a, b) => {
+          if (b.rating !== a.rating) return b.rating - a.rating;
+          return b.yearsOfExperience - a.yearsOfExperience;
+        });
         
         console.log('[CONSULTANT_LIST] Final transformed consultants:', transformedConsultants.length);
-        console.log('[CONSULTANT_LIST] Transformed consultants details:', 
-          transformedConsultants.map(c => ({ name: c.name, category: c.primaryCategory }))
-        );
+        console.log('[CONSULTANT_LIST] Sample consultant:', transformedConsultants[0]);
         
         setConsultants(transformedConsultants);
       } else {
-        console.error('[CONSULTANT_LIST] API Error:', result.error);
-        Alert.alert('Error', result.error || 'Failed to load consultants');
+        console.error('[CONSULTANT_LIST] API Error:', result?.error);
+        Alert.alert('Error', result?.error || 'Failed to load consultants');
         setConsultants([]);
       }
     } catch (error) {
       console.error('[CONSULTANT_LIST] Exception fetching consultants:', error);
       
-      if (error.message.includes('timeout')) {
-        Alert.alert('Timeout', 'Request timed out. Please check your internet connection and try again.');
-      } else {
-        Alert.alert('Error', error.message || 'Failed to load consultants');
+      let errorMessage = 'Failed to load consultants';
+      if (error.message?.includes('timeout')) {
+        errorMessage = 'Request timed out. Please check your internet connection and try again.';
+      } else if (error.message) {
+        errorMessage = error.message;
       }
       
+      Alert.alert('Error', errorMessage);
       setConsultants([]);
     } finally {
       console.log('[CONSULTANT_LIST] Setting loading to false');
@@ -168,8 +177,8 @@ const ConsultantListScreen = () => {
       return;
     }
 
+    const searchLower = searchQuery.toLowerCase();
     const filtered = consultants.filter(consultant => {
-      const searchLower = searchQuery.toLowerCase();
       return (
         consultant.name?.toLowerCase().includes(searchLower) ||
         consultant.primaryCategory?.toLowerCase().includes(searchLower) ||
@@ -180,14 +189,21 @@ const ConsultantListScreen = () => {
           skill.toLowerCase().includes(searchLower)
         ) ||
         consultant.qualification?.toLowerCase().includes(searchLower) ||
-        consultant.university?.toLowerCase().includes(searchLower)
+        consultant.university?.toLowerCase().includes(searchLower) ||
+        consultant.fieldOfStudy?.toLowerCase().includes(searchLower) ||
+        consultant.shortBio?.toLowerCase().includes(searchLower)
       );
     });
+    
     setFilteredConsultants(filtered);
   };
 
   const handleBack = () => {
-    navigation.goBack();
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    } else {
+      navigation.navigate('Main', { screen: 'Home' });
+    }
   };
 
   const handleViewProfile = (consultant) => {
@@ -197,22 +213,26 @@ const ConsultantListScreen = () => {
       email: consultant.email,
       phone: consultant.phone,
       profileImage: consultant.profilePicture,
-      location: consultant.location || 'Available Online',
+      location: consultant.location,
       consultantRequest: {
         status: 'approved',
         consultantProfile: {
           category: consultant.primaryCategory,
           keySkills: consultant.keySkills,
+          Specialized: consultant.specializedServices,
           sessionFee: consultant.sessionFee,
           yearsOfExperience: consultant.yearsOfExperience,
           qualification: consultant.qualification,
+          fieldOfStudy: consultant.fieldOfStudy,
           university: consultant.university,
+          graduationYear: consultant.graduationYear,
           shortBio: consultant.shortBio,
           languages: consultant.languages,
           daysPerWeek: consultant.daysPerWeek,
+          days: consultant.days,
           availableTimePerDay: consultant.availableTimePerDay,
-          consultantType: consultant.consultantType,
-          fieldOfStudy: consultant.primaryCategory
+          profileHealth: consultant.profileHealth,
+          wallet: consultant.wallet
         }
       }
     };
@@ -227,20 +247,26 @@ const ConsultantListScreen = () => {
       email: consultant.email,
       phone: consultant.phone,
       profileImage: consultant.profilePicture,
+      location: consultant.location,
       consultantRequest: {
         status: 'approved',
         consultantProfile: {
           sessionFee: consultant.sessionFee,
           category: consultant.primaryCategory,
           keySkills: consultant.keySkills,
+          Specialized: consultant.specializedServices,
           yearsOfExperience: consultant.yearsOfExperience,
           qualification: consultant.qualification,
+          fieldOfStudy: consultant.fieldOfStudy,
           university: consultant.university,
+          graduationYear: consultant.graduationYear,
           shortBio: consultant.shortBio,
           languages: consultant.languages,
           daysPerWeek: consultant.daysPerWeek,
+          days: consultant.days,
           availableTimePerDay: consultant.availableTimePerDay,
-          consultantType: consultant.consultantType
+          profileHealth: consultant.profileHealth,
+          wallet: consultant.wallet
         }
       }
     };
@@ -296,13 +322,13 @@ const ConsultantListScreen = () => {
                 <Icon name="person" size={28} color="#059669" />
               </View>
             )}
-            <View style={styles.onlineIndicator} />
+            {consultant.isOnline && <View style={styles.onlineIndicator} />}
           </View>
           
           <View style={styles.consultantInfo}>
             <View style={styles.nameRow}>
               <Text style={styles.consultantName}>
-                {consultant.name || 'Unknown'}
+                {consultant.name}
               </Text>
               {consultant.isApproved && (
                 <View style={styles.verifiedBadge}>
@@ -313,10 +339,17 @@ const ConsultantListScreen = () => {
             
             <Text style={styles.category}>
               {consultant.qualification && consultant.university 
-                ? `${consultant.qualification} - ${consultant.university}`
+                ? `${consultant.qualification}${consultant.fieldOfStudy ? ` in ${consultant.fieldOfStudy}` : ''}`
                 : consultant.primaryCategory
               }
             </Text>
+
+            {consultant.university && (
+              <Text style={styles.university} numberOfLines={1}>
+                {consultant.university}
+                {consultant.graduationYear && ` • ${consultant.graduationYear}`}
+              </Text>
+            )}
             
             {consultant.keySkills && consultant.keySkills.length > 0 && (
               <Text style={styles.skills} numberOfLines={1}>
@@ -327,13 +360,13 @@ const ConsultantListScreen = () => {
             
             <View style={styles.ratingRow}>
               <View style={styles.starsContainer}>
-                {renderStars(consultant.rating || 0)}
+                {renderStars(consultant.rating)}
               </View>
               <Text style={styles.ratingText}>
-                {consultant.rating ? consultant.rating.toFixed(1) : '0.0'}
+                {consultant.rating.toFixed(1)}
               </Text>
               <Text style={styles.reviewCount}>
-                ({consultant.reviewCount || 0})
+                ({consultant.reviewCount})
               </Text>
             </View>
           </View>
@@ -348,7 +381,7 @@ const ConsultantListScreen = () => {
         )}
 
         <View style={styles.detailsRow}>
-          {consultant.yearsOfExperience && (
+          {consultant.yearsOfExperience > 0 && (
             <View style={styles.detailItem}>
               <Icon name="work" size={14} color="#6B7280" />
               <Text style={styles.detailText}>
@@ -362,6 +395,15 @@ const ConsultantListScreen = () => {
               <Icon name="language" size={14} color="#6B7280" />
               <Text style={styles.detailText}>
                 {consultant.languages.slice(0, 2).join(', ')}
+              </Text>
+            </View>
+          )}
+
+          {consultant.location && (
+            <View style={styles.detailItem}>
+              <Icon name="location-on" size={14} color="#6B7280" />
+              <Text style={styles.detailText} numberOfLines={1}>
+                {consultant.location}
               </Text>
             </View>
           )}
@@ -409,6 +451,7 @@ const ConsultantListScreen = () => {
       <View style={styles.searchSection}>
         <Text style={styles.subtitle}>
           {filteredConsultants.length} experts available
+          {category?.title && ` in ${category.displayTitle}`}
         </Text>
         
         <View style={styles.searchContainer}>
@@ -452,7 +495,7 @@ const ConsultantListScreen = () => {
                 <Text style={styles.noResultsText}>
                   {searchQuery.trim() 
                     ? 'Try searching with different keywords'
-                    : `No consultants available for ${category?.displayTitle || 'this category'}`
+                    : `No consultants available for ${category?.displayTitle || 'this category'} at the moment`
                   }
                 </Text>
                 {searchQuery.trim() && (
@@ -472,14 +515,16 @@ const ConsultantListScreen = () => {
         </ScrollView>
       )}
       
-      <UnifiedBookingModal
-        visible={showBookingModal}
-        onClose={() => {
-          setShowBookingModal(false);
-          setSelectedConsultant(null);
-        }}
-        expert={selectedConsultant}
-      />
+      {showBookingModal && selectedConsultant && (
+        <UnifiedBookingModal
+          visible={showBookingModal}
+          onClose={() => {
+            setShowBookingModal(false);
+            setSelectedConsultant(null);
+          }}
+          expert={selectedConsultant}
+        />
+      )}
     </SafeAreaView>
   );
 };
@@ -589,6 +634,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E5E7EB',
     overflow: 'hidden',
+    elevation: 2,
+    shadowColor: '#000000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
   },
   cardContent: {
     padding: 16,
@@ -656,6 +709,12 @@ const styles = StyleSheet.create({
   category: {
     fontSize: 14,
     color: '#6B7280',
+    marginBottom: 2,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+  university: {
+    fontSize: 13,
+    color: '#9CA3AF',
     marginBottom: 4,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
@@ -711,6 +770,7 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     marginLeft: 4,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+    flex: 1,
   },
   actionButtons: {
     flexDirection: 'row',

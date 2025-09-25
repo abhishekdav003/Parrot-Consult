@@ -1,10 +1,9 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
-  Dimensions,
   SafeAreaView,
   Image,
   Animated,
@@ -14,7 +13,10 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useAuth } from '../../context/AuthContext';
 import { useFocusEffect } from '@react-navigation/native';
 
-const { width } = Dimensions.get('window');
+const NAVBAR_HEIGHT = 70; // Increased to accommodate curved button
+const QUICKIFY_BUTTON_SIZE = 56;
+const ICON_SIZE = 24;
+const ANIMATION_DURATION = 200;
 
 const Navbar = ({ state, descriptors, navigation }) => {
   const [hasNotifications, setHasNotifications] = useState(true);
@@ -27,15 +29,62 @@ const Navbar = ({ state, descriptors, navigation }) => {
   const scaleAnims = useRef(
     Array.from({ length: 5 }, () => new Animated.Value(1))
   ).current;
+  const quickifyScale = useRef(new Animated.Value(1)).current;
+
+  // Memoized navigation items
+  const navItems = useMemo(() => [
+    { 
+      name: 'Home', 
+      icon: 'home', 
+      route: 'Home',
+      activeColor: '#059669',
+      inactiveColor: '#6B7280'
+    },
+    { 
+      name: 'Assistant', 
+      icon: 'support-agent', 
+      route: 'ChatBot',
+      activeColor: '#059669',
+      inactiveColor: '#6B7280',
+      isAssistant: true
+    },
+    { 
+      name: 'Quickify', 
+      icon: 'play-arrow', 
+      route: 'Reels',
+      activeColor: '#FFFFFF',
+      inactiveColor: '#FFFFFF',
+      isQuickify: true
+    },
+    { 
+      name: 'Inbox', 
+      icon: 'inbox', 
+      route: 'Notifications',
+      activeColor: '#059669',
+      inactiveColor: '#6B7280',
+      hasNotification: hasNotifications
+    },
+    isAuthenticated ? {
+      name: 'Profile', 
+      icon: 'person', 
+      route: 'Dashboard',
+      activeColor: '#059669',
+      inactiveColor: '#6B7280',
+      isProfile: true
+    } : {
+      name: 'Login', 
+      icon: 'login', 
+      route: 'Login',
+      activeColor: '#059669',
+      inactiveColor: '#6B7280'
+    },
+  ], [isAuthenticated, user, hasNotifications]);
 
   // Hide navbar on specific screens
   useFocusEffect(
-    React.useCallback(() => {
+    useCallback(() => {
       const currentRoute = state.routes[state.index].name;
-      // Updated list to ensure ExpertProfileScreen is hidden
       const shouldHide = [
-        'Reels', 
-        'ChatBot', 
         'ExpertProfile', 
         'ExpertProfileScreen'
       ].includes(currentRoute);
@@ -44,12 +93,12 @@ const Navbar = ({ state, descriptors, navigation }) => {
         Animated.parallel([
           Animated.timing(fadeAnim, {
             toValue: shouldHide ? 0 : 1,
-            duration: 250,
+            duration: ANIMATION_DURATION,
             useNativeDriver: true,
           }),
           Animated.timing(slideAnim, {
-            toValue: shouldHide ? 100 : 0, // Increased slide distance
-            duration: 250,
+            toValue: shouldHide ? NAVBAR_HEIGHT + 20 : 0,
+            duration: ANIMATION_DURATION,
             useNativeDriver: true,
           }),
         ]).start(() => {
@@ -59,81 +108,33 @@ const Navbar = ({ state, descriptors, navigation }) => {
     }, [state, fadeAnim, slideAnim, isVisible])
   );
 
-  const navItems = [
-    { 
-      name: 'Home', 
-      icon: 'home', 
-      route: 'Home',
-      activeColor: '#059669',
-      inactiveColor: '#64748B'
-    },
-    { 
-      name: 'Assistant', 
-      icon: 'support-agent', 
-      route: 'ChatBot',
-      activeColor: '#059669',
-      inactiveColor: '#64748B',
-      isAssistant: true
-    },
-    { 
-      name: 'Media', 
-      icon: 'play-circle-outline', 
-      route: 'Reels',
-      activeColor: '#059669',
-      inactiveColor: '#64748B'
-    },
-    { 
-      name: 'Activity', 
-      icon: 'notifications-none', 
-      route: 'Notifications',
-      activeColor: '#059669',
-      inactiveColor: '#64748B',
-      hasNotification: hasNotifications
-    },
-    // Conditionally show Login or Profile
-    isAuthenticated ? {
-      name: 'Profile', 
-      icon: 'person-outline', 
-      route: 'Dashboard',
-      activeColor: '#059669',
-      inactiveColor: '#64748B',
-      isProfile: true
-    } : {
-      name: 'Login', 
-      icon: 'login', 
-      route: 'Login',
-      activeColor: '#059669',
-      inactiveColor: '#64748B'
-    },
-  ];
-
-  const handleNavigation = (routeName, index) => {
-    // Simple scale animation for feedback
+  const handleNavigation = useCallback((routeName, index, isQuickify = false) => {
+    // Different animation for Quickify button
+    const scaleAnimRef = isQuickify ? quickifyScale : scaleAnims[index];
+    
     Animated.sequence([
-      Animated.timing(scaleAnims[index], {
-        toValue: 0.92,
-        duration: 80,
+      Animated.timing(scaleAnimRef, {
+        toValue: isQuickify ? 0.9 : 0.95,
+        duration: 100,
         useNativeDriver: true,
       }),
-      Animated.timing(scaleAnims[index], {
+      Animated.timing(scaleAnimRef, {
         toValue: 1,
-        duration: 120,
+        duration: 150,
         useNativeDriver: true,
       }),
     ]).start();
 
     const event = navigation.emit({
       type: 'tabPress',
-      target: state.routes[index].key,
+      target: state.routes[index]?.key || routeName,
       canPreventDefault: true,
     });
 
     if (!event.defaultPrevented) {
-      // Special handling for different routes
       if (routeName === 'ChatBot') {
         navigation.navigate('ChatBot', { query: 'hello' });
       } else if (routeName === 'Home') {
-        // Reset to Home screen and clear any nested navigation
         navigation.reset({
           index: 0,
           routes: [{ name: 'Home' }],
@@ -142,76 +143,114 @@ const Navbar = ({ state, descriptors, navigation }) => {
         navigation.navigate(routeName);
       }
     }
-  };
+  }, [navigation, scaleAnims, quickifyScale]);
 
-  const NavButton = ({ item, index, isActive }) => (
+  const QuickifyButton = useCallback(() => {
+  const isActive = state.routes[state.index]?.name === 'Reels';
+  
+  return (
     <Animated.View
       style={[
-        styles.navButtonContainer,
+        styles.quickifyContainer,
         {
-          transform: [{ scale: scaleAnims[index] }],
+          transform: [{ scale: quickifyScale }],
         },
       ]}
     >
       <TouchableOpacity
-        style={styles.navButton}
-        onPress={() => handleNavigation(item.route, index)}
-        activeOpacity={0.6}
+        style={[styles.quickifyButton, isActive && styles.quickifyButtonActive]}
+        onPress={() => handleNavigation('Reels', 2, true)}
+        activeOpacity={0.8}
       >
-        <View style={styles.iconContainer}>
-          {/* Active indicator background */}
-          {isActive && (
-            <View style={styles.activeIndicatorBg} />
-          )}
-          
-          {item.isProfile && user?.profileImage ? (
-            <View style={styles.profileImageContainer}>
-              <Image 
-                source={{ uri: user.profileImage }} 
-                style={[
-                  styles.profileImage,
-                  isActive && styles.profileImageActive
-                ]}
-              />
-            </View>
-          ) : (
-            <Icon
-              name={item.icon}
-              size={24}
-              color={isActive ? item.activeColor : item.inactiveColor}
-              style={styles.icon}
-            />
-          )}
-          
-          {/* Notification badge */}
-          {item.hasNotification && (
-            <View style={styles.notificationBadge}>
-              <View style={styles.notificationDot} />
-            </View>
-          )}
-
-          {/* Active indicator dot */}
-          {isActive && (
-            <View style={styles.activeIndicatorDot} />
-          )}
+        <View style={styles.quickifyContent}>
+          <Icon
+            name="play-arrow"
+            size={20}
+            color="#FFFFFF"
+            style={styles.quickifyIcon}
+          />
+          <Text style={styles.quickifyTextInside}>Quickify</Text>
         </View>
-        
-        <Text
-          style={[
-            styles.navText,
-            {
-              color: isActive ? item.activeColor : item.inactiveColor,
-              fontWeight: isActive ? '600' : '500'
-            }
-          ]}
-        >
-          {item.name}
-        </Text>
       </TouchableOpacity>
     </Animated.View>
   );
+}, [quickifyScale, handleNavigation, state]);
 
-  // Don't render navbar if not visible
+  const NavButton = useCallback(({ item, index, isActive }) => {
+    if (item.isQuickify) {
+      return <QuickifyButton />;
+    }
+
+    return (
+      <Animated.View
+        style={[
+          styles.navButtonContainer,
+          {
+            transform: [{ scale: scaleAnims[index] }],
+          },
+        ]}
+      >
+        <TouchableOpacity
+          style={styles.navButton}
+          onPress={() => handleNavigation(item.route, index)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.iconContainer}>
+            {/* Active indicator */}
+            {isActive && <View style={styles.activeIndicator} />}
+            
+            {item.isProfile ? (
+              <View style={styles.profileContainer}>
+                {isAuthenticated && user?.profileImage ? (
+                  <Image 
+                    source={{ uri: user.profileImage }} 
+                    style={[
+                      styles.profileImage,
+                      isActive && styles.profileImageActive
+                    ]}
+                  />
+                ) : (
+                  <Icon
+                    name={isAuthenticated ? "person" : "login"}
+                    size={ICON_SIZE}
+                    color={isActive ? item.activeColor : item.inactiveColor}
+                    style={styles.icon}
+                  />
+                )}
+              </View>
+            ) : (
+              <Icon
+                name={item.icon}
+                size={ICON_SIZE}
+                color={isActive ? item.activeColor : item.inactiveColor}
+                style={styles.icon}
+              />
+            )}
+            
+            {/* Notification badge */}
+            {item.hasNotification && (
+              <View style={styles.notificationBadge} />
+            )}
+          </View>
+          
+          <Text
+            style={[
+              styles.navText,
+              {
+                color: isActive ? item.activeColor : item.inactiveColor,
+                fontWeight: isActive ? '600' : '400'
+              }
+            ]}
+            numberOfLines={1}
+          >
+            {item.name}
+          </Text>
+        </TouchableOpacity>
+      </Animated.View>
+    );
+  }, [scaleAnims, handleNavigation, user, isAuthenticated, QuickifyButton]);
+
+  // Don't render if not visible
   if (!isVisible) {
     return null;
   }
@@ -228,9 +267,15 @@ const Navbar = ({ state, descriptors, navigation }) => {
     >
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.navbar}>
-          <View style={styles.topBorder} />
+          {/* Background blur effect */}
+          <View style={styles.navbarBackground} />
+          
           {navItems.map((item, index) => {
-            const isActive = state.index === index;
+            const routeIndex = item.isQuickify 
+              ? state.routes.findIndex(route => route.name === 'Reels')
+              : state.routes.findIndex(route => route.name === item.route);
+            const isActive = state.index === routeIndex && routeIndex !== -1;
+            
             return (
               <NavButton 
                 key={`${item.route}-${index}`} 
@@ -252,50 +297,54 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    zIndex: 999, // Reduced z-index to be below ExpertProfileScreen header
+    zIndex: 100,
   },
   safeArea: {
-    backgroundColor: '#ffffff',
+    backgroundColor: 'transparent',
   },
   navbar: {
     flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 4,
-    backgroundColor: '#ffffff',
-    borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
-    elevation: 12,
-    shadowColor: '#000000',
-    shadowOffset: {
-      width: 0,
-      height: -2,
-    },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
+    alignItems: 'flex-end',
+    height: NAVBAR_HEIGHT,
+    paddingHorizontal: 8,
+    paddingBottom: 8,
+    paddingTop: 20, // Increased to accommodate the curved button
     position: 'relative',
   },
-  topBorder: {
+  navbarBackground: {
     position: 'absolute',
-    top: 0,
+    bottom: 0,
     left: 0,
     right: 0,
-    height: 2,
-    backgroundColor: '#10B981',
-    opacity: 0.6,
+    height: NAVBAR_HEIGHT - 8,
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 0.5,
+    borderTopColor: '#E5E7EB',
+    // Ensure solid background
+    opacity: 1,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000000',
+        shadowOffset: { width: 0, height: -3 },
+        shadowOpacity: 0.08,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 12,
+      },
+    }),
   },
   
-  // Nav Button Styles
+  // Regular Nav Button Styles
   navButtonContainer: {
     flex: 1,
   },
   navButton: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 8,
+    paddingVertical: 6,
     paddingHorizontal: 4,
-    minHeight: 64,
-    position: 'relative',
+    height: NAVBAR_HEIGHT - 20,
   },
   
   // Icon Styles
@@ -303,82 +352,119 @@ const styles = StyleSheet.create({
     position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
-    width: 40,
-    height: 40,
+    width: 36,
+    height: 36,
     marginBottom: 4,
   },
-  activeIndicatorBg: {
+  activeIndicator: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: '#D1FAE5',
-    borderRadius: 12,
-    opacity: 0.8,
+    top: -12,
+    left: '50%',
+    width: 6,
+    height: 6,
+    backgroundColor: '#059669',
+    borderRadius: 3,
+    transform: [{ translateX: -3 }],
   },
   icon: {
-    zIndex: 1,
-  },
-  activeIndicatorDot: {
-    position: 'absolute',
-    top: -2,
-    right: -2,
-    width: 8,
-    height: 8,
-    backgroundColor: '#10B981',
-    borderRadius: 4,
-    borderWidth: 1.5,
-    borderColor: '#ffffff',
+    textAlign: 'center',
   },
   
-  // Profile Image
-  profileImageContainer: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+  // Quickify Button Styles
+  quickifyContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    position: 'relative',
+  },
+  quickifyButton: {
+    width: 70,
+    height: 50,
+    backgroundColor: '#059669',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderTopLeftRadius: 25,
+    borderTopRightRadius: 25,
+    marginBottom: 0, // Remove negative margin
+    position: 'relative',
+    // Remove transparent borders by ensuring solid background
+    borderWidth: 0,
     overflow: 'hidden',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000000',
+        shadowOffset: { width: 0, height: -2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
+  },
+  quickifyButtonActive: {
+    backgroundColor: '#047857',
+  },
+  quickifyContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 4,
+  },
+  quickifyIcon: {
+    marginLeft: 1, // Slight adjustment for play icon centering
+    marginBottom: 2,
+  },
+  quickifyTextInside: {
+    fontSize: 9,
+    color: '#FFFFFF',
+    fontWeight: '600',
+    textAlign: 'center',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+    letterSpacing: 0.1,
+  },
+  
+  // Profile Styles
+  profileContainer: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   profileImage: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
   },
   profileImageActive: {
     borderWidth: 2,
-    borderColor: '#10B981',
+    borderColor: '#059669',
+    width: 26,
+    height: 26,
+    borderRadius: 13,
   },
   
   // Notification Badge
   notificationBadge: {
     position: 'absolute',
-    top: 2,
-    right: 2,
-    width: 14,
-    height: 14,
-    backgroundColor: '#ffffff',
-    borderRadius: 7,
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 2,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
-  },
-  notificationDot: {
-    width: 8,
-    height: 8,
+    top: 4,
+    right: 4,
+    width: 10,
+    height: 10,
     backgroundColor: '#EF4444',
-    borderRadius: 4,
+    borderRadius: 5,
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
   },
 
   // Text Styles
   navText: {
-    fontSize: 11,
+    fontSize: 10,
     textAlign: 'center',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
-    letterSpacing: 0.2,
+    letterSpacing: 0.1,
+    lineHeight: 12,
   },
 });
 

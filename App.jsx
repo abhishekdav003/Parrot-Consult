@@ -1,10 +1,11 @@
-// App.jsx
+// Updated App.jsx - Navigation structure with ExpertsListScreen added
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { AuthProvider } from './src/context/AuthContext';
 
+// Import all screens
 import SplashScreen from './src/screens/SplashScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import LoginScreen from './src/screens/LoginScreen';
@@ -12,14 +13,16 @@ import SignUpScreen from './src/screens/SignUpScreen';
 import OTPVerificationScreen from './src/screens/OTPVerificationScreen';
 import PasswordVerificationScreen from './src/screens/PasswordVerificationScreen';
 import DashboardScreen from './src/screens/DashboardScreen';
-// import SearchScreen from './src/screens/SearchScreen'; // Removed - replaced with ChatBot
 import ReelsScreen from './src/screens/ReelsScreen';
-import NotificationsScreen from './src/screens/NotificationsScreen';
+import InboxScreen from './src/screens/InboxScreen';
+import ChatScreen from './src/screens/ChatScreen';
 import CategoriesScreen from './src/screens/CategoriesScreen';
 import ConsultantListScreen from './src/screens/ConsultantListScreen';
 import ExpertProfileScreen from './src/screens/ExpertProfileScreen';
-import ChatBot from './src/screens/ChatBot'; // Import ChatBot component
+import ExpertListScreen from './src/screens/ExpertListScreen'; // Updated to match existing file
+import ChatBot from './src/screens/ChatBot';
 
+// Import Navigation Components
 import Navbar from './src/components/Navbar/Navbar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -36,7 +39,7 @@ const MainTabNavigator = () => {
       tabBar={(props) => <CustomTabBar {...props} />}
       screenOptions={{ 
         headerShown: false,
-        // Hide tab bar on Reels screen
+        // Hide tab bar on specific screens
         tabBarStyle: ({ route }) => {
           const routeName = route.name;
           if (routeName === 'Reels') {
@@ -46,20 +49,57 @@ const MainTabNavigator = () => {
         }
       }}
     >
-      <Tab.Screen name="Home" component={HomeScreen} />
-      <Tab.Screen name="Search" component={ChatBot} />
+      {/* Main Tab Screens */}
+      <Tab.Screen 
+        name="Home" 
+        component={HomeScreen}
+        options={{
+          tabBarLabel: 'Home',
+        }}
+      />
+      
+      <Tab.Screen 
+        name="Search" 
+        component={ChatBot}
+        options={{
+          tabBarLabel: 'AI Chat',
+        }}
+      />
+      
       <Tab.Screen 
         name="Reels" 
         component={ReelsScreen}
         options={{
           tabBarStyle: { display: 'none' },
+          tabBarLabel: 'Reels',
         }}
       />
-      <Tab.Screen name="Notifications" component={NotificationsScreen} />
-      <Tab.Screen name="Login" component={LoginScreen} />
-      <Tab.Screen name="Dashboard" component={DashboardScreen} />
       
-      {/* ChatBot Tab - Hidden from Tab Bar but accessible via navigation */}
+      <Tab.Screen 
+        name="Notifications" 
+        component={InboxScreen}
+        options={{
+          tabBarLabel: 'Messages',
+        }}
+      />
+      
+      <Tab.Screen 
+        name="Login" 
+        component={LoginScreen}
+        options={{
+          tabBarLabel: 'Profile',
+        }}
+      />
+      
+      <Tab.Screen 
+        name="Dashboard" 
+        component={DashboardScreen}
+        options={{
+          tabBarButton: () => null, // Hidden from tab bar
+        }}
+      />
+      
+      {/* Hidden Tab Screens - Accessible via navigation but not visible in tab bar */}
       <Tab.Screen 
         name="ChatBot" 
         component={ChatBot}
@@ -77,6 +117,7 @@ const MainTabNavigator = () => {
           tabBarStyle: { display: 'none' },
         }}
       />
+      
       <Tab.Screen 
         name="Categories" 
         component={CategoriesScreen}
@@ -85,6 +126,7 @@ const MainTabNavigator = () => {
           tabBarStyle: { display: 'none' },
         }}
       />
+      
       <Tab.Screen 
         name="ConsultantList" 
         component={ConsultantListScreen}
@@ -93,6 +135,17 @@ const MainTabNavigator = () => {
           tabBarStyle: { display: 'none' },
         }}
       />
+      
+      {/* Add ExpertsList to hidden tab screens */}
+      <Tab.Screen 
+        name="ExpertsList" 
+        component={ExpertListScreen}
+        options={{
+          tabBarButton: () => null,
+          tabBarStyle: { display: 'none' },
+        }}
+      />
+      
       <Tab.Screen 
         name="ExpertProfileScreen" 
         component={ExpertProfileScreen}
@@ -112,15 +165,57 @@ const App = () => {
         <NavigationContainer>
           <Stack.Navigator 
             initialRouteName="Splash" 
-            screenOptions={{ headerShown: false }}
+            screenOptions={{ 
+              headerShown: false,
+              // Optimize stack navigator for better performance
+              animation: 'slide_from_right',
+              presentation: 'card',
+            }}
           >
-            <Stack.Screen name="Splash" component={SplashScreen} />
-            <Stack.Screen name="Main" component={MainTabNavigator} />
-            <Stack.Screen name="SignUp" component={SignUpScreen} />
-            <Stack.Screen name="OTPVerification" component={OTPVerificationScreen} />
-            <Stack.Screen name="PasswordVerification" component={PasswordVerificationScreen} />
+            {/* Authentication Flow */}
+            <Stack.Screen 
+              name="Splash" 
+              component={SplashScreen}
+              options={{
+                animation: 'fade',
+              }}
+            />
             
-            {/* ChatBot as Stack Screen for better navigation control */}
+            <Stack.Screen 
+              name="SignUp" 
+              component={SignUpScreen}
+              options={{
+                animation: 'slide_from_bottom',
+                presentation: 'modal',
+              }}
+            />
+            
+            <Stack.Screen 
+              name="OTPVerification" 
+              component={OTPVerificationScreen}
+              options={{
+                animation: 'slide_from_right',
+              }}
+            />
+            
+            <Stack.Screen 
+              name="PasswordVerification" 
+              component={PasswordVerificationScreen}
+              options={{
+                animation: 'slide_from_right',
+              }}
+            />
+
+            {/* Main App Flow */}
+            <Stack.Screen 
+              name="Main" 
+              component={MainTabNavigator}
+              options={{
+                animation: 'fade',
+              }}
+            />
+            
+            {/* Stack-only Screens for better UX */}
             <Stack.Screen 
               name="ChatBotStack" 
               component={ChatBot}
@@ -132,6 +227,59 @@ const App = () => {
             />
             
             <Stack.Screen 
+              name="ChatScreen" 
+              component={ChatScreen}
+              options={{
+                headerShown: false,
+                presentation: 'card',
+                animation: 'slide_from_right',
+              }}
+            />
+            
+            {/* Expert/Consultant Related Screens */}
+            <Stack.Screen 
+              name="CategoriesStack" 
+              component={CategoriesScreen}
+              options={{
+                headerShown: false,
+                presentation: 'card',
+                animation: 'slide_from_right',
+              }}
+            />
+            
+            <Stack.Screen 
+              name="ConsultantListStack" 
+              component={ConsultantListScreen}
+              options={{
+                headerShown: false,
+                presentation: 'card',
+                animation: 'slide_from_right',
+              }}
+            />
+            
+            {/* Add ExpertsListStack for better navigation */}
+            <Stack.Screen 
+              name="ExpertsListStack" 
+              component={ExpertListScreen}
+              options={{
+                headerShown: false,
+                presentation: 'card',
+                animation: 'slide_from_right',
+              }}
+            />
+            
+            <Stack.Screen 
+              name="ExpertProfileStack" 
+              component={ExpertProfileScreen}
+              options={{
+                headerShown: false,
+                presentation: 'card',
+                animation: 'slide_from_right',
+              }}
+            />
+
+            {/* Legacy Routes - Keep for backward compatibility */}
+            <Stack.Screen 
               name="Categories" 
               component={CategoriesScreen}
               options={{
@@ -139,6 +287,7 @@ const App = () => {
                 presentation: 'card',
               }}
             />
+            
             <Stack.Screen 
               name="ConsultantList" 
               component={ConsultantListScreen}
@@ -147,16 +296,41 @@ const App = () => {
                 presentation: 'card',
               }}
             />
+            
             <Stack.Screen 
               name="ConsultantListScreen" 
               component={ConsultantListScreen}
-              options={{ headerShown: false }}
+              options={{ 
+                headerShown: false 
+              }}
             />
+            
+            {/* Add ExpertsList for backward compatibility */}
+            <Stack.Screen 
+              name="ExpertsList" 
+              component={ExpertListScreen}
+              options={{
+                headerShown: false,
+                presentation: 'card',
+              }}
+            />
+            
+            <Stack.Screen 
+              name="ExpertsListScreen" 
+              component={ExpertListScreen}
+              options={{ 
+                headerShown: false 
+              }}
+            />
+            
             <Stack.Screen 
               name="ExpertProfileScreen" 
               component={ExpertProfileScreen}
-              options={{ headerShown: false }}
+              options={{ 
+                headerShown: false 
+              }}
             />
+            
             <Stack.Screen 
               name="ExpertProfile" 
               component={ExpertProfileScreen}

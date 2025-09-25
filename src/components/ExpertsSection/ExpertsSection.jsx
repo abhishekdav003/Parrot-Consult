@@ -1,3 +1,4 @@
+// Updated ExpertsSection.jsx - Fixed Book Now button to properly call UnifiedBookingModal
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   View, 
@@ -63,11 +64,14 @@ const ExpertsSection = ({ onBookNow }) => {
   };
 
   const handleViewAllExperts = () => {
-    navigation.navigate('ExpertsList');
+    // Updated navigation - navigate to the correct screen name
+    navigation.navigate('ExpertsListStack', { 
+      onBookNow: onBookNow 
+    });
   };
 
   const handleViewProfile = (expert) => {
-    // Animate button press
+    // Animate card press
     if (scaleAnims[expert._id]) {
       Animated.sequence([
         Animated.timing(scaleAnims[expert._id], {
@@ -86,25 +90,21 @@ const ExpertsSection = ({ onBookNow }) => {
     navigation.navigate('ExpertProfile', { expert });
   };
 
-  const handleBookNow = (expert) => {
-    // Animate button press
-    if (scaleAnims[expert._id]) {
-      Animated.sequence([
-        Animated.timing(scaleAnims[expert._id], {
-          toValue: 0.95,
-          duration: 100,
-          useNativeDriver: true,
-        }),
-        Animated.timing(scaleAnims[expert._id], {
-          toValue: 1,
-          duration: 100,
-          useNativeDriver: true,
-        }),
-      ]).start();
+  // FIXED: Properly handle Book Now button press
+  const handleBookNow = (expert, event) => {
+    console.log('Book Now clicked for expert:', expert?.fullName);
+    
+    // Stop event propagation to prevent card press
+    if (event) {
+      event.stopPropagation();
     }
-
-    if (onBookNow) {
+    
+    // Check if onBookNow callback is provided
+    if (onBookNow && typeof onBookNow === 'function') {
+      console.log('Calling onBookNow callback with expert:', expert);
       onBookNow(expert);
+    } else {
+      console.warn('onBookNow callback not provided or not a function');
     }
   };
 
@@ -153,86 +153,93 @@ const ExpertsSection = ({ onBookNow }) => {
           { transform: [{ scale: scaleAnims[item._id] || 1 }] }
         ]}
       >
-        {/* Card Header */}
-        <View style={styles.cardHeader}>
-          <View style={styles.expertImageContainer}>
-            <Image
-              source={getImageSource(item)}
-              style={styles.expertImage}
-              onError={(error) => {
-                console.log('Image load error for:', item.fullName, error.nativeEvent.error);
-              }}
-            />
-            <View style={styles.onlineIndicator} />
-            <View style={styles.verifiedBadge}>
-              <Icon name="verified" size={16} color="#10B981" />
+        {/* Card content - Make only the card content clickable for profile view */}
+        <TouchableOpacity 
+          style={styles.cardContent}
+          onPress={() => handleViewProfile(item)}
+          activeOpacity={0.95}
+        >
+          {/* Card Header */}
+          <View style={styles.cardHeader}>
+            <View style={styles.expertImageContainer}>
+              <Image
+                source={getImageSource(item)}
+                style={styles.expertImage}
+                onError={(error) => {
+                  console.log('Image load error for:', item.fullName, error.nativeEvent.error);
+                }}
+              />
+              <View style={styles.onlineIndicator} />
+              <View style={styles.verifiedBadge}>
+                <Icon name="verified" size={16} color="#10B981" />
+              </View>
+            </View>
+            
+            <View style={styles.expertInfo}>
+              <Text style={styles.expertName} numberOfLines={1}>
+                {item.fullName}
+              </Text>
+              <Text style={styles.expertCategory} numberOfLines={1}>
+                {profile.category || profile.fieldOfStudy}
+              </Text>
+              <View style={styles.ratingContainer}>
+                <Icon name="star" size={14} color="#FBBF24" />
+                <Text style={styles.ratingText}>4.8</Text>
+                <Text style={styles.reviewsText}>(124 reviews)</Text>
+              </View>
             </View>
           </View>
-          
-          <View style={styles.expertInfo}>
-            <Text style={styles.expertName} numberOfLines={1}>
-              {item.fullName}
-            </Text>
-            <Text style={styles.expertCategory} numberOfLines={1}>
-              {profile.category || profile.fieldOfStudy}
-            </Text>
-            <View style={styles.ratingContainer}>
-              <Icon name="star" size={14} color="#FBBF24" />
-              <Text style={styles.ratingText}>4.8</Text>
-              <Text style={styles.reviewsText}>(124 reviews)</Text>
-            </View>
-          </View>
-        </View>
 
-        {/* Expertise Tags */}
-        <View style={styles.tagsContainer}>
-          <View style={styles.tag}>
-            <Text style={styles.tagText}>Expert</Text>
+          {/* Expertise Tags */}
+          <View style={styles.tagsContainer}>
+            <View style={styles.tag}>
+              <Text style={styles.tagText}>Expert</Text>
+            </View>
+            <View style={styles.tag}>
+              <Text style={styles.tagText}>Available</Text>
+            </View>
+            <View style={styles.tag}>
+              <Text style={styles.tagText}>Verified</Text>
+            </View>
           </View>
-          <View style={styles.tag}>
-            <Text style={styles.tagText}>Available</Text>
+          
+          {/* Details Section */}
+          <View style={styles.detailsSection}>
+            <View style={styles.detailRow}>
+              <View style={styles.detailItem}>
+                <Icon name="language" size={16} color="#059669" />
+                <Text style={styles.detailLabel}>Languages</Text>
+              </View>
+              <Text style={styles.detailValue} numberOfLines={1}>{languages}</Text>
+            </View>
+            
+            <View style={styles.detailRow}>
+              <View style={styles.detailItem}>
+                <Icon name="video-call" size={16} color="#059669" />
+                <Text style={styles.detailLabel}>Available</Text>
+              </View>
+              <Text style={styles.detailValue} numberOfLines={1}>Video & Chat</Text>
+            </View>
+            
+            <View style={styles.detailRow}>
+              <View style={styles.detailItem}>
+                <Icon name="access-time" size={16} color="#059669" />
+                <Text style={styles.detailLabel}>Response</Text>
+              </View>
+              <Text style={styles.detailValue} numberOfLines={1}>Within 2 hours</Text>
+            </View>
+            
+            <View style={styles.detailRow}>
+              <View style={styles.detailItem}>
+                <Icon name="location-on" size={16} color="#059669" />
+                <Text style={styles.detailLabel}>Location</Text>
+              </View>
+              <Text style={styles.detailValue} numberOfLines={1}>{item.location || 'Online'}</Text>
+            </View>
           </View>
-          <View style={styles.tag}>
-            <Text style={styles.tagText}>Verified</Text>
-          </View>
-        </View>
+        </TouchableOpacity>
         
-        {/* Details Section */}
-        <View style={styles.detailsSection}>
-          <View style={styles.detailRow}>
-            <View style={styles.detailItem}>
-              <Icon name="language" size={16} color="#059669" />
-              <Text style={styles.detailLabel}>Languages</Text>
-            </View>
-            <Text style={styles.detailValue} numberOfLines={1}>{languages}</Text>
-          </View>
-          
-          <View style={styles.detailRow}>
-            <View style={styles.detailItem}>
-              <Icon name="video-call" size={16} color="#059669" />
-              <Text style={styles.detailLabel}>Available</Text>
-            </View>
-            <Text style={styles.detailValue} numberOfLines={1}>Video & Chat</Text>
-          </View>
-          
-          <View style={styles.detailRow}>
-            <View style={styles.detailItem}>
-              <Icon name="access-time" size={16} color="#059669" />
-              <Text style={styles.detailLabel}>Response</Text>
-            </View>
-            <Text style={styles.detailValue} numberOfLines={1}>Within 2 hours</Text>
-          </View>
-          
-          <View style={styles.detailRow}>
-            <View style={styles.detailItem}>
-              <Icon name="location-on" size={16} color="#059669" />
-              <Text style={styles.detailLabel}>Location</Text>
-            </View>
-            <Text style={styles.detailValue} numberOfLines={1}>{item.location || 'Online'}</Text>
-          </View>
-        </View>
-        
-        {/* Action Buttons */}
+        {/* Action Buttons - Outside the card content to prevent conflicts */}
         <View style={styles.buttonContainer}>
           <TouchableOpacity 
             style={styles.viewProfileBtn}
@@ -243,9 +250,10 @@ const ExpertsSection = ({ onBookNow }) => {
             <Text style={styles.viewProfileText}>View Profile</Text>
           </TouchableOpacity>
           
+          {/* FIXED: Book Now button with proper event handling */}
           <TouchableOpacity 
             style={styles.bookNowBtn}
-            onPress={() => handleBookNow(item)}
+            onPress={(event) => handleBookNow(item, event)}
             activeOpacity={0.8}
           >
             <Icon name="calendar-today" size={16} color="#ffffff" />
@@ -460,6 +468,11 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
 
+  // FIXED: Separate card content from buttons
+  cardContent: {
+    flex: 1,
+  },
+
   // Card Header
   cardHeader: {
     flexDirection: 'row',
@@ -591,7 +604,7 @@ const styles = StyleSheet.create({
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
 
-  // Action Buttons
+  // Action Buttons - FIXED: Positioned outside card content
   buttonContainer: {
     flexDirection: 'row',
     padding: 16,
