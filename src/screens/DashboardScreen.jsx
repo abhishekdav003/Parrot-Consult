@@ -8,6 +8,7 @@ import {
   SafeAreaView,
   Alert,
   ActivityIndicator,
+  ScrollView,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useAuth } from '../context/AuthContext';
@@ -24,8 +25,9 @@ import WalletSection from '../components/Dashboard/WalletSection';
 import ToggleMenu from '../components/Dashboard/ToggleMenu';
 // import UploadReels from '../components/Dashboard/UploadReelSection';
 import UploadReelSection from '../components/Dashboard/UploadReelSection';
+import GetStartedSection from '../components/GetStartedSection/GetStartedSection';
 
-const DashboardScreen = ({ navigation }) => {
+const DashboardScreen = ({ navigation, route }) => {
   const { user, logout, refreshUserData } = useAuth();
   const [activeSection, setActiveSection] = useState('dashboard');
   const [menuVisible, setMenuVisible] = useState(false);
@@ -42,6 +44,13 @@ const DashboardScreen = ({ navigation }) => {
   const [initialLoad, setInitialLoad] = useState(true);
 
   console.log('[DASHBOARD] Component mounted, user:', user?.fullName);
+
+  // Add this inside your DashboardScreen component, with other useCallback functions
+const handleStartApplication = useCallback(() => {
+  console.log('[DASHBOARD] Start Application clicked - navigating to upgrade section');
+  setActiveSection('upgrade');
+  setMenuVisible(false);
+}, []);
 
   // Memoize profile completion calculation
   const calculateProfileCompletion = useCallback((userData) => {
@@ -148,6 +157,14 @@ const DashboardScreen = ({ navigation }) => {
   }, [user, calculateDashboardData, calculateProfileCompletion, initialLoad, logout, navigation]);
 
   // Initial data fetch when user changes
+
+  // Handle initial section parameter from navigation
+useEffect(() => {
+  if (route?.params?.initialSection) {
+    console.log('[DASHBOARD] Setting initial section:', route.params.initialSection);
+    setActiveSection(route.params.initialSection);
+  }
+}, [route?.params?.initialSection]);
   useEffect(() => {
     if (user) {
       fetchDashboardData(true);
@@ -272,14 +289,17 @@ const DashboardScreen = ({ navigation }) => {
 
     switch (activeSection) {
       case 'dashboard':
-        return (
-          <DashboardSection 
-            {...commonProps}
-            dashboardData={dashboardData}
-            onRefresh={handleRefresh}
-            onSectionChange={handleSectionChange}
-          />
-        );
+ 
+  return (
+    <ScrollView style={{ flex: 1 }}>
+      <DashboardSection 
+        {...commonProps}
+        dashboardData={dashboardData}
+        onRefresh={handleRefresh}
+        onSectionChange={handleSectionChange}
+      />
+    </ScrollView>
+  );
       case 'profile':
         return <ProfileSection {...commonProps} />;
       case 'mysessions':
@@ -325,7 +345,9 @@ const DashboardScreen = ({ navigation }) => {
     refreshing,
     handleProfileUpdate,
     handleRefresh,
-    handleAuthError
+    handleAuthError,
+    handleStartApplication,
+    navigation
   ]);
 
   // Loading state for initial load

@@ -1,6 +1,7 @@
 // src/screens/HomeScreen.jsx
 import React, { useState, useMemo } from 'react';
 import { View, ScrollView, StyleSheet, Dimensions } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import HeroSection from '../components/HeroSection/HeroSection';
 import ExpertsSection from '../components/ExpertsSection/ExpertsSection';
 import UserReviews from '../components/UserReviews/UserReviews';
@@ -20,6 +21,7 @@ const getNavbarHeight = (insets) => {
 };
 
 const HomeScreen = () => {
+  const navigation = useNavigation();
   const [bookingModalVisible, setBookingModalVisible] = useState(false);
   const [selectedExpert, setSelectedExpert] = useState(null);
   
@@ -33,6 +35,7 @@ const HomeScreen = () => {
     return navbarHeight + additionalPadding;
   }, [insets]);
 
+  // Handle booking modal
   const handleOpenBooking = (expert) => {
     console.log('Opening booking for expert:', expert);
     setSelectedExpert(expert);
@@ -42,6 +45,13 @@ const HomeScreen = () => {
   const handleCloseBooking = () => {
     setSelectedExpert(null);
     setBookingModalVisible(false);
+  };
+
+  // Handle Start Application button - Navigate to Dashboard Profile Upgrade
+  const handleStartApplication = () => {
+    console.log('HomeScreen: Start Application clicked - navigating to Dashboard');
+    // Navigate to Dashboard screen with upgrade section
+    navigation.navigate('Dashboard', { initialSection: 'upgrade' });
   };
 
   return (
@@ -64,7 +74,10 @@ const HomeScreen = () => {
           <CategorySection />
           <ExpertsSection onBookNow={handleOpenBooking} />
           <UserReviews />
-          <GetStartedSection />
+          <GetStartedSection 
+            onStartApplication={handleStartApplication}
+            navigation={navigation}
+          />
         </ScrollView>
 
         <UnifiedBookingModal
