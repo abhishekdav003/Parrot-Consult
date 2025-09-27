@@ -21,8 +21,8 @@ import ApiService from '../services/ApiService';
 import { io } from 'socket.io-client';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 
-// const CHAT_SERVER = 'https://api.parrotconsult.com'; // Use your production URL
-const CHAT_SERVER = 'http://10.0.2.2:8011';
+const CHAT_SERVER = 'https://api.parrotconsult.com'; // Use your production URL
+// const CHAT_SERVER = 'http://10.0.2.2:8011';
 
 
 const ChatScreen = ({ navigation, route }) => {

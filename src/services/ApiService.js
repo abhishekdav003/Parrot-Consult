@@ -4,7 +4,7 @@ import { Platform } from 'react-native';
 import RNBlobUtil from 'react-native-blob-util';
 
 // const BASE_URL = 'http://192.168.0.177:8011/api/v1';
-const BASE_URL = 'http://10.0.2.2:8011/api/v1';
+// const BASE_URL = 'http://10.0.2.2:8011/api/v1';
 // const BASE_URL = 'http://10.0.2.2:8011/api/v1';
 // const BASE_URL = 'http://10.33.116.48:8011/api/v1';
 // const BASE_URL = 'http://192.168.0.116:8011/api/v1';
@@ -14,7 +14,7 @@ const BASE_URL = 'http://10.0.2.2:8011/api/v1';
 
 // const BASE_URL = 'http://192.168.0.177:8011/api/v1';
 
-// const BASE_URL = 'https://api.parrotconsult.com/api/v1';
+const BASE_URL = 'https://api.parrotconsult.com/api/v1';
 
 
 const toLocalDateOnly = (date) => {
@@ -868,6 +868,15 @@ async sendChatMessage(chatData) {
   
   console.log('[API] Send message result:', result);
   return result;
+}
+
+async verifyRazorpayPayment(paymentData) {
+  console.log('[API] Verifying Razorpay payment:', paymentData);
+  
+  return await this.apiCall('/payment/verifypayment', {
+    method: 'POST',
+    body: JSON.stringify(paymentData),
+  });
 }
 
 async markMessagesAsRead(chatId, userId) {

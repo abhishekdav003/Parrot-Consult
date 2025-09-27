@@ -1,9 +1,10 @@
-// Updated App.jsx - Navigation structure with ExpertsListScreen added
-import React from 'react';
+// Updated App.jsx with proper StatusBar handling and responsive navigation
+import React, { useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { AuthProvider } from './src/context/AuthContext';
+import { StatusBar, Platform, Dimensions } from 'react-native';
 
 // Import all screens
 import SplashScreen from './src/screens/SplashScreen';
@@ -19,7 +20,7 @@ import ChatScreen from './src/screens/ChatScreen';
 import CategoriesScreen from './src/screens/CategoriesScreen';
 import ConsultantListScreen from './src/screens/ConsultantListScreen';
 import ExpertProfileScreen from './src/screens/ExpertProfileScreen';
-import ExpertListScreen from './src/screens/ExpertListScreen'; // Updated to match existing file
+import ExpertListScreen from './src/screens/ExpertListScreen';
 import ChatBot from './src/screens/ChatBot';
 
 // Import Navigation Components
@@ -28,6 +29,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const CustomTabBar = (props) => {
   return <Navbar {...props} />;
@@ -39,6 +41,9 @@ const MainTabNavigator = () => {
       tabBar={(props) => <CustomTabBar {...props} />}
       screenOptions={{ 
         headerShown: false,
+        // Optimize for better performance
+        lazy: true,
+        tabBarHideOnKeyboard: true,
         // Hide tab bar on specific screens
         tabBarStyle: ({ route }) => {
           const routeName = route.name;
@@ -136,7 +141,6 @@ const MainTabNavigator = () => {
         }}
       />
       
-      {/* Add ExpertsList to hidden tab screens */}
       <Tab.Screen 
         name="ExpertsList" 
         component={ExpertListScreen}
@@ -159,17 +163,44 @@ const MainTabNavigator = () => {
 };
 
 const App = () => {
+  // Configure StatusBar for different platforms and screen types
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      StatusBar.setBackgroundColor('#ffffff', true);
+      StatusBar.setBarStyle('dark-content', true);
+      StatusBar.setTranslucent(false);
+    }
+  }, []);
+
   return (
     <SafeAreaProvider>
       <AuthProvider>
+        {/* Responsive StatusBar configuration */}
+        <StatusBar 
+          barStyle="dark-content" 
+          backgroundColor="#ffffff" 
+          translucent={false}
+          networkActivityIndicatorVisible={false}
+          {...Platform.select({
+            ios: {
+              hidden: false,
+            },
+            android: {
+              animated: true,
+            },
+          })}
+        />
+        
         <NavigationContainer>
           <Stack.Navigator 
             initialRouteName="Splash" 
             screenOptions={{ 
               headerShown: false,
-              // Optimize stack navigator for better performance
+              // Optimize animations for better performance
               animation: 'slide_from_right',
               presentation: 'card',
+              gestureEnabled: true,
+              gestureDirection: 'horizontal',
             }}
           >
             {/* Authentication Flow */}
@@ -178,6 +209,7 @@ const App = () => {
               component={SplashScreen}
               options={{
                 animation: 'fade',
+                gestureEnabled: false,
               }}
             />
             
@@ -187,6 +219,8 @@ const App = () => {
               options={{
                 animation: 'slide_from_bottom',
                 presentation: 'modal',
+                gestureEnabled: true,
+                gestureDirection: 'vertical',
               }}
             />
             
@@ -195,6 +229,7 @@ const App = () => {
               component={OTPVerificationScreen}
               options={{
                 animation: 'slide_from_right',
+                gestureEnabled: false, // Prevent accidental back navigation during OTP
               }}
             />
             
@@ -203,6 +238,7 @@ const App = () => {
               component={PasswordVerificationScreen}
               options={{
                 animation: 'slide_from_right',
+                gestureEnabled: false,
               }}
             />
 
@@ -212,6 +248,7 @@ const App = () => {
               component={MainTabNavigator}
               options={{
                 animation: 'fade',
+                gestureEnabled: false,
               }}
             />
             
@@ -257,7 +294,6 @@ const App = () => {
               }}
             />
             
-            {/* Add ExpertsListStack for better navigation */}
             <Stack.Screen 
               name="ExpertsListStack" 
               component={ExpertListScreen}
@@ -305,7 +341,6 @@ const App = () => {
               }}
             />
             
-            {/* Add ExpertsList for backward compatibility */}
             <Stack.Screen 
               name="ExpertsList" 
               component={ExpertListScreen}
