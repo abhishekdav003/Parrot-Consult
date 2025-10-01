@@ -29,6 +29,7 @@ const ReelsScreen = ({ navigation }) => {
   const [page, setPage] = useState(1);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
+  const [isScreenFocused, setIsScreenFocused] = useState(true);
   const flatListRef = useRef(null);
   const isMounted = useRef(true);
   const baseReels = useRef([]);
@@ -142,13 +143,15 @@ const ReelsScreen = ({ navigation }) => {
     };
   }, []);
 
-  // Handle screen focus
+  // Handle screen focus - pause videos when screen loses focus
   useFocusEffect(
     useCallback(() => {
       StatusBar.setHidden(true);
+      setIsScreenFocused(true);
       
       return () => {
         StatusBar.setHidden(false);
+        setIsScreenFocused(false);
       };
     }, [])
   );
@@ -373,17 +376,17 @@ const ReelsScreen = ({ navigation }) => {
     handleScrollEnd();
   }, [handleScrollEnd]);
 
-  // Render reel item - FIXED: Added navigation prop
+  // Render reel item - pass screen focus state to pause videos when navigating away
   const renderItem = useCallback(({ item, index }) => (
     <ReelItem
       reel={item}
-      isActive={index === currentIndex}
+      isActive={index === currentIndex && isScreenFocused}
       onLike={handleLike}
       onComment={handleComment}
       currentUser={user}
       navigation={navigation}
     />
-  ), [currentIndex, handleLike, handleComment, user, navigation]);
+  ), [currentIndex, isScreenFocused, handleLike, handleComment, user, navigation]);
 
   // Key extractor
   const keyExtractor = useCallback((item) => item._id, []);
