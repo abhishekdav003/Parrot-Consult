@@ -708,95 +708,336 @@ async createBooking(bookingData) {
   }
 
   // Reels APIs
-  async uploadReel({ video, description }) {
-    const formData = new FormData();
-    
-    formData.append('video', {
-      uri: Platform.OS === 'android' && !video.uri.startsWith('file://')
-        ? `file://${video.uri}`
-        : video.uri,
-      type: video.type || 'video/mp4',
-      name: video.fileName || `reel_${Date.now()}.mp4`,
-    });
-    
-    if (description) {
-      formData.append('description', description);
-    }
+// Add these optimized methods to your ApiService.js class
+// Replace existing reel methods with these
 
-    console.log('[API] Uploading reel...');
-
-    return await this.apiCall('/reel/upload', {
-      method: 'POST',
-      body: formData,
-    });
-  }
-
- // Updated getAllReels method for infinite scroll
-  async getAllReels(page = 1, limit = 15) {
-    console.log(`[API] Getting reels - page: ${page}, limit: ${limit}`);
+// CRITICAL: Optimized for release APK - handles video URLs properly
+async getAllReels(page = 1, limit = 15) {
+  console.log(`[API] Getting reels - page: ${page}, limit: ${limit}`);
+  
+  try {
     const result = await this.apiCall(`/reel/feed?page=${page}&limit=${limit}`, {
       method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'Cache-Control': 'no-cache',
+      }
     });
-    console.log('[API] getAllReels result:', result);
-    return result;
-  }
-
-  // Updated likeReel method to handle like/unlike
-  async likeReel(reelId) {
-    console.log('[API] Toggling like for reel:', reelId);
     
-    // Extract original reel ID (remove page suffix if present)
+    if (result.success && result.data) {
+      // Ensure video URLs are properly formatted for release APK
+      const processedReels = (result.data || []).map(reel => ({
+        ...reel,
+        // Ensure URL is absolute and properly formatted
+        URL: this.processVideoUrl(reel.URL),
+        // Ensure user data exists
+        user: reel.user || { fullName: 'Unknown User', profileImage: null },
+        // Ensure arrays exist
+        comments: reel.comments || [],
+        likedBy: reel.likedBy || [],
+        // Ensure numbers exist
+        likes: reel.likes || 0,
+        // Ensure boolean exists
+        isLiked: reel.isLiked || false,
+      }));
+      
+      console.log(`[API] Processed ${processedReels.length} reels successfully`);
+      
+      return {
+        success: true,
+        data: processedReels
+      };
+    }
+    
+    console.warn('[API] No data in reels response');
+    return {
+      success: false,
+      data: [],
+      error: result.error || 'No reels found'
+    };
+  } catch (error) {
+    console.error('[API] getAllReels error:', error);
+    return {
+      success: false,
+      data: [],
+      error: error.message || 'Network error'
+    };
+  }
+}
+
+// Process video URL to ensure it works in release APK
+processVideoUrl(url) {
+  if (!url) return '';
+  
+  // If URL is already absolute, return as is
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return url;
+  }
+  
+  // If URL is relative, prepend base URL
+  if (url.startsWith('/')) {
+    return `${this.baseURL.replace('/api/v1', '')}${url}`;
+  }
+  
+  return url;
+}
+
+// Like/Unlike reel with proper error handling
+async likeReel(reelId) {
+  console.log('[API] Toggling like for reel:', reelId);
+  
+  try {
+    // Extract original reel ID (remove any loop suffix)
     const originalReelId = reelId.split('_')[0];
     
     const result = await this.apiCall(`/reel/${originalReelId}/like`, {
       method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      }
     });
     
-    console.log('[API] Like reel result:', result);
-    return result;
-  }
-
-  // Updated addComment method
-  async addComment(reelId, comment) {
-    console.log('[API] Adding comment to reel:', reelId, comment);
+    if (result.success && result.data) {
+      console.log('[API] Like toggled successfully');
+      return {
+        success: true,
+        data: {
+          likes: result.data.likes || 0,
+          isLiked: result.data.isLiked || false,
+          likedBy: result.data.likedBy || []
+        }
+      };
+    }
     
-    // Extract original reel ID (remove page suffix if present)
+    console.warn('[API] Like failed:', result.error);
+    return {
+      success: false,
+      error: result.error || 'Failed to like reel'
+    };
+  } catch (error) {
+    console.error('[API] likeReel error:', error);
+    return {
+      success: false,
+      error: error.message || 'Network error'
+    };
+  }
+}
+
+// Add comment with proper validation
+async addComment(reelId, comment) {
+  console.log('[API] Adding comment to reel:', reelId);
+  
+  try {
+    // Extract original reel ID
     const originalReelId = reelId.split('_')[0];
+    
+    // Validate comment
+    if (!comment || !comment.trim()) {
+      return {
+        success: false,
+        error: 'Comment cannot be empty'
+      };
+    }
+    
+    if (comment.trim().length > 200) {
+      return {
+        success: false,
+        error: 'Comment is too long (max 200 characters)'
+      };
+    }
     
     const result = await this.apiCall(`/reel/${originalReelId}/comment`, {
       method: 'POST',
-      body: JSON.stringify({ comment }),
+      body: JSON.stringify({ comment: comment.trim() }),
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      }
     });
     
-    console.log('[API] Add comment result:', result);
-    return result;
+    if (result.success && result.data) {
+      console.log('[API] Comment added successfully');
+      // Ensure comments array is properly formatted
+      const comments = Array.isArray(result.data) ? result.data : [];
+      return {
+        success: true,
+        data: comments
+      };
+    }
+    
+    console.warn('[API] Add comment failed:', result.error);
+    return {
+      success: false,
+      error: result.error || 'Failed to post comment'
+    };
+  } catch (error) {
+    console.error('[API] addComment error:', error);
+    return {
+      success: false,
+      error: error.message || 'Network error'
+    };
   }
+}
 
-  async getUserReels() {
-    return await this.apiCall('/reel/my-reels', {
+// Get user's own reels
+async getUserReels() {
+  console.log('[API] Getting user reels');
+  
+  try {
+    const result = await this.apiCall('/reel/my-reels', {
       method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+      }
     });
+    
+    if (result.success && result.data) {
+      const processedReels = (result.data || []).map(reel => ({
+        ...reel,
+        URL: this.processVideoUrl(reel.URL),
+        user: reel.user || { fullName: 'Unknown User', profileImage: null },
+        comments: reel.comments || [],
+        likedBy: reel.likedBy || [],
+        likes: reel.likes || 0,
+        isLiked: reel.isLiked || false,
+      }));
+      
+      return {
+        success: true,
+        data: processedReels
+      };
+    }
+    
+    return {
+      success: false,
+      data: [],
+      error: result.error || 'Failed to fetch user reels'
+    };
+  } catch (error) {
+    console.error('[API] getUserReels error:', error);
+    return {
+      success: false,
+      data: [],
+      error: error.message || 'Network error'
+    };
   }
+}
 
-  async likeReel(reelId) {
-    return await this.apiCall(`/reel/${reelId}/like`, {
-      method: 'POST',
-    });
-  }
-
-
-  async addComment(reelId, comment) {
-    return await this.apiCall(`/reel/${reelId}/comment`, {
-      method: 'POST',
-      body: JSON.stringify({ comment }),
-    });
-  }
-
-  async deleteReel(reelId) {
-    return await this.apiCall(`/reel/${reelId}`, {
+// Delete a reel
+async deleteReel(reelId) {
+  console.log('[API] Deleting reel:', reelId);
+  
+  try {
+    const originalReelId = reelId.split('_')[0];
+    
+    const result = await this.apiCall(`/reel/${originalReelId}`, {
       method: 'DELETE',
+      headers: {
+        'Accept': 'application/json',
+      }
     });
+    
+    console.log('[API] Delete reel result:', result.success ? 'Success' : 'Failed');
+    return result;
+  } catch (error) {
+    console.error('[API] deleteReel error:', error);
+    return {
+      success: false,
+      error: error.message || 'Failed to delete reel'
+    };
   }
+}
+
+// Upload reel - CRITICAL: Optimized for release APK
+async uploadReel({ video, description }) {
+  console.log('[API] Uploading reel...');
+  
+  try {
+    if (!video || !video.uri) {
+      return {
+        success: false,
+        error: 'Video file is required'
+      };
+    }
+
+    const formData = new FormData();
+    
+    // Handle video URI for Android release APK
+    let videoUri = video.uri;
+    
+    if (Platform.OS === 'android') {
+      // For content:// URIs, copy to cache first
+      if (video.uri.startsWith('content://')) {
+        try {
+          const RNBlobUtil = require('react-native-blob-util').default;
+          const fileName = video.fileName || `reel_${Date.now()}.mp4`;
+          const destPath = `${RNBlobUtil.fs.dirs.CacheDir}/${fileName}`;
+          
+          console.log('[API] Copying content URI to cache:', destPath);
+          await RNBlobUtil.fs.cp(video.uri, destPath);
+          videoUri = `file://${destPath}`;
+          console.log('[API] Converted URI:', videoUri);
+        } catch (e) {
+          console.error('[API] Failed to copy content URI:', e);
+          return {
+            success: false,
+            error: 'Could not process video for upload'
+          };
+        }
+      } else if (!video.uri.startsWith('file://')) {
+        videoUri = `file://${video.uri}`;
+      }
+    }
+    
+    const videoFile = {
+      uri: videoUri,
+      type: video.type || 'video/mp4',
+      name: video.fileName || `reel_${Date.now()}.mp4`,
+    };
+    
+    console.log('[API] Video file prepared:', {
+      uri: videoFile.uri.substring(0, 50) + '...',
+      type: videoFile.type,
+      name: videoFile.name
+    });
+    
+    formData.append('video', videoFile);
+    
+    if (description && description.trim()) {
+      formData.append('description', description.trim());
+    }
+
+    const result = await this.apiCall('/reel/upload', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        'Accept': 'application/json',
+      },
+      timeout: 120000, // 2 minute timeout for video upload
+    });
+
+    console.log('[API] Upload reel result:', result.success ? 'Success' : 'Failed');
+    
+    if (result.success && result.data) {
+      return {
+        success: true,
+        data: {
+          ...result.data,
+          URL: this.processVideoUrl(result.data.URL)
+        }
+      };
+    }
+    
+    return result;
+  } catch (error) {
+    console.error('[API] uploadReel error:', error);
+    return {
+      success: false,
+      error: error.message || 'Failed to upload reel'
+    };
+  }
+}
 
   async testConnection() {
     try {
