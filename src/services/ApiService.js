@@ -12,7 +12,9 @@ import RNBlobUtil from 'react-native-blob-util';
 // const BASE_URL = 'http://10.0.2.2:8011/api/v1';
 
 
-// const BASE_URL = 'http://192.168.0.177:8011/api/v1';
+// const BASE_URL = 'http://192.168.1.26:8011/api/v1';
+
+
 
 const BASE_URL = 'https://api.parrotconsult.com/api/v1';
 
@@ -530,11 +532,7 @@ async createBooking(bookingData) {
     });
   }
 
-  async getBookingById(bookingId) {
-    return await this.apiCall(`/booking/getbooking/${bookingId}`, {
-      method: 'GET',
-    });
-  }
+
 
   // FIXED: Consultant Application to match backend expectations
   async submitConsultantApplication(applicationData) {
@@ -1131,6 +1129,367 @@ async markMessagesAsRead(chatId, userId) {
   console.log('[API] Mark as read result:', result);
   return result;
 }
+
+
+
+
+
+
+// Check if user can join call (5 minutes before rule)
+canJoinVideoCall(bookingDateTime, duration = 30) {
+  const bookingTime = new Date(bookingDateTime);
+  const now = new Date();
+  const timeDiff = bookingTime - now;
+  const minutesDiff = Math.floor(timeDiff / 60000);
+  
+  // Can join 5 minutes before
+  const canJoinBefore = minutesDiff <= 5 && minutesDiff >= 0;
+  
+  // Check if session hasn't ended yet
+  const minutesAfterStart = Math.floor((now - bookingTime) / 60000);
+  const sessionNotEnded = minutesAfterStart < duration;
+  
+  return canJoinBefore || (minutesAfterStart >= 0 && sessionNotEnded);
+}
+// Verify meeting access (optional but recommended)
+async verifyMeetingAccess(bookingId) {
+  console.log('[API] Verifying meeting access for booking:', bookingId);
+  
+  try {
+    const bookingResult = await this.getBookingById(bookingId);
+    
+    if (!bookingResult.success) {
+      return {
+        success: false,
+        error: bookingResult.error,
+        canJoin: false
+      };
+    }
+    
+    const booking = bookingResult.data;
+    const userData = await AsyncStorage.getItem('userData');
+    
+    if (!userData) {
+      return {
+        success: false,
+        error: 'User not authenticated',
+        canJoin: false
+      };
+    }
+    
+    const user = JSON.parse(userData);
+    
+    // Check if user is participant in this booking
+    const isParticipant = 
+      booking.consultant?._id === user._id || 
+      booking.user?._id === user._id ||
+      booking.consultant === user._id ||
+      booking.user === user._id;
+    
+    if (!isParticipant) {
+      return {
+        success: false,
+        error: 'You are not authorized to join this meeting',
+        canJoin: false
+      };
+    }
+    
+    // Check if meeting is in valid status
+    const validStatuses = ['scheduled', 'in-progress'];
+    if (!validStatuses.includes(booking.status)) {
+      return {
+        success: false,
+        error: `Meeting is ${booking.status}`,
+        canJoin: false
+      };
+    }
+    
+    return {
+      success: true,
+      canJoin: true,
+      booking: booking
+    };
+  } catch (error) {
+    console.error('[API] verifyMeetingAccess error:', error);
+    return {
+      success: false,
+      error: error.message || 'Failed to verify access',
+      canJoin: false
+    };
+  }
+}
+
+// ADD THESE METHODS TO YOUR EXISTING ApiService.js
+
+// Get Agora token for video call - ENHANCED VERSION
+// Get Agora token for video call - ENHANCED VERSION
+async getAgoraToken(channelName) {
+  console.log('[API] Getting Agora token for channel:', channelName);
+  
+  if (!channelName) {
+    return {
+      success: false,
+      error: 'Channel name is required'
+    };
+  }
+  
+  try {
+    // Add retry logic for better reliability
+    let retries = 3;
+    let lastError = null;
+    
+    while (retries > 0) {
+      try {
+        const result = await this.apiCall(`/agora/token/${channelName}`, {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+          },
+          timeout: 10000, // 10 second timeout
+        });
+        
+        if (result.success && result.data) {
+          console.log('[API] Agora token received successfully');
+          return {
+            success: true,
+            data: {
+              token: result.data.token,
+              appId: result.data.appId
+            }
+          };
+        }
+        
+        lastError = result.error;
+        retries--;
+        
+        if (retries > 0) {
+          console.log(`[API] Retrying... (${retries} attempts left)`);
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      } catch (error) {
+        lastError = error.message;
+        retries--;
+        
+        if (retries > 0) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+    }
+    
+    console.warn('[API] Failed to get Agora token after all retries:', lastError);
+    return {
+      success: false,
+      error: lastError || 'Failed to get video call credentials'
+    };
+  } catch (error) {
+    console.error('[API] getAgoraToken error:', error);
+    return {
+      success: false,
+      error: error.message || 'Network error while getting token'
+    };
+  }
+}
+
+// Update booking status for video call lifecycle
+async updateBookingStatus(bookingId, status, additionalData = {}) {
+  console.log('[API] Updating booking status:', bookingId, status);
+  
+  if (!bookingId) {
+    return {
+      success: false,
+      error: 'Booking ID is required'
+    };
+  }
+  
+  const validStatuses = ['scheduled', 'in-progress', 'completed', 'cancelled', 'missed'];
+  if (!validStatuses.includes(status)) {
+    return {
+      success: false,
+      error: 'Invalid status'
+    };
+  }
+  
+  try {
+    const requestData = {
+      bookingId,
+      status,
+      ...additionalData
+    };
+    
+    // Add timestamps based on status
+    if (status === 'in-progress') {
+      requestData.startedAt = new Date().toISOString();
+    } else if (status === 'completed') {
+      requestData.completedAt = new Date().toISOString();
+    }
+    
+    const result = await this.apiCall('/booking/update-status', {
+      method: 'POST',
+      body: JSON.stringify(requestData),
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      }
+    });
+    
+    if (result.success) {
+      console.log('[API] Booking status updated successfully');
+      return result;
+    }
+    
+    console.warn('[API] Failed to update booking status:', result.error);
+    return result;
+  } catch (error) {
+    console.error('[API] updateBookingStatus error:', error);
+    return {
+      success: false,
+      error: error.message || 'Failed to update booking status'
+    };
+  }
+}
+
+// Enhanced getBookingById with better error handling
+// Enhanced getBookingById with better error handling - COMPLETE FIX
+// ✅ FINAL VERSION — Direct + Fallback + Auth + Error Handling
+async getBookingById(bookingId) {
+  console.log('[API] Getting booking by ID:', bookingId);
+
+  if (!bookingId || typeof bookingId !== 'string') {
+    return {
+      success: false,
+      error: 'Valid booking ID is required'
+    };
+  }
+
+  try {
+    // =========================
+    // 1. DIRECT API CALL
+    // =========================
+    console.log('[API] Step 1: Trying direct /booking/getbooking/:id');
+    const directResult = await this.apiCall(`/booking/getbooking/${bookingId}`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+      },
+    });
+
+    if (directResult.success && directResult.data) {
+      console.log('[API] Booking found directly ✅');
+      return {
+        success: true,
+        data: {
+          ...directResult.data,
+          meetingLink: directResult.data.meetingLink || directResult.data._id,
+          duration: directResult.data.duration || 30,
+          status: directResult.data.status || 'scheduled'
+        }
+      };
+    }
+
+    // =========================
+    // 2. FALLBACK - USER BOOKINGS
+    // =========================
+    console.log('[API] Step 2: Trying /user/seebookings');
+    const userBookingsResult = await this.apiCall('/user/seebookings', {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+      },
+    });
+
+    if (userBookingsResult.success && Array.isArray(userBookingsResult.data)) {
+      const booking = userBookingsResult.data.find(
+        b => b._id === bookingId || b.id === bookingId
+      );
+      if (booking) {
+        console.log('[API] Booking found in user bookings ✅');
+        return {
+          success: true,
+          data: {
+            ...booking,
+            meetingLink: booking.meetingLink || booking._id,
+            duration: booking.duration || 30,
+            status: booking.status || 'scheduled'
+          }
+        };
+      }
+    }
+
+    // =========================
+    // 3. FALLBACK - CONSULTANT BOOKINGS
+    // =========================
+    console.log('[API] Step 3: Trying /booking/getbookingsviaConsultantid');
+    const consultantBookingsResult = await this.apiCall('/booking/getbookingsviaConsultantid', {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+      },
+    });
+
+    if (consultantBookingsResult.success && Array.isArray(consultantBookingsResult.data)) {
+      const booking = consultantBookingsResult.data.find(
+        b => b._id === bookingId || b.id === bookingId
+      );
+      if (booking) {
+        console.log('[API] Booking found in consultant bookings ✅');
+        return {
+          success: true,
+          data: {
+            ...booking,
+            meetingLink: booking.meetingLink || booking._id,
+            duration: booking.duration || 30,
+            status: booking.status || 'scheduled'
+          }
+        };
+      }
+    }
+
+    // =========================
+    // 4. FINAL RESULT - Not Found
+    // =========================
+    console.warn('[API] Booking not found in any source ❌');
+    return {
+      success: false,
+      error: 'Booking not found. Please check the booking ID or your access permissions.'
+    };
+
+  } catch (error) {
+    console.error('[API] getBookingById error:', error);
+    return {
+      success: false,
+      error: error.message || 'Network error while fetching booking'
+    };
+  }
+}
+
+// Send call notification (optional - for future enhancement)
+async sendCallNotification(bookingId, type = 'started') {
+  console.log('[API] Sending call notification:', bookingId, type);
+  
+  try {
+    const result = await this.apiCall('/booking/call-notification', {
+      method: 'POST',
+      body: JSON.stringify({
+        bookingId,
+        notificationType: type,
+        timestamp: new Date().toISOString()
+      }),
+      headers: {
+        'Content-Type': 'application/json',
+      }
+    });
+    
+    return result;
+  } catch (error) {
+    console.error('[API] sendCallNotification error:', error);
+    // Don't fail the call if notification fails
+    return { success: true };
+  }
+}
+
+
+
+
 }
 
 // export const API_BASE_URL = BASE_URL;

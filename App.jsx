@@ -22,6 +22,7 @@ import ConsultantListScreen from './src/screens/ConsultantListScreen';
 import ExpertProfileScreen from './src/screens/ExpertProfileScreen';
 import ExpertListScreen from './src/screens/ExpertListScreen';
 import ChatBot from './src/screens/ChatBot';
+import VideoCallScreen from './src/screens/VideoCallScreen';
 
 // Import Navigation Components
 import Navbar from './src/components/Navbar/Navbar';
@@ -374,6 +375,22 @@ const App = () => {
                 presentation: 'card',
               }}
             />
+            <Stack.Screen 
+  name="VideoCall" 
+  component={VideoCallScreen}
+  options={{
+    headerShown: false,
+    presentation: 'fullScreenModal',
+    animation: 'fade',
+    gestureEnabled: false, // Prevent accidental swipe during call
+    // Prevent back button during call on Android
+    ...Platform.select({
+      android: {
+        gestureEnabled: false,
+      },
+    }),
+  }}
+/>
           </Stack.Navigator>
         </NavigationContainer>
       </AuthProvider>

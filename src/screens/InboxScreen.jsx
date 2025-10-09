@@ -1,37 +1,139 @@
-// InboxScreen.jsx - Clean Inbox Implementation
-import React, { useState, useEffect, useCallback } from 'react';
+// InboxScreen.jsx - Production-Ready Inbox with Real-time Updates (WhatsApp-like) - COMPLETE VERSION
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
   FlatList,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   ActivityIndicator,
   SafeAreaView,
-  RefreshControl,
   StatusBar,
+  Image,
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { useFocusEffect } from '@react-navigation/native';
 import ApiService from '../services/ApiService';
+import { io } from 'socket.io-client';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+const CHAT_SERVER = 'https://api.parrotconsult.com';
 
 const InboxScreen = ({ navigation }) => {
   const { isAuthenticated, user } = useAuth();
   const [inbox, setInbox] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const [connected, setConnected] = useState(false);
+  const insets = useSafeAreaInsets();
+  
+  const socketRef = useRef(null);
+  const isMountedRef = useRef(true);
+  const inboxRoomsJoined = useRef(new Set());
+
+  // Real-time socket connection for instant inbox updates
+  useEffect(() => {
+    if (!isAuthenticated || !user) return;
+
+    const initSocket = () => {
+      if (socketRef.current) {
+        socketRef.current.removeAllListeners();
+        socketRef.current.disconnect();
+      }
+
+      const socket = io(CHAT_SERVER, {
+        transports: ['websocket'],
+        withCredentials: true,
+        reconnection: true,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
+        reconnectionAttempts: 10,
+      });
+
+      socketRef.current = socket;
+
+      socket.on('connect', () => {
+        console.log('[INBOX] Socket connected:', socket.id);
+        setConnected(true);
+        
+        // Re-join all chat rooms after reconnection
+        if (inbox.length > 0) {
+          inbox.forEach(chat => {
+            if (!inboxRoomsJoined.current.has(chat.chatId)) {
+              socket.emit('join-chat', {
+                chatId: chat.chatId,
+                userId: user._id,
+                consultantId: chat.otherId
+              });
+              inboxRoomsJoined.current.add(chat.chatId);
+            }
+          });
+        }
+      });
+
+      socket.on('disconnect', () => {
+        console.log('[INBOX] Socket disconnected');
+        setConnected(false);
+        inboxRoomsJoined.current.clear();
+      });
+
+      socket.on('new-message', ({ message, chat }) => {
+        console.log('[INBOX] New message received, updating inbox automatically');
+        loadInboxSilently();
+      });
+
+      socket.on('read-updated', ({ chatId }) => {
+        console.log('[INBOX] Messages marked as read, updating inbox automatically');
+        loadInboxSilently();
+      });
+
+      return socket;
+    };
+
+    const socket = initSocket();
+
+    return () => {
+      if (socket) {
+        socket.removeAllListeners();
+        socket.disconnect();
+      }
+      inboxRoomsJoined.current.clear();
+    };
+  }, [isAuthenticated, user]);
+
+  // Join socket rooms when inbox updates
+  useEffect(() => {
+    if (socketRef.current?.connected && inbox.length > 0) {
+      inbox.forEach(chat => {
+        if (!inboxRoomsJoined.current.has(chat.chatId)) {
+          socketRef.current.emit('join-chat', {
+            chatId: chat.chatId,
+            userId: user._id,
+            consultantId: chat.otherId
+          });
+          inboxRoomsJoined.current.add(chat.chatId);
+          console.log('[INBOX] Joined room:', chat.chatId);
+        }
+      });
+    }
+  }, [inbox, user]);
 
   // Load inbox when screen comes into focus
   useFocusEffect(
     useCallback(() => {
+      isMountedRef.current = true;
+      
       if (isAuthenticated && user) {
         loadInbox();
       }
+
+      return () => {
+        isMountedRef.current = false;
+      };
     }, [isAuthenticated, user])
   );
 
+  // Load inbox with loading indicator (initial load only)
   const loadInbox = useCallback(async () => {
     if (!isAuthenticated || !user) return;
     
@@ -40,29 +142,48 @@ const InboxScreen = ({ navigation }) => {
       setLoading(true);
       const result = await ApiService.getChatInbox();
       
-      if (result.success) {
+      if (result.success && isMountedRef.current) {
         const inboxData = result.data.inbox || [];
-        setInbox(inboxData);
-        console.log('[INBOX] Loaded', inboxData.length, 'conversations');
-      } else {
+        
+        const sortedInbox = inboxData.sort((a, b) => 
+          new Date(b.updatedAt) - new Date(a.updatedAt)
+        );
+        
+        setInbox(sortedInbox);
+        console.log('[INBOX] Loaded', sortedInbox.length, 'conversations');
+      } else if (!result.success && !result.error?.includes('Session expired')) {
         console.error('[INBOX] Failed to load:', result.error);
-        if (!result.error?.includes('Session expired')) {
-          Alert.alert('Error', result.error || 'Failed to load conversations');
-        }
       }
     } catch (error) {
       console.error('[INBOX] Load error:', error);
-      Alert.alert('Error', 'Failed to load conversations');
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
     }
   }, [isAuthenticated, user]);
 
-  const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    loadInbox();
-  }, [loadInbox]);
+  // Load inbox silently (no loading indicator) - for real-time updates
+  const loadInboxSilently = useCallback(async () => {
+    if (!isAuthenticated || !user || !isMountedRef.current) return;
+    
+    try {
+      const result = await ApiService.getChatInbox();
+      
+      if (result.success && isMountedRef.current) {
+        const inboxData = result.data.inbox || [];
+        
+        const sortedInbox = inboxData.sort((a, b) => 
+          new Date(b.updatedAt) - new Date(a.updatedAt)
+        );
+        
+        setInbox(sortedInbox);
+        console.log('[INBOX] Automatically updated', sortedInbox.length, 'conversations');
+      }
+    } catch (error) {
+      console.error('[INBOX] Silent load error:', error);
+    }
+  }, [isAuthenticated, user]);
 
   const openChat = useCallback((chatItem) => {
     console.log('[INBOX] Opening chat with:', chatItem.otherName);
@@ -81,7 +202,8 @@ const InboxScreen = ({ navigation }) => {
     const diffInDays = diffInHours / 24;
 
     if (diffInHours < 1) {
-      return 'now';
+      const diffInMinutes = Math.floor(diffInHours * 60);
+      return diffInMinutes <= 1 ? 'now' : `${diffInMinutes}m`;
     } else if (diffInHours < 24) {
       return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     } else if (diffInDays < 7) {
@@ -115,9 +237,16 @@ const InboxScreen = ({ navigation }) => {
           styles.inboxAvatar,
           item.unreadCountForMe > 0 && styles.unreadAvatar
         ]}>
-          <Text style={styles.inboxAvatarText}>
-            {getInitials(item.otherName)}
-          </Text>
+          {item.otherprofileImage ? (
+            <Image 
+              source={{ uri: item.otherprofileImage }} 
+              style={styles.avatarImage}
+            />
+          ) : (
+            <Text style={styles.inboxAvatarText}>
+              {getInitials(item.otherName)}
+            </Text>
+          )}
         </View>
         {item.unreadCountForMe > 0 && (
           <View style={styles.unreadBadge}>
@@ -161,7 +290,7 @@ const InboxScreen = ({ navigation }) => {
   // Authentication guard
   if (!isAuthenticated || !user) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[styles.container, { paddingTop: insets.top }]}>
         <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
         <View style={styles.authContainer}>
           <Icon name="lock-outline" size={64} color="#E2E8F0" />
@@ -180,7 +309,7 @@ const InboxScreen = ({ navigation }) => {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
       
       <View style={styles.header}>
@@ -189,17 +318,15 @@ const InboxScreen = ({ navigation }) => {
           {inbox.some(chat => (chat.unreadCountForMe || 0) > 0) && (
             <View style={styles.newMessageIndicator} />
           )}
-          <TouchableOpacity 
-            onPress={loadInbox} 
-            disabled={loading}
-            style={styles.refreshButton}
-          >
-            <Icon name="refresh" size={24} color="#059669" />
-          </TouchableOpacity>
+          {!connected && (
+            <View style={styles.reconnectingIndicator}>
+              <ActivityIndicator size="small" color="#F59E0B" />
+            </View>
+          )}
         </View>
       </View>
       
-      {loading && !refreshing ? (
+      {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#059669" />
           <Text style={styles.loadingText}>Loading conversations...</Text>
@@ -210,14 +337,6 @@ const InboxScreen = ({ navigation }) => {
           renderItem={renderInboxItem}
           keyExtractor={(item) => item.chatId}
           showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl 
-              refreshing={refreshing} 
-              onRefresh={onRefresh} 
-              colors={["#059669"]}
-              tintColor="#059669"
-            />
-          }
           ListEmptyComponent={() => (
             <View style={styles.emptyContainer}>
               <View style={styles.emptyIcon}>
@@ -270,12 +389,10 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     backgroundColor: '#EF4444',
-    marginRight: 8,
   },
-  refreshButton: {
-    padding: 8,
-    borderRadius: 20,
-    backgroundColor: '#F0FDF4',
+  reconnectingIndicator: {
+    marginLeft: 8,
+    padding: 4,
   },
   inboxItem: {
     flexDirection: 'row',
@@ -302,6 +419,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#059669',
     justifyContent: 'center',
     alignItems: 'center',
+    overflow: 'hidden',
   },
   unreadAvatar: {
     backgroundColor: '#10B981',
@@ -310,6 +428,11 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 20,
     fontWeight: '600',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
   },
   unreadBadge: {
     position: 'absolute',
@@ -321,12 +444,13 @@ const styles = StyleSheet.create({
     height: 24,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 6,
     borderWidth: 3,
     borderColor: '#FFFFFF',
   },
   unreadBadgeText: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
   },
   inboxContent: {

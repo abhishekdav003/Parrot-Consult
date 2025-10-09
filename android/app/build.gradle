@@ -24,11 +24,16 @@ android {
         versionCode 1
         versionName "1.0"
         
-        // Enable multidex for release builds
+        // CRITICAL: Enable multidex for video call support
         multiDexEnabled true
         
-        // Video playback optimization
+        // Video playback and call optimization
         vectorDrawables.useSupportLibrary = true
+        
+        // IMPORTANT: Increase memory for better video performance
+        ndk {
+            abiFilters "armeabi-v7a", "arm64-v8a", "x86", "x86_64"
+        }
     }
     
     signingConfigs {
@@ -65,19 +70,42 @@ android {
         }
     }
     
+    // CRITICAL: Packaging options for Agora SDK
     packagingOptions {
         pickFirst 'lib/x86/libc++_shared.so'
         pickFirst 'lib/x86_64/libc++_shared.so'
         pickFirst 'lib/armeabi-v7a/libc++_shared.so'
         pickFirst 'lib/arm64-v8a/libc++_shared.so'
+        
+        // Additional exclusions for better compatibility
+        exclude 'META-INF/DEPENDENCIES'
+        exclude 'META-INF/LICENSE'
+        exclude 'META-INF/LICENSE.txt'
+        exclude 'META-INF/license.txt'
+        exclude 'META-INF/NOTICE'
+        exclude 'META-INF/NOTICE.txt'
+        exclude 'META-INF/notice.txt'
+        exclude 'META-INF/ASL2.0'
+    }
+    
+    // IMPORTANT: Configure for better performance
+    dexOptions {
+        javaMaxHeapSize "4g"
     }
 }
 
 dependencies {
     implementation("com.facebook.react:react-android")
     
-    // Multidex support
+    // CRITICAL: Multidex support
     implementation 'androidx.multidex:multidex:2.0.1'
+    
+    // CRITICAL: Agora SDK (ensure you have this in package.json)
+    // The react-native-agora library should be auto-linked
+    
+    // Additional dependencies for better video call support
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'com.google.android.material:material:1.9.0'
 
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")

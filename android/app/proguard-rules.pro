@@ -1,13 +1,25 @@
 # Add project specific ProGuard rules here.
-# By default, the flags in this file are appended to flags specified
-# in /usr/local/Cellar/android-sdk/24.3.3/tools/proguard/proguard-android.txt
-# You can edit the include path and order by changing the proguardFiles
-# directive in build.gradle.
 
 # Keep React Native classes
 -keep class com.facebook.react.** { *; }
 -keep class com.facebook.hermes.** { *; }
 -keep class com.facebook.jni.** { *; }
+
+# CRITICAL: Keep Agora SDK classes (ESSENTIAL FOR VIDEO CALLS)
+-keep class io.agora.** { *; }
+-keep class io.agora.rtc.** { *; }
+-keep class io.agora.rtc2.** { *; }
+-keep class io.agora.base.** { *; }
+-dontwarn io.agora.**
+
+# Keep native methods for Agora
+-keepclasseswithmembernames class * {
+    native <methods>;
+}
+
+# Keep react-native-agora classes
+-keep class com.syan.agora.** { *; }
+-keep interface com.syan.agora.** { *; }
 
 # Keep react-native-video classes (CRITICAL FOR VIDEO PLAYBACK)
 -keep class com.brentvatne.** { *; }
@@ -81,9 +93,19 @@
 -optimizationpasses 5
 -allowaccessmodification
 
-# Remove logging in release
+# Remove logging in release (but keep error logs)
 -assumenosideeffects class android.util.Log {
     public static *** d(...);
     public static *** v(...);
     public static *** i(...);
 }
+
+# CRITICAL: Keep video call related classes
+-keep class android.media.** { *; }
+-keep class android.hardware.camera2.** { *; }
+-keep class android.opengl.** { *; }
+
+# Keep annotations
+-keepattributes *Annotation*
+-keepattributes Signature
+-keepattributes Exceptions
