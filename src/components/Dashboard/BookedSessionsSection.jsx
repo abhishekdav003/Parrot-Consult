@@ -1,4 +1,4 @@
-// src/components/Dashboard/BookedSessionsSection.jsx - FIXED VERSION
+// src/components/Dashboard/BookedSessionsSection.jsx - PRODUCTION READY
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   Alert,
+  Platform,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
@@ -22,7 +23,7 @@ const BookedSessionsSection = ({ user, onRefresh, onAuthError }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [activeFilter, setActiveFilter] = useState('all');
 
-  // Fetch consultant bookings (sessions where people booked me)
+  // Fetch consultant bookings (sessions where people booked me) with sorting
   const fetchBookings = useCallback(async (showLoading = true) => {
     try {
       if (showLoading) setLoading(true);
@@ -41,23 +42,43 @@ const BookedSessionsSection = ({ user, onRefresh, onAuthError }) => {
           meetingLink: booking.meetingLink || booking._id,
           duration: booking.duration || 30,
           status: booking.status || 'scheduled',
-          // Ensure user data exists
           user: booking.user || { 
             _id: booking.userId, 
             fullName: 'Client',
             name: 'Client'
           },
-          // Ensure consultant data exists
           consultant: booking.consultant || {
             _id: user?._id,
             fullName: user?.fullName,
             name: user?.fullName
           }
         }));
+
+        // âœ… Sort bookings by date/time (upcoming first, then by closest time)
+        const sortedBookings = processedBookings.sort((a, b) => {
+          const dateA = new Date(a.bookingDateTime);
+          const dateB = new Date(b.bookingDateTime);
+          const now = new Date();
+          
+          // Separate upcoming and past bookings
+          const isAUpcoming = dateA >= now;
+          const isBUpcoming = dateB >= now;
+          
+          // Upcoming bookings come first
+          if (isAUpcoming && !isBUpcoming) return -1;
+          if (!isAUpcoming && isBUpcoming) return 1;
+          
+          // Within upcoming: earliest first
+          if (isAUpcoming && isBUpcoming) {
+            return dateA - dateB;
+          }
+          
+          // Within past: most recent first
+          return dateB - dateA;
+        });
         
-        setBookings(processedBookings);
-        console.log('[BOOKED_SESSIONS] Loaded', processedBookings.length, 'bookings');
-        console.log('[BOOKED_SESSIONS] First booking:', processedBookings[0]);
+        setBookings(sortedBookings);
+        console.log('[BOOKED_SESSIONS] Loaded', sortedBookings.length, 'bookings');
       } else {
         if (result.needsLogin && onAuthError) {
           onAuthError(result);
@@ -89,25 +110,69 @@ const BookedSessionsSection = ({ user, onRefresh, onAuthError }) => {
     if (onRefresh) onRefresh();
   }, [fetchBookings, onRefresh]);
 
-  // Memoized filtered bookings
+  // âœ… Memoized filtered bookings with smart filtering
   const filteredBookings = useMemo(() => {
     if (activeFilter === 'all') return bookings;
     
     return bookings.filter(booking => {
-      if (activeFilter === 'upcoming') {
-        return ['pending', 'scheduled'].includes(booking.status);
+      const bookingDate = new Date(booking.bookingDateTime);
+      const now = new Date();
+      const timeDiff = bookingDate - now;
+      const minutesDiff = Math.floor(timeDiff / 60000);
+      const sessionDuration = booking.duration || 30;
+      
+      switch (activeFilter) {
+        case 'upcoming':
+          // Show scheduled/pending sessions that haven't ended yet
+          if (['pending', 'scheduled'].includes(booking.status)) {
+            // Check if session hasn't ended
+            if (minutesDiff < 0) {
+              const minutesAfterStart = Math.abs(minutesDiff);
+              return minutesAfterStart < sessionDuration; // Still in progress
+            }
+            return true; // Future session
+          }
+          return false;
+          
+        case 'completed':
+          return booking.status === 'completed';
+          
+        case 'cancelled':
+          return ['cancelled', 'missed'].includes(booking.status);
+          
+        default:
+          return true;
       }
-      return booking.status === activeFilter;
     });
   }, [bookings, activeFilter]);
 
-  // Memoized filter counts
-  const filterCounts = useMemo(() => ({
-    all: bookings.length,
-    upcoming: bookings.filter(b => ['pending', 'scheduled'].includes(b.status)).length,
-    completed: bookings.filter(b => b.status === 'completed').length,
-    cancelled: bookings.filter(b => b.status === 'cancelled').length,
-  }), [bookings]);
+  // âœ… Memoized filter counts with smart counting
+  const filterCounts = useMemo(() => {
+    const now = new Date();
+    
+    const upcoming = bookings.filter(b => {
+      if (!['scheduled', 'pending'].includes(b.status)) return false;
+      
+      const bookingDate = new Date(b.bookingDateTime);
+      const timeDiff = bookingDate - now;
+      const minutesDiff = Math.floor(timeDiff / 60000);
+      const sessionDuration = b.duration || 30;
+      
+      // Future session
+      if (minutesDiff >= 0) return true;
+      
+      // In-progress session
+      const minutesAfterStart = Math.abs(minutesDiff);
+      return minutesAfterStart < sessionDuration;
+    }).length;
+    
+    return {
+      all: bookings.length,
+      upcoming: upcoming,
+      completed: bookings.filter(b => b.status === 'completed').length,
+      cancelled: bookings.filter(b => ['cancelled', 'missed'].includes(b.status)).length,
+    };
+  }, [bookings]);
 
   const filters = useMemo(() => [
     { key: 'all', label: 'All', icon: 'apps-outline' },
@@ -119,7 +184,7 @@ const BookedSessionsSection = ({ user, onRefresh, onAuthError }) => {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#34C759" />
+        <ActivityIndicator size="large" color="#059669" />
         <Text style={styles.loadingText}>Loading sessions...</Text>
       </View>
     );
@@ -202,8 +267,8 @@ const BookedSessionsSection = ({ user, onRefresh, onAuthError }) => {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            colors={['#34C759']}
-            tintColor="#34C759"
+            colors={['#059669']}
+            tintColor="#059669"
           />
         }
         showsVerticalScrollIndicator={false}
@@ -243,8 +308,8 @@ const BookedSessionsSection = ({ user, onRefresh, onAuthError }) => {
       {bookings.length > 0 && (
         <View style={styles.bottomStats}>
           <View style={styles.statCard}>
-            <View style={[styles.statIconContainer, { backgroundColor: '#E8F7ED' }]}>
-              <Ionicons name="calendar-outline" size={20} color="#34C759" />
+            <View style={[styles.statIconContainer, { backgroundColor: '#F0FDF4' }]}>
+              <Ionicons name="calendar-outline" size={20} color="#059669" />
             </View>
             <Text style={styles.statNumber}>{filterCounts.all}</Text>
             <Text style={styles.statLabel}>Total Bookings</Text>
@@ -259,8 +324,8 @@ const BookedSessionsSection = ({ user, onRefresh, onAuthError }) => {
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statCard}>
-            <View style={[styles.statIconContainer, { backgroundColor: '#F3E8FF' }]}>
-              <Ionicons name="checkmark-circle-outline" size={20} color="#8E44AD" />
+            <View style={[styles.statIconContainer, { backgroundColor: '#F0FDF4' }]}>
+              <Ionicons name="checkmark-circle-outline" size={20} color="#059669" />
             </View>
             <Text style={styles.statNumber}>{filterCounts.completed}</Text>
             <Text style={styles.statLabel}>Completed</Text>
@@ -274,13 +339,13 @@ const BookedSessionsSection = ({ user, onRefresh, onAuthError }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F2F2F7',
+    backgroundColor: '#F8FAFC',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F2F2F7',
+    backgroundColor: '#F8FAFC',
   },
   loadingText: {
     marginTop: 16,
@@ -310,7 +375,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   headerBadge: {
-    backgroundColor: '#34C759',
+    backgroundColor: '#059669',
     borderRadius: 20,
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -340,13 +405,19 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   activeFilterChip: {
-    backgroundColor: '#34C759',
-    borderColor: '#34C759',
-    shadowColor: '#34C759',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
+    backgroundColor: '#059669',
+    borderColor: '#059669',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#059669',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
   },
   chipContent: {
     flexDirection: 'row',
@@ -394,7 +465,7 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   activeBadgeText: {
-    color: '#34C759',
+    color: '#059669',
   },
   bookingsList: {
     flex: 1,
@@ -444,11 +515,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderTopWidth: 1,
     borderTopColor: '#E5E5EA',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 8,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 8,
+      },
+    }),
   },
   statCard: {
     flex: 1,

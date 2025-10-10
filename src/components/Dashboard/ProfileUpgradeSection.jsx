@@ -9,11 +9,15 @@ import {
   ActivityIndicator,
   StyleSheet,
   Platform,
+  Modal,
+  Dimensions,
 } from 'react-native';
 import { pick, isCancel, types } from '@react-native-documents/picker';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import ApiService from '../../services/ApiService';
 import { useAuth } from '../../context/AuthContext';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const ProfileUpgradeSection = ({ user, onRefresh, navigation }) => {
   const { updateUserProfile } = useAuth();
@@ -21,6 +25,7 @@ const ProfileUpgradeSection = ({ user, onRefresh, navigation }) => {
   const [loading, setLoading] = useState(false);
   const [applicationStatus, setApplicationStatus] = useState('loading');
   const [uploadProgress, setUploadProgress] = useState({ aadhaar: false, pan: false });
+  const [showDaysModal, setShowDaysModal] = useState(false);
 
   // Step 1: KYC Data
   const [kycData, setKycData] = useState({
@@ -30,14 +35,17 @@ const ProfileUpgradeSection = ({ user, onRefresh, navigation }) => {
     panFile: null,
   });
 
-  // Step 2: Consultant Application Data
+  // Step 2: Consultant Application Data - Enhanced with all fields
   const [consultantData, setConsultantData] = useState({
     rate: '',
-    daysPerWeek: '5',
+    daysPerWeek: '',
+    days: [], // Array of selected days
     qualification: '',
     field: '',
     university: '',
     graduationYear: '',
+    keySkills: [],
+    Specialized: [],
     shortBio: '',
     experience: '',
     category: '',
@@ -46,16 +54,38 @@ const ProfileUpgradeSection = ({ user, onRefresh, navigation }) => {
   });
 
   const [languageInput, setLanguageInput] = useState('');
+  const [skillInput, setSkillInput] = useState('');
+  const [specializationInput, setSpecializationInput] = useState('');
 
   const categories = [
-    'Tech',
-    'E-commerce',
-    'Legal',
-    'Marketing',
-    'Finance',
-    'HR',
-    'Business',
-    'Other'
+    'IT & Technology',
+    'Business & Finance',
+    'Legal & Compliance',
+    'Marketing & Sales',
+    'Human Resources',
+    'Healthcare',
+    'Education & Training',
+    'Design & Creative',
+    'Engineering',
+    'Consulting',
+  ];
+
+  const daysOfWeek = [
+    'Monday',
+    'Tuesday',
+    'Wednesday',
+    'Thursday',
+    'Friday',
+    'Saturday',
+    'Sunday',
+  ];
+
+  const timeSlots = [
+    '1-2 hours',
+    '2-4 hours',
+    '4-6 hours',
+    '6-8 hours',
+    'Flexible',
   ];
 
   // Check email availability on mount
@@ -209,6 +239,22 @@ const ProfileUpgradeSection = ({ user, onRefresh, navigation }) => {
     }
   }, []);
 
+  // Days Selection Handler
+  const toggleDaySelection = useCallback((day) => {
+    setConsultantData(prev => {
+      const days = prev.days.includes(day)
+        ? prev.days.filter(d => d !== day)
+        : [...prev.days, day];
+      
+      // Update daysPerWeek automatically
+      return {
+        ...prev,
+        days,
+        daysPerWeek: days.length.toString(),
+      };
+    });
+  }, []);
+
   // Validation Functions
   const validateKYC = useCallback(() => {
     const errors = [];
@@ -277,6 +323,12 @@ const ProfileUpgradeSection = ({ user, onRefresh, navigation }) => {
       errors.push('Please select a category');
     }
 
+    if (consultantData.days.length === 0) {
+      errors.push('Please select at least one available day');
+    }
+
+   
+
     if (consultantData.languages.length === 0) {
       errors.push('Please add at least one language');
     }
@@ -302,12 +354,11 @@ const ProfileUpgradeSection = ({ user, onRefresh, navigation }) => {
       setLoading(true);
       setUploadProgress({ aadhaar: true, pan: true });
 
-      // Upload files using updateUserProfile which handles the backend correctly
       const profileData = {
         aadharNumber: kycData.aadharNumber,
         panNumber: kycData.panNumber,
-        profileImage: kycData.aadhaarFile, // Will be handled as aadhaar upload
-        resume: kycData.panFile, // Will be handled as pan upload
+        profileImage: kycData.aadhaarFile,
+        resume: kycData.panFile,
       };
 
       const result = await updateUserProfile(profileData);
@@ -397,6 +448,42 @@ const ProfileUpgradeSection = ({ user, onRefresh, navigation }) => {
     }));
   }, []);
 
+  // Skill Management
+  const addSkill = useCallback(() => {
+    if (skillInput.trim() && !consultantData.keySkills.includes(skillInput.trim())) {
+      setConsultantData(prev => ({
+        ...prev,
+        keySkills: [...prev.keySkills, skillInput.trim()]
+      }));
+      setSkillInput('');
+    }
+  }, [skillInput, consultantData.keySkills]);
+
+  const removeSkill = useCallback((skillToRemove) => {
+    setConsultantData(prev => ({
+      ...prev,
+      keySkills: prev.keySkills.filter(skill => skill !== skillToRemove)
+    }));
+  }, []);
+
+  // Specialization Management
+  const addSpecialization = useCallback(() => {
+    if (specializationInput.trim() && !consultantData.Specialized.includes(specializationInput.trim())) {
+      setConsultantData(prev => ({
+        ...prev,
+        Specialized: [...prev.Specialized, specializationInput.trim()]
+      }));
+      setSpecializationInput('');
+    }
+  }, [specializationInput, consultantData.Specialized]);
+
+  const removeSpecialization = useCallback((specToRemove) => {
+    setConsultantData(prev => ({
+      ...prev,
+      Specialized: prev.Specialized.filter(spec => spec !== specToRemove)
+    }));
+  }, []);
+
   // Render Status Screen
   const renderStatusScreen = () => {
     const statusConfig = {
@@ -453,6 +540,59 @@ const ProfileUpgradeSection = ({ user, onRefresh, navigation }) => {
     );
   };
 
+  // Days Selection Modal
+  const renderDaysModal = () => (
+    <Modal
+      visible={showDaysModal}
+      transparent
+      animationType="slide"
+      onRequestClose={() => setShowDaysModal(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Select Available Days</Text>
+            <TouchableOpacity onPress={() => setShowDaysModal(false)}>
+              <Ionicons name="close" size={24} color="#64748B" />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView style={styles.modalBody}>
+            {daysOfWeek.map((day) => (
+              <TouchableOpacity
+                key={day}
+                style={[
+                  styles.dayOption,
+                  consultantData.days.includes(day) && styles.selectedDayOption
+                ]}
+                onPress={() => toggleDaySelection(day)}
+              >
+                <Text style={[
+                  styles.dayOptionText,
+                  consultantData.days.includes(day) && styles.selectedDayOptionText
+                ]}>
+                  {day}
+                </Text>
+                {consultantData.days.includes(day) && (
+                  <Ionicons name="checkmark-circle" size={24} color="#059669" />
+                )}
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          <TouchableOpacity
+            style={styles.modalButton}
+            onPress={() => setShowDaysModal(false)}
+          >
+            <Text style={styles.modalButtonText}>
+              Done ({consultantData.days.length} selected)
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+
   // Render KYC Step
   const renderKYCStep = () => (
     <View style={styles.stepContainer}>
@@ -471,6 +611,7 @@ const ProfileUpgradeSection = ({ user, onRefresh, navigation }) => {
           value={kycData.aadharNumber}
           onChangeText={(text) => setKycData(prev => ({ ...prev, aadharNumber: text.replace(/\D/g, '') }))}
           placeholder="Enter 12-digit Aadhaar number"
+          placeholderTextColor="#94A3B8"
           keyboardType="numeric"
           maxLength={12}
           editable={!loading}
@@ -509,6 +650,7 @@ const ProfileUpgradeSection = ({ user, onRefresh, navigation }) => {
           value={kycData.panNumber}
           onChangeText={(text) => setKycData(prev => ({ ...prev, panNumber: text.toUpperCase() }))}
           placeholder="Enter PAN (e.g., ABCDE1234F)"
+          placeholderTextColor="#94A3B8"
           maxLength={10}
           autoCapitalize="characters"
           editable={!loading}
@@ -568,33 +710,66 @@ const ProfileUpgradeSection = ({ user, onRefresh, navigation }) => {
         <Text style={styles.stepSubtitle}>Complete your consultant application</Text>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView showsVerticalScrollIndicator={false} style={styles.formScrollView}>
+        {/* Session Fee & Experience */}
         <View style={styles.formRow}>
-          <View style={[styles.formGroup, { flex: 1, marginRight: 8 }]}>
+          <View style={[styles.formGroup, styles.halfWidth]}>
             <Text style={styles.formLabel}>Session Fee (₹/hour) *</Text>
             <TextInput
               style={styles.formInput}
               value={consultantData.rate}
               onChangeText={(text) => setConsultantData(prev => ({ ...prev, rate: text.replace(/\D/g, '') }))}
               placeholder="e.g., 500"
+              placeholderTextColor="#94A3B8"
               keyboardType="numeric"
               editable={!loading}
             />
           </View>
 
-          <View style={[styles.formGroup, { flex: 1, marginLeft: 8 }]}>
+          <View style={[styles.formGroup, styles.halfWidth]}>
             <Text style={styles.formLabel}>Experience (years) *</Text>
             <TextInput
               style={styles.formInput}
               value={consultantData.experience}
               onChangeText={(text) => setConsultantData(prev => ({ ...prev, experience: text.replace(/\D/g, '') }))}
               placeholder="e.g., 5"
+              placeholderTextColor="#94A3B8"
               keyboardType="numeric"
               editable={!loading}
             />
           </View>
         </View>
 
+        {/* Available Days Selection */}
+        <View style={styles.formGroup}>
+          <Text style={styles.formLabel}>Available Days *</Text>
+          <TouchableOpacity
+            style={[styles.formInput, styles.selectInput]}
+            onPress={() => setShowDaysModal(true)}
+            disabled={loading}
+          >
+            <Text style={[styles.selectInputText, consultantData.days.length === 0 && styles.placeholderText]}>
+              {consultantData.days.length > 0 
+                ? `${consultantData.days.length} day${consultantData.days.length > 1 ? 's' : ''} selected`
+                : 'Select available days'}
+            </Text>
+            <Ionicons name="chevron-down" size={20} color="#64748B" />
+          </TouchableOpacity>
+          
+          {consultantData.days.length > 0 && (
+            <View style={styles.selectedDaysContainer}>
+              {consultantData.days.map((day) => (
+                <View key={day} style={styles.selectedDayChip}>
+                  <Text style={styles.selectedDayChipText}>{day}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+
+       
+
+        {/* Education Details */}
         <View style={styles.formGroup}>
           <Text style={styles.formLabel}>Qualification *</Text>
           <TextInput
@@ -602,6 +777,7 @@ const ProfileUpgradeSection = ({ user, onRefresh, navigation }) => {
             value={consultantData.qualification}
             onChangeText={(text) => setConsultantData(prev => ({ ...prev, qualification: text }))}
             placeholder="e.g., Master's in Business Administration"
+            placeholderTextColor="#94A3B8"
             editable={!loading}
           />
         </View>
@@ -613,29 +789,32 @@ const ProfileUpgradeSection = ({ user, onRefresh, navigation }) => {
             value={consultantData.field}
             onChangeText={(text) => setConsultantData(prev => ({ ...prev, field: text }))}
             placeholder="e.g., Business Management"
+            placeholderTextColor="#94A3B8"
             editable={!loading}
           />
         </View>
 
         <View style={styles.formRow}>
-          <View style={[styles.formGroup, { flex: 1, marginRight: 8 }]}>
+          <View style={[styles.formGroup, styles.halfWidth]}>
             <Text style={styles.formLabel}>University *</Text>
             <TextInput
               style={styles.formInput}
               value={consultantData.university}
               onChangeText={(text) => setConsultantData(prev => ({ ...prev, university: text }))}
               placeholder="University name"
+              placeholderTextColor="#94A3B8"
               editable={!loading}
             />
           </View>
 
-          <View style={[styles.formGroup, { flex: 1, marginLeft: 8 }]}>
+          <View style={[styles.formGroup, styles.halfWidth]}>
             <Text style={styles.formLabel}>Graduation Year *</Text>
             <TextInput
               style={styles.formInput}
               value={consultantData.graduationYear}
               onChangeText={(text) => setConsultantData(prev => ({ ...prev, graduationYear: text.replace(/\D/g, '') }))}
               placeholder="Year"
+              placeholderTextColor="#94A3B8"
               keyboardType="numeric"
               maxLength={4}
               editable={!loading}
@@ -643,6 +822,7 @@ const ProfileUpgradeSection = ({ user, onRefresh, navigation }) => {
           </View>
         </View>
 
+        {/* Category */}
         <View style={styles.formGroup}>
           <Text style={styles.formLabel}>Category *</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll}>
@@ -667,30 +847,32 @@ const ProfileUpgradeSection = ({ user, onRefresh, navigation }) => {
           </ScrollView>
         </View>
 
+        {/* Key Skills */}
         <View style={styles.formGroup}>
-          <Text style={styles.formLabel}>Languages *</Text>
-          <View style={styles.languageInputContainer}>
+          <Text style={styles.formLabel}>Key Skills</Text>
+          <View style={styles.inputWithButton}>
             <TextInput
-              style={[styles.formInput, styles.languageInput]}
-              value={languageInput}
-              onChangeText={setLanguageInput}
-              placeholder="Add language"
-              onSubmitEditing={addLanguage}
+              style={[styles.formInput, styles.flexInput]}
+              value={skillInput}
+              onChangeText={setSkillInput}
+              placeholder="Add skill"
+              placeholderTextColor="#94A3B8"
+              onSubmitEditing={addSkill}
               editable={!loading}
             />
-            <TouchableOpacity style={styles.addButton} onPress={addLanguage} disabled={loading}>
+            <TouchableOpacity style={styles.addButton} onPress={addSkill} disabled={loading}>
               <Ionicons name="add" size={24} color="#fff" />
             </TouchableOpacity>
           </View>
           
-          {consultantData.languages.length > 0 && (
-            <View style={styles.languageList}>
-              {consultantData.languages.map((language, index) => (
-                <View key={index} style={styles.languageChip}>
-                  <Text style={styles.languageChipText}>{language}</Text>
+          {consultantData.keySkills.length > 0 && (
+            <View style={styles.chipList}>
+              {consultantData.keySkills.map((skill, index) => (
+                <View key={index} style={styles.chip}>
+                  <Text style={styles.chipText}>{skill}</Text>
                   <TouchableOpacity
-                    onPress={() => removeLanguage(language)}
-                    style={styles.removeLanguageButton}
+                    onPress={() => removeSkill(skill)}
+                    style={styles.removeChipButton}
                     disabled={loading}
                   >
                     <Ionicons name="close" size={16} color="#64748B" />
@@ -701,6 +883,79 @@ const ProfileUpgradeSection = ({ user, onRefresh, navigation }) => {
           )}
         </View>
 
+        {/* Specializations */}
+        <View style={styles.formGroup}>
+          <Text style={styles.formLabel}>Specializations</Text>
+          <View style={styles.inputWithButton}>
+            <TextInput
+              style={[styles.formInput, styles.flexInput]}
+              value={specializationInput}
+              onChangeText={setSpecializationInput}
+              placeholder="Add specialization"
+              placeholderTextColor="#94A3B8"
+              onSubmitEditing={addSpecialization}
+              editable={!loading}
+            />
+            <TouchableOpacity style={styles.addButton} onPress={addSpecialization} disabled={loading}>
+              <Ionicons name="add" size={24} color="#fff" />
+            </TouchableOpacity>
+          </View>
+          
+          {consultantData.Specialized.length > 0 && (
+            <View style={styles.chipList}>
+              {consultantData.Specialized.map((spec, index) => (
+                <View key={index} style={styles.chip}>
+                  <Text style={styles.chipText}>{spec}</Text>
+                  <TouchableOpacity
+                    onPress={() => removeSpecialization(spec)}
+                    style={styles.removeChipButton}
+                    disabled={loading}
+                  >
+                    <Ionicons name="close" size={16} color="#64748B" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+
+        {/* Languages */}
+        <View style={styles.formGroup}>
+          <Text style={styles.formLabel}>Languages *</Text>
+          <View style={styles.inputWithButton}>
+            <TextInput
+              style={[styles.formInput, styles.flexInput]}
+              value={languageInput}
+              onChangeText={setLanguageInput}
+              placeholder="Add language"
+              placeholderTextColor="#94A3B8"
+              onSubmitEditing={addLanguage}
+              editable={!loading}
+            />
+            <TouchableOpacity style={styles.addButton} onPress={addLanguage} disabled={loading}>
+              <Ionicons name="add" size={24} color="#fff" />
+            </TouchableOpacity>
+          </View>
+          
+          {consultantData.languages.length > 0 && (
+            <View style={styles.chipList}>
+              {consultantData.languages.map((language, index) => (
+                <View key={index} style={styles.chip}>
+                  <Text style={styles.chipText}>{language}</Text>
+                  <TouchableOpacity
+                    onPress={() => removeLanguage(language)}
+                    style={styles.removeChipButton}
+                    disabled={loading}
+                  >
+                    <Ionicons name="close" size={16} color="#64748B" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+
+        {/* Short Bio */}
         <View style={styles.formGroup}>
           <Text style={styles.formLabel}>Short Bio</Text>
           <TextInput
@@ -708,13 +963,16 @@ const ProfileUpgradeSection = ({ user, onRefresh, navigation }) => {
             value={consultantData.shortBio}
             onChangeText={(text) => setConsultantData(prev => ({ ...prev, shortBio: text }))}
             placeholder="Tell us about yourself and your expertise..."
+            placeholderTextColor="#94A3B8"
             multiline
             numberOfLines={4}
             textAlignVertical="top"
             editable={!loading}
           />
+          <Text style={styles.charCount}>{consultantData.shortBio.length}/500</Text>
         </View>
 
+        {/* Resume Upload */}
         <View style={styles.formGroup}>
           <Text style={styles.formLabel}>Resume *</Text>
           <TouchableOpacity
@@ -724,7 +982,7 @@ const ProfileUpgradeSection = ({ user, onRefresh, navigation }) => {
           >
             <Ionicons name="cloud-upload-outline" size={20} color="#059669" />
             <Text style={styles.uploadButtonText}>
-              {consultantData.resume ? 'Change Resume' : 'Upload Resume (PDF)'}
+              {consultantData.resume ? 'Change Resume' : 'Upload Resume (PDF/DOC)'}
             </Text>
           </TouchableOpacity>
           {consultantData.resume && (
@@ -740,6 +998,7 @@ const ProfileUpgradeSection = ({ user, onRefresh, navigation }) => {
           )}
         </View>
 
+        {/* Submit Button */}
         <TouchableOpacity
           style={[styles.primaryButton, loading && styles.disabledButton]}
           onPress={handleConsultantApplication}
@@ -779,6 +1038,7 @@ const ProfileUpgradeSection = ({ user, onRefresh, navigation }) => {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       {currentStep === 1 ? renderKYCStep() : renderConsultantStep()}
+      {renderDaysModal()}
     </ScrollView>
   );
 };
@@ -791,6 +1051,7 @@ const styles = StyleSheet.create({
   contentContainer: {
     flexGrow: 1,
     padding: 16,
+    paddingBottom: 32,
   },
   loadingContainer: {
     flex: 1,
@@ -807,7 +1068,7 @@ const styles = StyleSheet.create({
   stepContainer: {
     backgroundColor: '#fff',
     borderRadius: 16,
-    padding: 24,
+    padding: SCREEN_WIDTH < 380 ? 16 : 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
@@ -816,7 +1077,7 @@ const styles = StyleSheet.create({
   },
   stepHeader: {
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: 24,
   },
   stepBadge: {
     backgroundColor: '#F0FDF4',
@@ -832,7 +1093,7 @@ const styles = StyleSheet.create({
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
   stepTitle: {
-    fontSize: 24,
+    fontSize: SCREEN_WIDTH < 380 ? 20 : 24,
     fontWeight: '700',
     color: '#1E293B',
     marginBottom: 8,
@@ -840,17 +1101,24 @@ const styles = StyleSheet.create({
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
   },
   stepSubtitle: {
-    fontSize: 16,
+    fontSize: 14,
     color: '#64748B',
     textAlign: 'center',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+  formScrollView: {
+    maxHeight: SCREEN_WIDTH < 380 ? 500 : 600,
   },
   formGroup: {
     marginBottom: 20,
   },
   formRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    gap: 12,
+    marginBottom: 0,
+  },
+  halfWidth: {
+    flex: 1,
   },
   formLabel: {
     fontSize: 14,
@@ -870,9 +1138,29 @@ const styles = StyleSheet.create({
     color: '#1E293B',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
+  selectInput: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  selectInputText: {
+    fontSize: 14,
+    color: '#1E293B',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+  placeholderText: {
+    color: '#94A3B8',
+  },
   textArea: {
     height: 100,
     textAlignVertical: 'top',
+  },
+  charCount: {
+    fontSize: 12,
+    color: '#94A3B8',
+    textAlign: 'right',
+    marginTop: 4,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
   uploadButton: {
     flexDirection: 'row',
@@ -909,6 +1197,49 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
+  selectedDaysContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 12,
+    gap: 8,
+  },
+  selectedDayChip: {
+    backgroundColor: '#E0F2FE',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  selectedDayChipText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#0369A1',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+  timeSlotScroll: {
+    marginTop: 8,
+  },
+  timeSlotChip: {
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1.5,
+    borderColor: '#E5E7EB',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginRight: 8,
+  },
+  selectedTimeSlotChip: {
+    backgroundColor: '#059669',
+    borderColor: '#059669',
+  },
+  timeSlotChipText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#6B7280',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+  selectedTimeSlotChipText: {
+    color: '#fff',
+  },
   categoryScroll: {
     marginTop: 8,
   },
@@ -926,7 +1257,7 @@ const styles = StyleSheet.create({
     borderColor: '#059669',
   },
   categoryChipText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '500',
     color: '#6B7280',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
@@ -934,13 +1265,14 @@ const styles = StyleSheet.create({
   selectedCategoryChipText: {
     color: '#fff',
   },
-  languageInputContainer: {
+  inputWithButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
   },
-  languageInput: {
+  flexInput: {
     flex: 1,
+    marginBottom: 0,
   },
   addButton: {
     backgroundColor: '#059669',
@@ -950,13 +1282,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  languageList: {
+  chipList: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     marginTop: 12,
     gap: 8,
   },
-  languageChip: {
+  chip: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#DBEAFE',
@@ -965,13 +1297,13 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     gap: 6,
   },
-  languageChipText: {
+  chipText: {
     fontSize: 13,
     fontWeight: '500',
     color: '#1E40AF',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
-  removeLanguageButton: {
+  removeChipButton: {
     width: 20,
     height: 20,
     justifyContent: 'center',
@@ -1006,7 +1338,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: 16,
     borderWidth: 2,
-    padding: 40,
+    padding: SCREEN_WIDTH < 380 ? 24 : 40,
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
@@ -1018,7 +1350,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   statusTitle: {
-    fontSize: 24,
+    fontSize: SCREEN_WIDTH < 380 ? 20 : 24,
     fontWeight: '700',
     color: '#1E293B',
     marginBottom: 12,
@@ -1026,11 +1358,82 @@ const styles = StyleSheet.create({
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
   },
   statusSubtitle: {
-    fontSize: 16,
+    fontSize: 14,
     color: '#64748B',
     textAlign: 'center',
-    lineHeight: 24,
-    maxWidth: 300,
+    lineHeight: 22,
+    paddingHorizontal: 20,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1E293B',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
+  },
+  modalBody: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+  },
+  dayOption: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    marginBottom: 8,
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+  },
+  selectedDayOption: {
+    backgroundColor: '#F0FDF4',
+    borderColor: '#059669',
+  },
+  dayOptionText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#64748B',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+  selectedDayOptionText: {
+    color: '#059669',
+    fontWeight: '600',
+  },
+  modalButton: {
+    backgroundColor: '#059669',
+    marginHorizontal: 20,
+    marginTop: 16,
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  modalButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
 });

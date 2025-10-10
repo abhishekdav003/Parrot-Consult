@@ -4,7 +4,7 @@ import { Platform } from 'react-native';
 import RNBlobUtil from 'react-native-blob-util';
 
 // const BASE_URL = 'http://192.168.0.177:8011/api/v1';
-// const BASE_URL = 'http://10.0.2.2:8011/api/v1';
+const BASE_URL = 'http://10.0.2.2:8011/api/v1';
 // const BASE_URL = 'http://10.0.2.2:8011/api/v1';
 // const BASE_URL = 'http://10.33.116.48:8011/api/v1';
 // const BASE_URL = 'http://192.168.0.116:8011/api/v1';
@@ -16,7 +16,7 @@ import RNBlobUtil from 'react-native-blob-util';
 
 
 
-const BASE_URL = 'https://api.parrotconsult.com/api/v1';
+// const BASE_URL = 'https://api.parrotconsult.com/api/v1';
 
 
 const toLocalDateOnly = (date) => {
@@ -1351,6 +1351,9 @@ async updateBookingStatus(bookingId, status, additionalData = {}) {
 // Enhanced getBookingById with better error handling
 // Enhanced getBookingById with better error handling - COMPLETE FIX
 // ✅ FINAL VERSION — Direct + Fallback + Auth + Error Handling
+// âœ… ENHANCED VERSION â€" With consultant data population
+
+// âœ… ENHANCED VERSION â€" With consultant data population
 async getBookingById(bookingId) {
   console.log('[API] Getting booking by ID:', bookingId);
 
@@ -1374,14 +1377,21 @@ async getBookingById(bookingId) {
     });
 
     if (directResult.success && directResult.data) {
-      console.log('[API] Booking found directly ✅');
+      console.log('[API] Booking found directly âœ…');
+      
+      // Populate consultant data if needed
+      let bookingData = directResult.data;
+      if (typeof bookingData.consultant === 'string') {
+        bookingData = await this.populateConsultantData(bookingData);
+      }
+      
       return {
         success: true,
         data: {
-          ...directResult.data,
-          meetingLink: directResult.data.meetingLink || directResult.data._id,
-          duration: directResult.data.duration || 30,
-          status: directResult.data.status || 'scheduled'
+          ...bookingData,
+          meetingLink: bookingData.meetingLink || bookingData._id,
+          duration: bookingData.duration || 30,
+          status: bookingData.status || 'scheduled'
         }
       };
     }
@@ -1402,14 +1412,21 @@ async getBookingById(bookingId) {
         b => b._id === bookingId || b.id === bookingId
       );
       if (booking) {
-        console.log('[API] Booking found in user bookings ✅');
+        console.log('[API] Booking found in user bookings âœ…');
+        
+        // Populate consultant data if needed
+        let bookingData = booking;
+        if (typeof bookingData.consultant === 'string') {
+          bookingData = await this.populateConsultantData(bookingData);
+        }
+        
         return {
           success: true,
           data: {
-            ...booking,
-            meetingLink: booking.meetingLink || booking._id,
-            duration: booking.duration || 30,
-            status: booking.status || 'scheduled'
+            ...bookingData,
+            meetingLink: bookingData.meetingLink || bookingData._id,
+            duration: bookingData.duration || 30,
+            status: bookingData.status || 'scheduled'
           }
         };
       }
@@ -1431,14 +1448,21 @@ async getBookingById(bookingId) {
         b => b._id === bookingId || b.id === bookingId
       );
       if (booking) {
-        console.log('[API] Booking found in consultant bookings ✅');
+        console.log('[API] Booking found in consultant bookings âœ…');
+        
+        // Populate consultant data if needed
+        let bookingData = booking;
+        if (typeof bookingData.consultant === 'string') {
+          bookingData = await this.populateConsultantData(bookingData);
+        }
+        
         return {
           success: true,
           data: {
-            ...booking,
-            meetingLink: booking.meetingLink || booking._id,
-            duration: booking.duration || 30,
-            status: booking.status || 'scheduled'
+            ...bookingData,
+            meetingLink: bookingData.meetingLink || bookingData._id,
+            duration: bookingData.duration || 30,
+            status: bookingData.status || 'scheduled'
           }
         };
       }
@@ -1447,7 +1471,7 @@ async getBookingById(bookingId) {
     // =========================
     // 4. FINAL RESULT - Not Found
     // =========================
-    console.warn('[API] Booking not found in any source ❌');
+    console.warn('[API] Booking not found in any source âŒ');
     return {
       success: false,
       error: 'Booking not found. Please check the booking ID or your access permissions.'
@@ -1461,6 +1485,7 @@ async getBookingById(bookingId) {
     };
   }
 }
+
 
 // Send call notification (optional - for future enhancement)
 async sendCallNotification(bookingId, type = 'started') {
@@ -1484,6 +1509,51 @@ async sendCallNotification(bookingId, type = 'started') {
     console.error('[API] sendCallNotification error:', error);
     // Don't fail the call if notification fails
     return { success: true };
+  }
+}
+
+// âœ… NEW METHOD - Populate consultant data from all users list
+async populateConsultantData(booking) {
+  try {
+    console.log('[API] Populating consultant data for:', booking.consultant);
+    
+    // Get all consultants
+    const consultantsResult = await this.getAllUsers();
+    
+    if (consultantsResult.success && Array.isArray(consultantsResult.data)) {
+      const consultant = consultantsResult.data.find(
+        c => c._id === booking.consultant || c.id === booking.consultant
+      );
+      
+      if (consultant) {
+        console.log('[API] Found consultant data:', consultant.fullName);
+        return {
+          ...booking,
+          consultant: {
+            _id: consultant._id,
+            fullName: consultant.fullName,
+            name: consultant.fullName,
+            email: consultant.email,
+            phone: consultant.phone,
+            profileImage: consultant.profileImage
+          }
+        };
+      }
+    }
+    
+    // If not found, return with placeholder
+    console.warn('[API] Could not find consultant data');
+    return {
+      ...booking,
+      consultant: {
+        _id: booking.consultant,
+        fullName: 'Consultant',
+        name: 'Consultant'
+      }
+    };
+  } catch (error) {
+    console.error('[API] Error populating consultant data:', error);
+    return booking;
   }
 }
 

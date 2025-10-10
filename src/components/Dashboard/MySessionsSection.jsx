@@ -1,4 +1,4 @@
-// src/components/Dashboard/MySessionsSection.jsx
+// src/components/Dashboard/MySessionsSection.jsx - PRODUCTION READY
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   Alert,
+  Platform,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
@@ -21,9 +22,8 @@ const MySessionsSection = ({ user, onRefresh, onAuthError }) => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState('all');
-  const [consultantCache, setConsultantCache] = useState({});
 
-  // Fetch sessions with optimized caching
+  // Fetch sessions with sorting
   const fetchBookings = useCallback(async (showLoading = true) => {
     try {
       if (showLoading) setLoading(true);
@@ -35,32 +35,31 @@ const MySessionsSection = ({ user, onRefresh, onAuthError }) => {
       if (result.success) {
         const bookingsData = Array.isArray(result.data) ? result.data : [];
         
-        // Pre-cache consultant names for better performance
-        const consultantIds = [...new Set(
-          bookingsData
-            .map(b => typeof b.consultant === 'object' ? b.consultant._id : b.consultant)
-            .filter(Boolean)
-        )];
-        
-        if (consultantIds.length > 0) {
-          try {
-            const allUsersResult = await ApiService.getAllUsers();
-            if (allUsersResult.success && Array.isArray(allUsersResult.data)) {
-              const consultantData = {};
-              allUsersResult.data.forEach(u => {
-                if (consultantIds.includes(u._id) && u.fullName) {
-                  consultantData[u._id] = u.fullName;
-                }
-              });
-              setConsultantCache(prev => ({ ...prev, ...consultantData }));
-            }
-          } catch (error) {
-            console.log('[MY_SESSIONS] Error caching consultants:', error);
+        // âœ… Sort bookings by date/time (upcoming first, then by closest time)
+        const sortedBookings = bookingsData.sort((a, b) => {
+          const dateA = new Date(a.bookingDateTime);
+          const dateB = new Date(b.bookingDateTime);
+          const now = new Date();
+          
+          // Separate upcoming and past bookings
+          const isAUpcoming = dateA >= now;
+          const isBUpcoming = dateB >= now;
+          
+          // Upcoming bookings come first
+          if (isAUpcoming && !isBUpcoming) return -1;
+          if (!isAUpcoming && isBUpcoming) return 1;
+          
+          // Within upcoming: earliest first
+          if (isAUpcoming && isBUpcoming) {
+            return dateA - dateB;
           }
-        }
+          
+          // Within past: most recent first
+          return dateB - dateA;
+        });
         
-        setBookings(bookingsData);
-        console.log('[MY_SESSIONS] Loaded', bookingsData.length, 'sessions');
+        setBookings(sortedBookings);
+        console.log('[MY_SESSIONS] Loaded', sortedBookings.length, 'sessions');
       } else {
         if (result.needsLogin && onAuthError) {
           onAuthError(result);
@@ -91,31 +90,69 @@ const MySessionsSection = ({ user, onRefresh, onAuthError }) => {
     if (onRefresh) onRefresh();
   }, [fetchBookings, onRefresh]);
 
-  // Memoized filtered bookings for performance
+  // âœ… Memoized filtered bookings with smart filtering
   const filteredBookings = useMemo(() => {
     if (activeTab === 'all') return bookings;
     
     return bookings.filter(booking => {
+      const bookingDate = new Date(booking.bookingDateTime);
+      const now = new Date();
+      const timeDiff = bookingDate - now;
+      const minutesDiff = Math.floor(timeDiff / 60000);
+      const sessionDuration = booking.duration || 30;
+      
       switch (activeTab) {
         case 'upcoming':
-          return ['scheduled', 'pending'].includes(booking.status);
+          // Show scheduled/pending sessions that haven't ended yet
+          if (['scheduled', 'pending'].includes(booking.status)) {
+            // Check if session hasn't ended
+            if (minutesDiff < 0) {
+              const minutesAfterStart = Math.abs(minutesDiff);
+              return minutesAfterStart < sessionDuration; // Still in progress
+            }
+            return true; // Future session
+          }
+          return false;
+          
         case 'completed':
           return booking.status === 'completed';
+          
         case 'cancelled':
           return ['cancelled', 'missed'].includes(booking.status);
+          
         default:
           return true;
       }
     });
   }, [bookings, activeTab]);
 
-  // Memoized tab counts
-  const tabCounts = useMemo(() => ({
-    all: bookings.length,
-    upcoming: bookings.filter(b => ['scheduled', 'pending'].includes(b.status)).length,
-    completed: bookings.filter(b => b.status === 'completed').length,
-    cancelled: bookings.filter(b => ['cancelled', 'missed'].includes(b.status)).length,
-  }), [bookings]);
+  // âœ… Memoized tab counts with smart counting
+  const tabCounts = useMemo(() => {
+    const now = new Date();
+    
+    const upcoming = bookings.filter(b => {
+      if (!['scheduled', 'pending'].includes(b.status)) return false;
+      
+      const bookingDate = new Date(b.bookingDateTime);
+      const timeDiff = bookingDate - now;
+      const minutesDiff = Math.floor(timeDiff / 60000);
+      const sessionDuration = b.duration || 30;
+      
+      // Future session
+      if (minutesDiff >= 0) return true;
+      
+      // In-progress session
+      const minutesAfterStart = Math.abs(minutesDiff);
+      return minutesAfterStart < sessionDuration;
+    }).length;
+    
+    return {
+      all: bookings.length,
+      upcoming: upcoming,
+      completed: bookings.filter(b => b.status === 'completed').length,
+      cancelled: bookings.filter(b => ['cancelled', 'missed'].includes(b.status)).length,
+    };
+  }, [bookings]);
 
   const tabs = useMemo(() => [
     { key: 'all', label: 'All', icon: 'apps-outline' },
@@ -248,22 +285,31 @@ const MySessionsSection = ({ user, onRefresh, onAuthError }) => {
         )}
       </ScrollView>
 
-      {/* Bottom Stats - Only show if there are bookings */}
+      {/* Bottom Stats */}
       {bookings.length > 0 && (
         <View style={styles.bottomStats}>
           <View style={styles.statCard}>
+            <View style={[styles.statIconContainer, { backgroundColor: '#E6F3FF' }]}>
+              <Ionicons name="calendar-outline" size={20} color="#007AFF" />
+            </View>
             <Text style={styles.statNumber}>{tabCounts.all}</Text>
             <Text style={styles.statLabel}>Total</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statCard}>
-            <Text style={styles.statNumber}>{tabCounts.completed}</Text>
-            <Text style={styles.statLabel}>Completed</Text>
+            <View style={[styles.statIconContainer, { backgroundColor: '#FFF4E6' }]}>
+              <Ionicons name="time-outline" size={20} color="#FF9500" />
+            </View>
+            <Text style={styles.statNumber}>{tabCounts.upcoming}</Text>
+            <Text style={styles.statLabel}>Upcoming</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statCard}>
-            <Text style={styles.statNumber}>{tabCounts.upcoming}</Text>
-            <Text style={styles.statLabel}>Upcoming</Text>
+            <View style={[styles.statIconContainer, { backgroundColor: '#F0FDF4' }]}>
+              <Ionicons name="checkmark-circle-outline" size={20} color="#059669" />
+            </View>
+            <Text style={styles.statNumber}>{tabCounts.completed}</Text>
+            <Text style={styles.statLabel}>Completed</Text>
           </View>
         </View>
       )}
@@ -274,13 +320,13 @@ const MySessionsSection = ({ user, onRefresh, onAuthError }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F2F2F7',
+    backgroundColor: '#F8FAFC',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F2F2F7',
+    backgroundColor: '#F8FAFC',
   },
   loadingText: {
     marginTop: 16,
@@ -346,11 +392,17 @@ const styles = StyleSheet.create({
   activeTab: {
     backgroundColor: '#007AFF',
     borderColor: '#007AFF',
-    shadowColor: '#007AFF',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#007AFF',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
   },
   tabIcon: {
     width: 28,
@@ -441,11 +493,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 28,
     paddingVertical: 14,
     borderRadius: 28,
-    shadowColor: '#007AFF',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#007AFF',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
     gap: 8,
   },
   bookNowText: {
@@ -461,20 +519,34 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderTopWidth: 1,
     borderTopColor: '#E5E5EA',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 8,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 8,
+      },
+    }),
   },
   statCard: {
     flex: 1,
     alignItems: 'center',
   },
+  statIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
   statNumber: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: '700',
-    color: '#007AFF',
+    color: '#1C1C1E',
     marginBottom: 4,
   },
   statLabel: {
@@ -484,7 +556,7 @@ const styles = StyleSheet.create({
   },
   statDivider: {
     width: 1,
-    height: 40,
+    height: 60,
     backgroundColor: '#E5E5EA',
   },
 });

@@ -1,13 +1,13 @@
-// src/components/Dashboard/EnhancedSessionCard.jsx - FIXED VERSION
+// src/components/Dashboard/EnhancedSessionCard.jsx - COMPLETE PRODUCTION READY CODE
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   View, 
   Text, 
   TouchableOpacity, 
   StyleSheet, 
-  Alert,
-  Platform,
+  Modal,
   Animated,
+  Platform,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
@@ -16,73 +16,147 @@ const EnhancedSessionCard = ({ booking, isConsultantView = false }) => {
   const navigation = useNavigation();
   const [isExpanded, setIsExpanded] = useState(false);
   const [scaleAnim] = useState(new Animated.Value(1));
+  const [showTimeAlert, setShowTimeAlert] = useState(false);
+  const [timeInfo, setTimeInfo] = useState('');
+  const [canJoin, setCanJoin] = useState(false);
+  const [meetingStatus, setMeetingStatus] = useState('upcoming');
 
-  // FIXED: Removed time restriction - users can join anytime
-  const canJoinCall = useCallback(() => {
-    if (!booking?.bookingDateTime) return false;
-    
-    // Check if session is scheduled or in-progress
-    const validStatuses = ['scheduled', 'in-progress'];
-    return validStatuses.includes(booking.status);
-  }, [booking]);
+  // Debug: Log booking data to help troubleshoot
+  useEffect(() => {
+    console.log('[SESSION_CARD] Booking data:', {
+      id: booking._id,
+      consultant: booking.consultant,
+      consultantName: booking.consultantName,
+      user: booking.user,
+      isConsultantView: isConsultantView
+    });
+  }, [booking, isConsultantView]);
 
-  // Calculate time info for display
-  const getTimeInfo = useCallback(() => {
-    if (!booking?.bookingDateTime) return 'Time not available';
+  // ✅ CRITICAL: 5-minute rule validation with complete logic
+  const calculateMeetingStatus = useCallback(() => {
+    if (!booking?.bookingDateTime) {
+      return { 
+        canJoin: false, 
+        timeInfo: 'Time not available',
+        status: 'unavailable',
+        minutesUntilStart: null
+      };
+    }
     
     const bookingTime = new Date(booking.bookingDateTime);
     const now = new Date();
     const timeDiff = bookingTime - now;
     const minutesDiff = Math.floor(timeDiff / 60000);
+    const sessionDuration = booking.duration || 30;
     
-    // If booking is in the past
+    // Meeting has already started
     if (minutesDiff < 0) {
       const minutesAfterStart = Math.abs(minutesDiff);
-      const sessionDuration = booking.duration || 30;
       
+      // Meeting is still within duration
       if (minutesAfterStart < sessionDuration) {
-        return `In Progress (${sessionDuration - minutesAfterStart}m remaining)`;
+        return {
+          canJoin: true,
+          timeInfo: `In Progress (${sessionDuration - minutesAfterStart}m remaining)`,
+          status: 'in-progress',
+          minutesUntilStart: minutesDiff
+        };
       } else {
-        return 'Session Ended';
+        // Meeting has ended
+        return {
+          canJoin: false,
+          timeInfo: 'Session Ended',
+          status: 'ended',
+          minutesUntilStart: minutesDiff
+        };
       }
     }
     
-    // If booking is in the future
+    // Meeting is in future - ✅ 5-MINUTE RULE
+    // Can ONLY join 5 minutes before or less
+    if (minutesDiff <= 5) {
+      return {
+        canJoin: true,
+        timeInfo: minutesDiff === 0 ? 'Starting Now' : `Starting in ${minutesDiff}m`,
+        status: 'ready',
+        minutesUntilStart: minutesDiff
+      };
+    }
+    
+    // Too early to join - MORE than 5 minutes before
     const hours = Math.floor(minutesDiff / 60);
     const mins = minutesDiff % 60;
     
+    let displayTime;
     if (hours > 24) {
       const days = Math.floor(hours / 24);
-      return `Starts in ${days} day${days > 1 ? 's' : ''}`;
+      displayTime = `Starts in ${days} day${days > 1 ? 's' : ''}`;
     } else if (hours > 0) {
-      return `Starts in ${hours}h ${mins}m`;
-    } else if (mins > 0) {
-      return `Starts in ${mins} minute${mins > 1 ? 's' : ''}`;
+      displayTime = `Starts in ${hours}h ${mins}m`;
     } else {
-      return 'Starting now';
+      displayTime = `Starts in ${mins} minute${mins > 1 ? 's' : ''}`;
     }
+    
+    return {
+      canJoin: false,
+      timeInfo: displayTime,
+      status: 'upcoming',
+      minutesUntilStart: minutesDiff
+    };
   }, [booking]);
 
-  // Update every minute
-  const [timeInfo, setTimeInfo] = useState(getTimeInfo());
-  
+  // Update meeting status every 30 seconds
   useEffect(() => {
-    setTimeInfo(getTimeInfo());
-    const interval = setInterval(() => {
-      setTimeInfo(getTimeInfo());
-    }, 60000); // Update every minute
+    const updateStatus = () => {
+      const status = calculateMeetingStatus();
+      setTimeInfo(status.timeInfo);
+      setCanJoin(status.canJoin);
+      setMeetingStatus(status.status);
+    };
+    
+    updateStatus();
+    const interval = setInterval(updateStatus, 30000); // Update every 30 seconds
     
     return () => clearInterval(interval);
-  }, [getTimeInfo]);
+  }, [calculateMeetingStatus]);
 
-  // Handle join call - FIXED with proper navigation
+  // Handle join call with comprehensive validation
   const handleJoinCall = useCallback(() => {
-    if (!booking?._id) {
-      Alert.alert('Error', 'Invalid booking ID');
+    const status = calculateMeetingStatus();
+    
+    if (!status.canJoin) {
+      if (status.status === 'ended') {
+        setShowTimeAlert({
+          type: 'ended',
+          title: 'Session Ended',
+          message: 'This consultation session has already ended. Please book a new session if you need further consultation.',
+          icon: 'close-circle-outline',
+          color: '#FF3B30'
+        });
+      } else if (status.status === 'upcoming') {
+        const absMinutes = Math.abs(status.minutesUntilStart);
+        const waitTime = absMinutes - 5;
+        setShowTimeAlert({
+          type: 'too-early',
+          title: 'Too Early to Join',
+          message: `This meeting will be available to join 5 minutes before the scheduled time.\n\nYou can join in ${waitTime} minute${waitTime !== 1 ? 's' : ''}.`,
+          icon: 'time-outline',
+          color: '#FF9500',
+          countdown: waitTime
+        });
+      } else {
+        setShowTimeAlert({
+          type: 'unavailable',
+          title: 'Cannot Join Meeting',
+          message: 'This meeting is currently unavailable. Please check the meeting status and time.',
+          icon: 'alert-circle-outline',
+          color: '#8E8E93'
+        });
+      }
       return;
     }
 
-    // Animate press
+    // Animate press for better UX
     Animated.sequence([
       Animated.timing(scaleAnim, {
         toValue: 0.95,
@@ -96,21 +170,26 @@ const EnhancedSessionCard = ({ booking, isConsultantView = false }) => {
       }),
     ]).start();
 
-    // Navigate to video call screen
+    // Navigate to video call
     try {
       console.log('[SESSION_CARD] Navigating to VideoCall with booking:', booking._id);
-      
       navigation.navigate('VideoCall', {
         bookingId: booking._id,
         channelName: booking.meetingLink || booking._id,
       });
     } catch (error) {
       console.error('[SESSION_CARD] Navigation error:', error);
-      Alert.alert('Error', 'Failed to start video call. Please try again.');
+      setShowTimeAlert({
+        type: 'error',
+        title: 'Navigation Error',
+        message: 'Failed to start video call. Please try again.',
+        icon: 'alert-circle-outline',
+        color: '#FF3B30'
+      });
     }
-  }, [booking, navigation, scaleAnim]);
+  }, [booking, calculateMeetingStatus, scaleAnim, navigation]);
 
-  // Format date and time
+  // Format date and time beautifully
   const formatDateTime = useCallback((dateString) => {
     try {
       const date = new Date(dateString);
@@ -122,7 +201,8 @@ const EnhancedSessionCard = ({ booking, isConsultantView = false }) => {
         }),
         time: date.toLocaleTimeString('en-GB', { 
           hour: '2-digit', 
-          minute: '2-digit' 
+          minute: '2-digit',
+          hour12: true
         }),
         dayName: date.toLocaleDateString('en-GB', { weekday: 'short' })
       };
@@ -132,7 +212,7 @@ const EnhancedSessionCard = ({ booking, isConsultantView = false }) => {
     }
   }, []);
 
-  // Status configuration
+  // Status configuration with proper colors
   const getStatusConfig = useCallback((status) => {
     const configs = {
       pending: { 
@@ -142,9 +222,9 @@ const EnhancedSessionCard = ({ booking, isConsultantView = false }) => {
         label: 'Pending'
       },
       scheduled: { 
-        color: '#34C759', 
-        bg: '#E8F7ED', 
-        icon: 'calendar-check-outline',
+        color: '#059669', 
+        bg: '#F0FDF4', 
+        icon: 'calendar-outline',
         label: 'Scheduled'
       },
       'in-progress': { 
@@ -154,8 +234,8 @@ const EnhancedSessionCard = ({ booking, isConsultantView = false }) => {
         label: 'In Progress'
       },
       completed: { 
-        color: '#8E44AD', 
-        bg: '#F3E8FF', 
+        color: '#059669', 
+        bg: '#F0FDF4', 
         icon: 'checkmark-circle-outline',
         label: 'Completed'
       },
@@ -172,15 +252,10 @@ const EnhancedSessionCard = ({ booking, isConsultantView = false }) => {
         label: 'Missed'
       }
     };
-    return configs[status] || { 
-      color: '#8E8E93', 
-      bg: '#F2F2F7', 
-      icon: 'help-circle-outline',
-      label: 'Unknown'
-    };
+    return configs[status] || configs.scheduled;
   }, []);
 
-  // Memoized values
+  // Memoized values for performance
   const { date, time, dayName } = useMemo(
     () => formatDateTime(booking.bookingDateTime), 
     [booking.bookingDateTime, formatDateTime]
@@ -196,15 +271,27 @@ const EnhancedSessionCard = ({ booking, isConsultantView = false }) => {
     [booking.status]
   );
   
-  // Get participant name
   const participantName = useMemo(() => {
     try {
       if (isConsultantView) {
+        // For consultant view, show client name
         return booking.user?.fullName || booking.user?.name || 'Client';
       }
-      return booking.consultant?.fullName || booking.consultant?.name || 'Consultant';
+      
+      // For user view, show consultant name
+      const consultant = booking.consultant;
+      
+      // Handle different data structures
+      if (typeof consultant === 'object' && consultant !== null) {
+        return consultant.fullName || consultant.name || 'Consultant';
+      } else if (typeof consultant === 'string') {
+        // If consultant is just an ID, try to get name from other sources
+        return booking.consultantName || 'Consultant';
+      }
+      
+      return 'Consultant';
     } catch (error) {
-      console.error('[SESSION_CARD] Name extraction error:', error);
+      console.error('[SESSION_CARD] Error getting participant name:', error);
       return isConsultantView ? 'Client' : 'Consultant';
     }
   }, [isConsultantView, booking]);
@@ -214,197 +301,267 @@ const EnhancedSessionCard = ({ booking, isConsultantView = false }) => {
     [participantName]
   );
 
-  // Handle card press
-  const handleCardPress = useCallback(() => {
-    setIsExpanded(prev => !prev);
-  }, []);
-
   return (
-    <Animated.View 
-      style={[
-        styles.sessionCard,
-        { transform: [{ scale: scaleAnim }] }
-      ]}
-    >
-      {/* Header */}
-      <TouchableOpacity 
-        onPress={handleCardPress}
-        activeOpacity={0.9}
-        style={styles.cardHeader}
+    <>
+      <Animated.View 
+        style={[
+          styles.sessionCard,
+          { transform: [{ scale: scaleAnim }] }
+        ]}
       >
-        <View style={styles.participantInfo}>
-          <View style={[
-            styles.avatar,
-            { backgroundColor: isConsultantView ? '#34C759' : '#007AFF' }
-          ]}>
-            <Text style={styles.avatarText}>{participantInitial}</Text>
-          </View>
-          <View style={styles.participantDetails}>
-            <Text style={styles.participantName} numberOfLines={1}>
-              {participantName}
-            </Text>
-            <Text style={styles.sessionType}>Video Consultation</Text>
-          </View>
-        </View>
-        <View style={[styles.statusBadge, { backgroundColor: statusConfig.bg }]}>
-          <Ionicons name={statusConfig.icon} size={14} color={statusConfig.color} />
-          <Text style={[styles.statusText, { color: statusConfig.color }]}>
-            {statusConfig.label}
-          </Text>
-        </View>
-      </TouchableOpacity>
-
-      {/* Session Details */}
-      <View style={styles.sessionDetails}>
-        <View style={styles.detailRow}>
-          <View style={styles.detailItem}>
-            <Ionicons 
-              name="calendar-outline" 
-              size={16} 
-              color={isConsultantView ? '#34C759' : '#007AFF'} 
-            />
-            <Text style={styles.detailText}>{dayName}, {date}</Text>
-          </View>
-          <View style={styles.detailItem}>
-            <Ionicons 
-              name="time-outline" 
-              size={16} 
-              color={isConsultantView ? '#34C759' : '#007AFF'} 
-            />
-            <Text style={styles.detailText}>{time}</Text>
-          </View>
-        </View>
-        
-        <View style={styles.detailRow}>
-          <View style={styles.detailItem}>
-            <Ionicons 
-              name="hourglass-outline" 
-              size={16} 
-              color={isConsultantView ? '#34C759' : '#007AFF'} 
-            />
-            <Text style={styles.detailText}>{booking.duration || 30} min</Text>
-          </View>
-          <View style={styles.detailItem}>
-            <Ionicons 
-              name="videocam-outline" 
-              size={16} 
-              color={isConsultantView ? '#34C759' : '#007AFF'} 
-            />
-            <Text style={styles.detailText}>Video Call</Text>
-          </View>
-        </View>
-      </View>
-
-      {/* Time Info Badge */}
-      {isUpcoming && (
-        <View style={[
-          styles.timeInfoContainer,
-          { 
-            backgroundColor: canJoinCall() ? '#E8F7ED' : '#FFF4E6',
-            borderColor: canJoinCall() ? '#34C759' : '#FF9500',
-          }
-        ]}>
-          <Ionicons 
-            name={canJoinCall() ? "videocam" : "time-outline"} 
-            size={16} 
-            color={canJoinCall() ? "#34C759" : "#FF9500"} 
-          />
-          <Text style={[
-            styles.timeInfoText,
-            { color: canJoinCall() ? "#34C759" : "#FF9500" }
-          ]}>
-            {timeInfo}
-          </Text>
-          {canJoinCall() && (
-            <View style={styles.readyIndicator}>
-              <View style={styles.readyDot} />
+        {/* Header Section */}
+        <TouchableOpacity 
+          onPress={() => setIsExpanded(!isExpanded)}
+          activeOpacity={0.9}
+          style={styles.cardHeader}
+        >
+          <View style={styles.participantInfo}>
+            <View style={[
+              styles.avatar,
+              { backgroundColor: isConsultantView ? '#059669' : '#007AFF' }
+            ]}>
+              <Text style={styles.avatarText}>{participantInitial}</Text>
             </View>
-          )}
-        </View>
-      )}
-
-      {/* Consultation Details - Expandable */}
-      {booking.consultationDetail && isExpanded && (
-        <View style={styles.consultationNote}>
-          <View style={styles.noteHeader}>
-            <Ionicons name="document-text-outline" size={16} color="#007AFF" />
-            <Text style={styles.noteLabel}>Consultation Notes</Text>
+            <View style={styles.participantDetails}>
+              <Text style={styles.participantName} numberOfLines={1}>
+                {participantName}
+              </Text>
+              <Text style={styles.sessionType}>Video Consultation</Text>
+            </View>
           </View>
-          <Text style={styles.noteText}>
-            {booking.consultationDetail}
-          </Text>
-        </View>
-      )}
+          <View style={[styles.statusBadge, { backgroundColor: statusConfig.bg }]}>
+            <View style={[styles.statusDot, { backgroundColor: statusConfig.color }]} />
+            <Text style={[styles.statusText, { color: statusConfig.color }]}>
+              {statusConfig.label}
+            </Text>
+          </View>
+        </TouchableOpacity>
 
-      {/* Action Buttons - Show for scheduled and in-progress sessions */}
-      {isUpcoming && (
-        <View style={styles.actionButtons}>
+        {/* Session Details Section */}
+        <View style={styles.sessionDetails}>
+          <View style={styles.detailRow}>
+            <View style={styles.detailItem}>
+              <View style={[styles.detailIconBg, { backgroundColor: '#F0FDF4' }]}>
+                <Ionicons 
+                  name="calendar-outline" 
+                  size={14} 
+                  color="#059669" 
+                />
+              </View>
+              <Text style={styles.detailText}>{dayName}, {date}</Text>
+            </View>
+          </View>
+          
+          <View style={styles.detailRow}>
+            <View style={styles.detailItem}>
+              <View style={[styles.detailIconBg, { backgroundColor: '#FFF4E6' }]}>
+                <Ionicons 
+                  name="time-outline" 
+                  size={14} 
+                  color="#FF9500" 
+                />
+              </View>
+              <Text style={styles.detailText}>{time}</Text>
+            </View>
+            <View style={styles.detailItem}>
+              <View style={[styles.detailIconBg, { backgroundColor: '#E6F3FF' }]}>
+                <Ionicons 
+                  name="hourglass-outline" 
+                  size={14} 
+                  color="#007AFF" 
+                />
+              </View>
+              <Text style={styles.detailText}>{booking.duration || 30} min</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Time Info Badge - Shows meeting availability */}
+        {isUpcoming && (
+          <View style={[
+            styles.timeInfoContainer,
+            { 
+              backgroundColor: canJoin ? '#F0FDF4' : '#FFF4E6',
+              borderColor: canJoin ? '#059669' : '#FF9500',
+            }
+          ]}>
+            <View style={styles.timeInfoContent}>
+              <Ionicons 
+                name={canJoin ? "videocam" : "time-outline"} 
+                size={16} 
+                color={canJoin ? "#059669" : "#FF9500"} 
+              />
+              <Text style={[
+                styles.timeInfoText,
+                { color: canJoin ? "#059669" : "#FF9500" }
+              ]}>
+                {timeInfo}
+              </Text>
+              {canJoin && (
+                <View style={styles.readyIndicator}>
+                  <View style={styles.readyDot} />
+                </View>
+              )}
+            </View>
+          </View>
+        )}
+
+        {/* Consultation Notes - Expandable */}
+        {booking.consultationDetail && isExpanded && (
+          <View style={styles.consultationNote}>
+            <View style={styles.noteHeader}>
+              <Ionicons name="document-text-outline" size={16} color="#059669" />
+              <Text style={styles.noteLabel}>Consultation Notes</Text>
+            </View>
+            <Text style={styles.noteText}>
+              {booking.consultationDetail}
+            </Text>
+          </View>
+        )}
+
+        {/* Action Buttons - For Upcoming Sessions */}
+        {isUpcoming && (
+          <View style={styles.actionButtons}>
+            <TouchableOpacity 
+              style={[
+                styles.joinButton,
+                { 
+                  backgroundColor: canJoin 
+                    ? (isConsultantView ? '#059669' : '#007AFF')
+                    : '#E5E5EA'
+                }
+              ]}
+              onPress={handleJoinCall}
+              activeOpacity={0.8}
+              disabled={!canJoin}
+            >
+              <Ionicons 
+                name="videocam" 
+                size={20} 
+                color={canJoin ? "#fff" : "#8E8E93"} 
+              />
+              <Text style={[
+                styles.joinButtonText,
+                { color: canJoin ? '#fff' : '#8E8E93' }
+              ]}>
+                {canJoin 
+                  ? (booking.status === 'in-progress' ? 'Rejoin Video Call' : 'Join Video Call')
+                  : 'Meeting Not Available Yet'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Completed Session Badge */}
+        {booking.status === 'completed' && (
+          <View style={styles.completedSection}>
+            <View style={styles.completedBadge}>
+              <Ionicons name="checkmark-circle" size={20} color="#059669" />
+              <Text style={styles.completedText}>Session Completed Successfully</Text>
+            </View>
+          </View>
+        )}
+
+        {/* Expand/Collapse Button */}
+        {booking.consultationDetail && (
           <TouchableOpacity 
-            style={[
-              styles.joinButton,
-              { backgroundColor: isConsultantView ? '#34C759' : '#007AFF' }
-            ]}
-            onPress={handleJoinCall}
-            activeOpacity={0.8}
+            style={styles.expandButton}
+            onPress={() => setIsExpanded(!isExpanded)}
+            activeOpacity={0.7}
           >
             <Ionicons 
-              name="videocam" 
-              size={20} 
-              color="#fff" 
+              name={isExpanded ? "chevron-up" : "chevron-down"} 
+              size={18} 
+              color="#8E8E93" 
             />
-            <Text style={styles.joinButtonText}>
-              {booking.status === 'in-progress' ? 'Rejoin Video Call' : 'Join Video Call'}
+            <Text style={styles.expandText}>
+              {isExpanded ? 'Show Less' : 'Show More'}
             </Text>
           </TouchableOpacity>
+        )}
+      </Animated.View>
+
+      {/* Time Alert Modal - Beautiful alerts for all scenarios */}
+      <Modal
+        visible={!!showTimeAlert}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowTimeAlert(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.alertContainer}>
+            {/* Alert Icon */}
+            <View style={[
+              styles.alertIconContainer,
+              { backgroundColor: showTimeAlert?.color + '15' }
+            ]}>
+              <Ionicons 
+                name={showTimeAlert?.icon} 
+                size={48} 
+                color={showTimeAlert?.color} 
+              />
+            </View>
+            
+            {/* Alert Title */}
+            <Text style={styles.alertTitle}>{showTimeAlert?.title}</Text>
+            
+            {/* Alert Message */}
+            <Text style={styles.alertMessage}>{showTimeAlert?.message}</Text>
+            
+            {/* Countdown Badge - Only for "too early" scenario */}
+            {showTimeAlert?.type === 'too-early' && (
+              <View style={styles.countdownContainer}>
+                <View style={styles.countdownBadge}>
+                  <Ionicons name="time-outline" size={16} color="#FF9500" />
+                  <Text style={styles.countdownText}>
+                    Available in {showTimeAlert.countdown} min
+                  </Text>
+                </View>
+              </View>
+            )}
+            
+            {/* Close Button */}
+            <TouchableOpacity
+              style={[
+                styles.alertButton,
+                { backgroundColor: showTimeAlert?.color }
+              ]}
+              onPress={() => setShowTimeAlert(false)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.alertButtonText}>Got It</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      )}
-
-      {/* Completed Session Actions */}
-      {booking.status === 'completed' && (
-        <TouchableOpacity 
-          style={styles.reviewButton}
-          activeOpacity={0.8}
-        >
-          <Ionicons name="star-outline" size={18} color="#FF9500" />
-          <Text style={styles.reviewButtonText}>Rate & Review Session</Text>
-        </TouchableOpacity>
-      )}
-
-      {/* Expand/Collapse Indicator */}
-      {booking.consultationDetail && (
-        <TouchableOpacity 
-          style={styles.expandButton}
-          onPress={handleCardPress}
-          activeOpacity={0.7}
-        >
-          <Ionicons 
-            name={isExpanded ? "chevron-up" : "chevron-down"} 
-            size={20} 
-            color="#8E8E93" 
-          />
-          <Text style={styles.expandText}>
-            {isExpanded ? 'Show Less' : 'Show More'}
-          </Text>
-        </TouchableOpacity>
-      )}
-    </Animated.View>
+      </Modal>
+    </>
   );
 };
 
+// ==================== STYLES ====================
 const styles = StyleSheet.create({
+  // Main Card Container
   sessionCard: {
     backgroundColor: '#fff',
-    borderRadius: 20,
+    borderRadius: 16,
     padding: 20,
     marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 5,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.08,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
     borderWidth: 1,
-    borderColor: '#F0F0F0',
+    borderColor: '#E5E5EA',
   },
+
+  // Header Styles
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -424,11 +581,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 3,
   },
   avatarText: {
     fontSize: 20,
@@ -449,47 +601,66 @@ const styles = StyleSheet.create({
     color: '#8E8E93',
     fontWeight: '500',
   },
+
+  // Status Badge Styles
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 20,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginRight: 6,
   },
   statusText: {
     fontSize: 13,
     fontWeight: '700',
-    marginLeft: 5,
   },
+
+  // Session Details Styles
   sessionDetails: {
     marginBottom: 12,
-    paddingHorizontal: 4,
   },
   detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 10,
+    marginBottom: 8,
   },
   detailItem: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
   },
+  detailIconBg: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
   detailText: {
     fontSize: 14,
     color: '#1C1C1E',
-    marginLeft: 8,
     fontWeight: '600',
   },
+
+  // Time Info Badge Styles
   timeInfoContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 12,
     marginBottom: 16,
-    alignSelf: 'flex-start',
     borderWidth: 1.5,
+  },
+  timeInfoContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   timeInfoText: {
     fontSize: 14,
@@ -498,25 +669,25 @@ const styles = StyleSheet.create({
   },
   readyIndicator: {
     marginLeft: 8,
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#34C759',
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
   readyDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#34C759',
-    opacity: 0.6,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#059669',
   },
+
+  // Consultation Notes Styles
   consultationNote: {
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#F8FAFC',
     padding: 16,
-    borderRadius: 14,
+    borderRadius: 12,
     marginBottom: 16,
-    borderLeftWidth: 4,
-    borderLeftColor: '#007AFF',
+    borderLeftWidth: 3,
+    borderLeftColor: '#059669',
   },
   noteHeader: {
     flexDirection: 'row',
@@ -524,19 +695,20 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   noteLabel: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
-    color: '#007AFF',
+    color: '#059669',
     marginLeft: 6,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   noteText: {
-    fontSize: 15,
+    fontSize: 14,
     color: '#1C1C1E',
-    lineHeight: 22,
-    fontWeight: '400',
+    lineHeight: 20,
   },
+
+  // Action Button Styles
   actionButtons: {
     marginTop: 4,
   },
@@ -544,36 +716,49 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
-    borderRadius: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
+    paddingVertical: 14,
+    borderRadius: 12,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
   },
   joinButtonText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
-    color: '#fff',
-    marginLeft: 10,
+    marginLeft: 8,
   },
-  reviewButton: {
+
+  // Completed Section Styles
+  completedSection: {
+    marginTop: 8,
+  },
+  completedBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFF4E6',
-    paddingVertical: 14,
-    borderRadius: 14,
+    backgroundColor: '#F0FDF4',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#FFDDB3',
+    borderColor: '#059669',
   },
-  reviewButtonText: {
-    fontSize: 15,
+  completedText: {
+    fontSize: 14,
     fontWeight: '700',
-    color: '#FF9500',
+    color: '#059669',
     marginLeft: 8,
   },
+
+  // Expand/Collapse Button Styles
   expandButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -584,10 +769,91 @@ const styles = StyleSheet.create({
     borderTopColor: '#F2F2F7',
   },
   expandText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
     color: '#8E8E93',
     marginLeft: 4,
+  },
+
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  alertContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    maxWidth: 340,
+    alignItems: 'center',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.3,
+        shadowRadius: 20,
+      },
+      android: {
+        elevation: 10,
+      },
+    }),
+  },
+  alertIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  alertTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#1C1C1E',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  alertMessage: {
+    fontSize: 15,
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 20,
+  },
+  countdownContainer: {
+    marginBottom: 20,
+  },
+  countdownBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF4E6',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#FF9500',
+  },
+  countdownText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FF9500',
+    marginLeft: 6,
+  },
+  alertButton: {
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    borderRadius: 12,
+    width: '100%',
+    alignItems: 'center',
+  },
+  alertButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#fff',
   },
 });
 

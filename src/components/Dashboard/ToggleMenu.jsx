@@ -157,25 +157,26 @@ const ToggleMenu = ({
           <View style={styles.actionSection}>
             <Text style={styles.menuSectionTitle}>Quick Actions</Text>
             
-            {isConsultant && (
-              <TouchableOpacity
-                style={styles.actionButton}
-                onPress={() => {
-                  // Handle upload reel action
-                  onClose();
-                }}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.actionIcon, { backgroundColor: '#8B5CF6' }]}>
-                  <Ionicons name="videocam" size={20} color="#ffffff" />
-                </View>
-                <View style={styles.actionContent}>
-                  <Text style={styles.actionText}>Upload Reel</Text>
-                  <Text style={styles.actionSubtext}>Share your expertise</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={16} color="#94A3B8" />
-              </TouchableOpacity>
-            )}
+            // In ToggleMenu.jsx - Update the Upload Reel button
+{isConsultant && (
+  <TouchableOpacity
+    style={styles.actionButton}
+    onPress={() => {
+      navigation.navigate('ReelUpload'); // Navigate to new screen
+      onClose();
+    }}
+    activeOpacity={0.7}
+  >
+    <View style={[styles.actionIcon, { backgroundColor: '#8B5CF6' }]}>
+      <Ionicons name="videocam" size={20} color="#ffffff" />
+    </View>
+    <View style={styles.actionContent}>
+      <Text style={styles.actionText}>Upload Reel</Text>
+      <Text style={styles.actionSubtext}>Share your expertise</Text>
+    </View>
+    <Ionicons name="chevron-forward" size={16} color="#94A3B8" />
+  </TouchableOpacity>
+)}
 
             <TouchableOpacity
               style={styles.actionButton}
