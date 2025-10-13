@@ -22,8 +22,8 @@ import { io } from 'socket.io-client';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-// const CHAT_SERVER = 'https://api.parrotconsult.com';
-const CHAT_SERVER = 'http://192.168.1.26:8011';
+const CHAT_SERVER = 'https://api.parrotconsult.com';
+// const CHAT_SERVER = 'http://192.168.1.26:8011';
 
 
 const ChatScreen = ({ navigation, route }) => {
@@ -166,6 +166,8 @@ const ChatScreen = ({ navigation, route }) => {
           ...msg,
           status: msg.sender._id === user._id 
             ? (msg.readBy?.includes(otherId) ? 'read' : 'sent')
+
+            
             : 'received'
         }));
         

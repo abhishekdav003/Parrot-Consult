@@ -1,4 +1,4 @@
-// src/components/Dashboard/ToggleMenu.jsx
+// src/components/Dashboard/ToggleMenu.jsx - UPDATED
 import React, { useMemo } from 'react';
 import {
   View,
@@ -22,7 +22,7 @@ const ToggleMenu = ({
 }) => {
   // Check if user is consultant
   const isConsultant = useMemo(() => {
-    return user?.role === 'consultant'  || user?.consultantRequest?.status === 'approved';
+    return user?.role === 'consultant' || user?.consultantRequest?.status === 'approved';
   }, [user?.role, user?.consultantRequest?.status]);
 
   // Base menu (visible to all)
@@ -157,26 +157,26 @@ const ToggleMenu = ({
           <View style={styles.actionSection}>
             <Text style={styles.menuSectionTitle}>Quick Actions</Text>
             
-            // In ToggleMenu.jsx - Update the Upload Reel button
-{isConsultant && (
-  <TouchableOpacity
-    style={styles.actionButton}
-    onPress={() => {
-      navigation.navigate('ReelUpload'); // Navigate to new screen
-      onClose();
-    }}
-    activeOpacity={0.7}
-  >
-    <View style={[styles.actionIcon, { backgroundColor: '#8B5CF6' }]}>
-      <Ionicons name="videocam" size={20} color="#ffffff" />
-    </View>
-    <View style={styles.actionContent}>
-      <Text style={styles.actionText}>Upload Reel</Text>
-      <Text style={styles.actionSubtext}>Share your expertise</Text>
-    </View>
-    <Ionicons name="chevron-forward" size={16} color="#94A3B8" />
-  </TouchableOpacity>
-)}
+            {/* Upload Reel - Only for consultants */}
+            {isConsultant && (
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={() => {
+                  onItemPress('uploadreel'); // Navigate to upload reel section
+                  onClose();
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.actionIcon, { backgroundColor: '#8B5CF6' }]}>
+                  <Ionicons name="videocam" size={20} color="#ffffff" />
+                </View>
+                <View style={styles.actionContent}>
+                  <Text style={styles.actionText}>Upload Reel</Text>
+                  <Text style={styles.actionSubtext}>Share your expertise</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color="#94A3B8" />
+              </TouchableOpacity>
+            )}
 
             <TouchableOpacity
               style={styles.actionButton}
