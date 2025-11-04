@@ -137,7 +137,7 @@ const PaymentScreen = ({
         description: `Consultation with ${expert.fullName}`,
         image: expert.profileImage || 'https://via.placeholder.com/100x100',
         currency: 'INR',
-        key: 'rzp_test_31csbH4WG6RLV5', // Replace with your actual Razorpay key
+        key: 'rzp_live_RO5pteNB012wkS', // Replace with your actual Razorpay key
         amount: razorpayOrder.amount,
         name: 'ParrotConsult',
         order_id: razorpayOrder.id,
