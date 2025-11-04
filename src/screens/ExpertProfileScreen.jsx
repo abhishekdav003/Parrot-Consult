@@ -1,5 +1,5 @@
-// ExpertProfileScreen.jsx - Enhanced with smooth chat integration
-import React, { useState, useEffect, useCallback } from 'react';
+// ExpertProfileScreen.jsx - Production-Ready Optimized Version
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,44 +8,95 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
-  Dimensions,
   Platform,
   StatusBar,
   SafeAreaView,
   ActivityIndicator,
+  Animated,
+  Dimensions,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import UnifiedBookingModal from './UnifiedBookingModal';
 import { useAuth } from '../context/AuthContext';
 import ApiService from '../services/ApiService';
+import { wp, hp, rfs, getSpacing } from '../utils/ResponsiveUtils';
 
-const { width: screenWidth } = Dimensions.get('window');
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+// Calculate dynamic navbar height (consistent with HomeScreen)
+const getNavbarHeight = (insets) => {
+  const isSmallScreen = SCREEN_HEIGHT < 700;
+  const isTablet = SCREEN_WIDTH > 768;
+  const BASE_HEIGHT = isTablet ? 80 : isSmallScreen ? 65 : 70;
+  return BASE_HEIGHT + insets.bottom;
+};
+
+// Calculate header height for proper scrollview padding
+const getHeaderHeight = (insets) => {
+  const isSmallScreen = SCREEN_HEIGHT < 700;
+  const baseHeight = isSmallScreen ? 56 : 64;
+  return baseHeight + insets.top;
+};
 
 const ExpertProfileScreen = ({ route, navigation }) => {
   const { expert } = route.params;
   const { user, isAuthenticated } = useAuth();
-  const profile = expert.consultantRequest?.consultantProfile || {};
-  const kycInfo = expert.kycVerify || {};
+  const insets = useSafeAreaInsets();
+  const spacing = getSpacing();
   
   // State management
   const [showBookingModal, setShowBookingModal] = useState(false);
-  const [scrollY, setScrollY] = useState(0);
   const [isStartingChat, setIsStartingChat] = useState(false);
-  const [chatInitialized, setChatInitialized] = useState(false);
+  const [imageError, setImageError] = useState(false);
+  const scrollY = useRef(new Animated.Value(0)).current;
+
+  // Calculate dynamic paddings for proper spacing
+  const { topPadding, bottomPadding, actionButtonHeight } = useMemo(() => {
+    const navbarHeight = getNavbarHeight(insets);
+    const headerHeight = getHeaderHeight(insets);
+    
+    // Action button container height with proper margins
+    const buttonHeight = hp(50); // Minimum button height
+    const buttonPadding = hp(12) * 2; // Top + bottom padding
+    const actionMargin = hp(16); // Margin from bottom navbar
+    const safeArea = insets.bottom;
+    
+    const actionHeight = buttonHeight + buttonPadding + actionMargin + safeArea;
+    
+    return {
+      topPadding: hp(16), // Increased space below header
+      bottomPadding: actionHeight + hp(24), // Extra space above action buttons
+      actionButtonHeight: actionHeight,
+    };
+  }, [insets]);
+
+  // Safe data extraction with memoization
+  const profile = useMemo(() => 
+    expert?.consultantRequest?.consultantProfile || expert?.consultantProfile || {},
+    [expert]
+  );
 
   useEffect(() => {
-    StatusBar.setBarStyle('light-content', true);
-    return () => StatusBar.setBarStyle('default', true);
+    StatusBar.setBarStyle('dark-content', true);
+    if (Platform.OS === 'android') {
+      StatusBar.setBackgroundColor('#FFFFFF', true);
+      StatusBar.setTranslucent(false);
+    }
+    
+    return () => {
+      StatusBar.setBarStyle('dark-content', true);
+    };
   }, []);
 
-  // Image source handler with better fallbacks
+  // Optimized image handler with fallback
   const getImageSource = useCallback(() => {
-    if (!expert.profileImage || 
+    if (imageError || !expert?.profileImage || 
         expert.profileImage === '' || 
         expert.profileImage.includes('amar-jha.dev') || 
         expert.profileImage.includes('MyImg-BjWvYtsb.svg')) {
       return { 
-        uri: `https://via.placeholder.com/150x150/D1FAE5/059669?text=${encodeURIComponent(expert.fullName?.charAt(0) || 'E')}` 
+        uri: `https://ui-avatars.com/api/?name=${encodeURIComponent(expert?.fullName || 'Expert')}&size=400&background=059669&color=FFFFFF&bold=true&format=png`
       };
     }
     
@@ -58,15 +109,20 @@ const ExpertProfileScreen = ({ route, navigation }) => {
     }
     
     if (expert.profileImage.startsWith('/uploads/')) {
-      return { uri: `http://10.33.116.48:8011${expert.profileImage}` };
+      const baseUrl = ApiService.baseURL?.replace('/api/v1', '') || '';
+      return { uri: `${baseUrl}${expert.profileImage}` };
     }
     
     return { 
-      uri: `https://via.placeholder.com/150x150/D1FAE5/059669?text=${encodeURIComponent(expert.fullName?.charAt(0) || 'E')}` 
+      uri: `https://ui-avatars.com/api/?name=${encodeURIComponent(expert?.fullName || 'Expert')}&size=400&background=059669&color=FFFFFF&bold=true&format=png`
     };
-  }, [expert.profileImage, expert.fullName]);
+  }, [expert?.profileImage, expert?.fullName, imageError]);
 
-  // Enhanced message handler with chat creation/navigation
+  const handleImageError = useCallback(() => {
+    setImageError(true);
+  }, []);
+
+  // Optimized chat handler with error handling
   const handleMessage = useCallback(async () => {
     if (!isAuthenticated || !user) {
       Alert.alert(
@@ -74,62 +130,35 @@ const ExpertProfileScreen = ({ route, navigation }) => {
         'Please login to start a conversation',
         [
           { text: 'Cancel', style: 'cancel' },
-          { 
-            text: 'Login', 
-            onPress: () => navigation.navigate('Login')
-          }
+          { text: 'Login', onPress: () => navigation.navigate('Login') }
         ]
       );
       return;
     }
 
-    // Prevent self-messaging
     if (user._id === expert._id) {
       Alert.alert('Info', "You cannot message yourself");
       return;
     }
 
-    // Prevent multiple rapid taps
-    if (isStartingChat) {
-      return;
-    }
+    if (isStartingChat) return;
 
     try {
       setIsStartingChat(true);
-
-      console.log('[EXPERT_PROFILE] Starting chat with expert:', {
-        expertId: expert._id,
-        expertName: expert.fullName,
-        userId: user._id,
-        userName: user.fullName
-      });
-
-      // First, try to get existing chat history
       const chatHistoryResult = await ApiService.getChatHistory(user._id, expert._id, 'null');
       
       if (chatHistoryResult.success) {
         const chatData = chatHistoryResult.data;
         const existingChatId = chatData.chat;
         
-        console.log('[EXPERT_PROFILE] Chat history retrieved:', {
-          chatId: existingChatId,
-          messageCount: chatData.messages?.length || 0
-        });
-
-        // Navigate directly to chat screen with existing or new chat data
         navigation.navigate('ChatScreen', {
-          chatId: existingChatId,
+          chatId: existingChatId || 'new',
           otherId: expert._id,
           otherName: expert.fullName,
           otherProfileImage: expert.profileImage,
           isNewChat: !existingChatId || existingChatId === 'null'
         });
-
-        setChatInitialized(true);
       } else {
-        // Fallback: Navigate anyway and let ChatScreen handle chat creation
-        console.log('[EXPERT_PROFILE] Chat history failed, proceeding with navigation:', chatHistoryResult.error);
-        
         navigation.navigate('ChatScreen', {
           chatId: 'new',
           otherId: expert._id,
@@ -138,20 +167,15 @@ const ExpertProfileScreen = ({ route, navigation }) => {
           isNewChat: true
         });
       }
-
     } catch (error) {
       console.error('[EXPERT_PROFILE] Error starting chat:', error);
-      Alert.alert(
-        'Chat Error', 
-        'Unable to start chat at the moment. Please try again.',
-        [{ text: 'OK' }]
-      );
+      Alert.alert('Chat Error', 'Unable to start chat. Please try again.');
     } finally {
       setIsStartingChat(false);
     }
   }, [isAuthenticated, user, expert, navigation, isStartingChat]);
 
-  // Booking handler
+  // Optimized booking handler
   const handleBookNow = useCallback(() => {
     if (!isAuthenticated || !user) {
       Alert.alert(
@@ -159,10 +183,7 @@ const ExpertProfileScreen = ({ route, navigation }) => {
         'Please login to book a session',
         [
           { text: 'Cancel', style: 'cancel' },
-          { 
-            text: 'Login', 
-            onPress: () => navigation.navigate('Login')
-          }
+          { text: 'Login', onPress: () => navigation.navigate('Login') }
         ]
       );
       return;
@@ -173,418 +194,408 @@ const ExpertProfileScreen = ({ route, navigation }) => {
       return;
     }
 
-    console.log('[EXPERT_PROFILE] Opening booking modal for expert:', expert.fullName);
     setShowBookingModal(true);
   }, [isAuthenticated, user, expert, navigation]);
 
-  const handleCloseBookingModal = useCallback(() => {
-    setShowBookingModal(false);
-  }, []);
-
-  const handleScroll = useCallback((event) => {
-    const currentScrollY = event.nativeEvent.contentOffset.y;
-    setScrollY(currentScrollY);
-  }, []);
-
-  const handleBackPress = useCallback(() => {
-    navigation.goBack();
-  }, [navigation]);
-
-  // Calculate profile data with better defaults
-  const experience = profile.yearsOfExperience || 
-                    profile.experience ||
-                    (profile.graduationYear ? new Date().getFullYear() - profile.graduationYear : 3);
-
-  const languages = profile.languages && Array.isArray(profile.languages) && profile.languages.length > 0
-    ? profile.languages.join(', ')
-    : 'English';
-
-  const availability = profile.days && Array.isArray(profile.days) && profile.days.length > 0
-    ? profile.days.join(', ')
-    : (profile.daysPerWeek ? `${profile.daysPerWeek} days/week` : 'Available');
-
-  const sessionFee = profile.sessionFee || profile.rate 
-    ? `₹${(profile.sessionFee || profile.rate).toLocaleString()}` 
-    : 'Contact for pricing';
-
-  // Star rating component
-  const renderStars = useCallback((rating = 4.8) => {
-    const stars = [];
-    const fullStars = Math.floor(rating);
-    const hasHalfStar = rating % 1 !== 0;
-    
-    for (let i = 0; i < fullStars; i++) {
-      stars.push(
-        <Icon key={i} name="star" size={16} color="#FBBF24" />
-      );
+  // Memoized computed values for better performance
+  const experience = useMemo(() => {
+    if (profile.yearsOfExperience) return profile.yearsOfExperience;
+    if (profile.experience) return profile.experience;
+    if (profile.graduationYear) {
+      const years = new Date().getFullYear() - profile.graduationYear;
+      return years > 0 ? years : null;
     }
-    
-    if (hasHalfStar) {
-      stars.push(
-        <Icon key="half" name="star-half" size={16} color="#FBBF24" />
-      );
+    return null;
+  }, [profile]);
+
+  const languages = useMemo(() => {
+    if (profile.languages && Array.isArray(profile.languages) && profile.languages.length > 0) {
+      return profile.languages.filter(lang => lang && lang.trim());
     }
-    
-    const emptyStars = 5 - Math.ceil(rating);
-    for (let i = 0; i < emptyStars; i++) {
-      stars.push(
-        <Icon key={`empty-${i}`} name="star-border" size={16} color="#E2E8F0" />
-      );
+    return [];
+  }, [profile.languages]);
+
+  const availability = useMemo(() => {
+    if (profile.days && Array.isArray(profile.days) && profile.days.length > 0) {
+      return profile.days.filter(day => day && day.trim()).join(', ');
     }
-    
-    return stars;
-  }, []);
+    if (profile.daysPerWeek) {
+      return `${profile.daysPerWeek} days/week`;
+    }
+    return null;
+  }, [profile.days, profile.daysPerWeek]);
+
+  const sessionFee = useMemo(() => {
+    const fee = profile.sessionFee || profile.rate;
+    return fee ? parseInt(fee) : null;
+  }, [profile.sessionFee, profile.rate]);
+
+  const skills = useMemo(() => {
+    if (profile.keySkills && Array.isArray(profile.keySkills) && profile.keySkills.length > 0) {
+      return profile.keySkills.filter(skill => skill && skill.trim());
+    }
+    return [];
+  }, [profile.keySkills]);
+
+  const specialized = useMemo(() => {
+    if (profile.Specialized && Array.isArray(profile.Specialized) && profile.Specialized.length > 0) {
+      return profile.Specialized.filter(area => area && area.trim());
+    }
+    return [];
+  }, [profile.Specialized]);
 
   return (
     <View style={styles.container}>
-      <StatusBar backgroundColor="#059669" barStyle="light-content" />
+      <StatusBar backgroundColor="#FFFFFF" barStyle="dark-content" />
       
-      {/* Fixed Header */}
-      <View style={styles.headerContainer}>
-        <SafeAreaView style={styles.headerSafeArea}>
-          <View style={[styles.header, { opacity: Math.max(0.95, Math.min(scrollY / 100, 1)) }]}>
+      {/* Fixed Header with SafeAreaView */}
+      <SafeAreaView style={styles.headerSafeArea} edges={['top']}>
+        <View style={styles.header}>
+          <View style={styles.headerContent}>
             <TouchableOpacity 
-              style={styles.backButton} 
-              onPress={handleBackPress}
+              style={styles.headerBtn} 
+              onPress={() => navigation.goBack()}
               activeOpacity={0.7}
             >
-              <Icon name="arrow-back" size={24} color="#ffffff" />
+              <Icon name="arrow-back" size={rfs(24)} color="#1E293B" />
             </TouchableOpacity>
             
-            <Text style={[styles.headerTitle, { opacity: scrollY > 100 ? 1 : 0 }]}>
-              {expert.fullName}
-            </Text>
+            <Text style={styles.headerTitle} numberOfLines={1}>Expert Profile</Text>
             
-            <TouchableOpacity 
-              style={styles.headerAction}
-              onPress={() => console.log('Share profile')}
-              activeOpacity={0.7}
-            >
-              <Icon name="share" size={24} color="#ffffff" />
-            </TouchableOpacity>
-          </View>
-        </SafeAreaView>
-      </View>
-
-      <ScrollView 
-        style={styles.scrollContainer}
-        showsVerticalScrollIndicator={false}
-        onScroll={handleScroll}
-        scrollEventThrottle={16}
-        contentContainerStyle={styles.scrollContent}
-      >
-        {/* Hero Section */}
-        <View style={styles.heroSection}>
-          <View style={styles.profileImageContainer}>
-            <Image
-              source={getImageSource()}
-              style={styles.profileImage}
-              onError={(error) => {
-                console.log('[EXPERT_PROFILE] Image load error:', error.nativeEvent.error);
-              }}
-            />
-            
-            {/* Online Status */}
-            <View style={styles.onlineIndicator}>
-              <View style={styles.onlineDot} />
-              <Text style={styles.onlineText}>Online</Text>
-            </View>
-
-            {/* Verification Badges */}
-            <View style={styles.badgeContainer}>
-              {expert.aadharVerified && (
-                <View style={styles.verificationBadge}>
-                  <Icon name="verified-user" size={16} color="#10B981" />
-                  <Text style={styles.badgeText}>Verified</Text>
-                </View>
-              )}
-              {expert.role === 'consultant' && (
-                <View style={[styles.verificationBadge, styles.expertBadge]}>
-                  <Icon name="star" size={16} color="#FBBF24" />
-                  <Text style={styles.badgeText}>Expert</Text>
-                </View>
-              )}
-            </View>
-          </View>
-
-          <View style={styles.profileInfo}>
-            <Text style={styles.expertName}>{expert.fullName}</Text>
-            
-            {profile.category && (
-              <Text style={styles.expertSpecialty}>{profile.category}</Text>
-            )}
-            
-            {profile.fieldOfStudy && profile.category !== profile.fieldOfStudy && (
-              <Text style={styles.expertField}>{profile.fieldOfStudy}</Text>
-            )}
-
-            {/* Rating Section */}
-            <View style={styles.ratingContainer}>
-              <View style={styles.starsContainer}>
-                {renderStars(4.8)}
-              </View>
-              <Text style={styles.ratingText}>4.8 (124 reviews)</Text>
-            </View>
-
-            {/* Quick Stats */}
-            {experience && (
-              <View style={styles.quickStats}>
-                <View style={styles.statItem}>
-                  <Text style={styles.statNumber}>{experience}</Text>
-                  <Text style={styles.statLabel}>Years Exp.</Text>
-                </View>
-                
-                {(profile.sessionFee || profile.rate) && (
-                  <>
-                    <View style={styles.statDivider} />
-                    <View style={styles.statItem}>
-                      <Text style={styles.statNumber}>₹{profile.sessionFee || profile.rate}</Text>
-                      <Text style={styles.statLabel}>Per Session</Text>
-                    </View>
-                  </>
-                )}
-
-                {profile.daysPerWeek && (
-                  <>
-                    <View style={styles.statDivider} />
-                    <View style={styles.statItem}>
-                      <Text style={styles.statNumber}>{profile.daysPerWeek}</Text>
-                      <Text style={styles.statLabel}>Days/Week</Text>
-                    </View>
-                  </>
-                )}
-              </View>
-            )}
+            <View style={styles.headerBtn} />
           </View>
         </View>
+      </SafeAreaView>
 
-        {/* Session Info Card */}
-        <View style={styles.sessionCard}>
-          <View style={styles.sessionHeader}>
-            <Icon name="video-call" size={24} color="#059669" />
-            <Text style={styles.sessionTitle}>Session Information</Text>
-          </View>
-          
-          <View style={styles.sessionDetails}>
-            <View style={styles.sessionRow}>
-              <View style={styles.sessionItem}>
-                <Icon name="attach-money" size={20} color="#059669" />
-                <Text style={styles.sessionLabel}>Fee</Text>
-              </View>
-              <Text style={styles.sessionValue}>{sessionFee}/30min</Text>
-            </View>
-
-            <View style={styles.sessionRow}>
-              <View style={styles.sessionItem}>
-                <Icon name="schedule" size={20} color="#059669" />
-                <Text style={styles.sessionLabel}>Available</Text>
-              </View>
-              <Text style={styles.sessionValue}>{availability}</Text>
-            </View>
-
-            {profile.availableTimePerDay && (
-              <View style={styles.sessionRow}>
-                <View style={styles.sessionItem}>
-                  <Icon name="access-time" size={20} color="#059669" />
-                  <Text style={styles.sessionLabel}>Hours/Day</Text>
+      {/* Scrollable Content */}
+      <ScrollView 
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: false }
+        )}
+        scrollEventThrottle={16}
+        removeClippedSubviews={true}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* Profile Header Card */}
+        <View style={styles.profileCard}>
+          <View style={styles.profileHeader}>
+            <View style={styles.imageWrapper}>
+              <Image
+                source={getImageSource()}
+                style={styles.profileImage}
+                onError={handleImageError}
+              />
+              {expert?.aadharVerified && (
+                <View style={styles.verifiedBadge}>
+                  <Icon name="verified" size={rfs(20)} color="#10B981" />
                 </View>
-                <Text style={styles.sessionValue}>{profile.availableTimePerDay}</Text>
-              </View>
-            )}
-
-            <View style={styles.sessionRow}>
-              <View style={styles.sessionItem}>
-                <Icon name="language" size={20} color="#059669" />
-                <Text style={styles.sessionLabel}>Languages</Text>
-              </View>
-              <Text style={styles.sessionValue}>{languages}</Text>
+              )}
             </View>
-
-            {expert.location && (
-              <View style={styles.sessionRow}>
-                <View style={styles.sessionItem}>
-                  <Icon name="location-on" size={20} color="#059669" />
-                  <Text style={styles.sessionLabel}>Location</Text>
+            
+            <View style={styles.profileInfo}>
+              <Text style={styles.expertName} numberOfLines={2}>
+                {expert?.fullName || 'Expert Name'}
+              </Text>
+              
+              {profile.category && (
+                <View style={styles.categoryContainer}>
+                  <Icon name="work-outline" size={rfs(16)} color="#059669" />
+                  <Text style={styles.categoryText}>{profile.category}</Text>
                 </View>
-                <Text style={styles.sessionValue}>{expert.location}</Text>
-              </View>
-            )}
+              )}
+              
+              {profile.fieldOfStudy && profile.category !== profile.fieldOfStudy && (
+                <View style={styles.fieldContainer}>
+                  <Icon name="school" size={rfs(14)} color="#64748B" />
+                  <Text style={styles.fieldText}>{profile.fieldOfStudy}</Text>
+                </View>
+              )}
+
+              {expert?.location && (
+                <View style={styles.locationContainer}>
+                  <Icon name="location-on" size={rfs(14)} color="#64748B" />
+                  <Text style={styles.locationText} numberOfLines={1}>{expert.location}</Text>
+                </View>
+              )}
+            </View>
           </View>
+
+          {/* Quick Stats Row */}
+          {(experience || sessionFee || profile.daysPerWeek) && (
+            <View style={styles.statsRow}>
+              {experience && (
+                <View style={styles.statItem}>
+                  <View style={styles.statIcon}>
+                    <Icon name="workspace-premium" size={rfs(20)} color="#059669" />
+                  </View>
+                  <Text style={styles.statValue}>{experience}+</Text>
+                  <Text style={styles.statLabel}>Years</Text>
+                </View>
+              )}
+              
+              {sessionFee && (
+                <View style={styles.statItem}>
+                  <View style={styles.statIcon}>
+                    <Icon name="payments" size={rfs(20)} color="#059669" />
+                  </View>
+                  <Text style={styles.statValue}>₹{sessionFee}</Text>
+                  <Text style={styles.statLabel}>Per Session</Text>
+                </View>
+              )}
+
+              {profile.daysPerWeek && (
+                <View style={styles.statItem}>
+                  <View style={styles.statIcon}>
+                    <Icon name="event-available" size={rfs(20)} color="#059669" />
+                  </View>
+                  <Text style={styles.statValue}>{profile.daysPerWeek}</Text>
+                  <Text style={styles.statLabel}>Days/Week</Text>
+                </View>
+              )}
+            </View>
+          )}
         </View>
 
         {/* About Section */}
         {profile.shortBio && (
-          <View style={styles.aboutCard}>
-            <View style={styles.cardHeader}>
-              <Icon name="person" size={24} color="#059669" />
-              <Text style={styles.cardTitle}>About</Text>
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionIconBox}>
+                <Icon name="person" size={rfs(18)} color="#059669" />
+              </View>
+              <Text style={styles.sectionTitle}>About</Text>
             </View>
             <Text style={styles.aboutText}>{profile.shortBio}</Text>
           </View>
         )}
 
-        {/* Education & Qualification */}
-        {(profile.qualification || profile.university) && (
-          <View style={styles.educationCard}>
-            <View style={styles.cardHeader}>
-              <Icon name="school" size={24} color="#059669" />
-              <Text style={styles.cardTitle}>Education</Text>
-            </View>
-            
-            <View style={styles.educationItem}>
-              <View style={styles.educationDot} />
-              <View style={styles.educationContent}>
-                {profile.qualification && (
-                  <Text style={styles.educationDegree}>{profile.qualification}</Text>
-                )}
-                {profile.fieldOfStudy && (
-                  <Text style={styles.educationField}>in {profile.fieldOfStudy}</Text>
-                )}
-                {profile.university && (
-                  <Text style={styles.educationUniversity}>{profile.university}</Text>
-                )}
-                {profile.graduationYear && (
-                  <Text style={styles.educationYear}>Graduated: {profile.graduationYear}</Text>
-                )}
+        {/* Optimized Skills Section - Thin Pills */}
+        {skills.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionIconBox}>
+                <Icon name="psychology" size={rfs(18)} color="#059669" />
               </View>
-            </View>
-          </View>
-        )}
-
-        {/* Skills */}
-        {profile.keySkills && Array.isArray(profile.keySkills) && profile.keySkills.length > 0 && (
-          <View style={styles.skillsCard}>
-            <View style={styles.cardHeader}>
-              <Icon name="psychology" size={24} color="#059669" />
-              <Text style={styles.cardTitle}>Key Skills</Text>
+              <Text style={styles.sectionTitle}>Key Skills</Text>
             </View>
             <View style={styles.skillsContainer}>
-              {profile.keySkills.map((skill, index) => (
-                <View key={index} style={styles.skillChip}>
-                  <Text style={styles.skillText}>{skill}</Text>
+              {skills.map((skill, index) => (
+                <View key={`skill-${index}`} style={styles.skillPill}>
+                  <Icon name="check-circle" size={rfs(12)} color="#059669" />
+                  <Text style={styles.skillText} numberOfLines={1}>{skill}</Text>
                 </View>
               ))}
             </View>
           </View>
         )}
 
-        {/* Specialized Areas */}
-        {profile.Specialized && Array.isArray(profile.Specialized) && profile.Specialized.length > 0 && (
-          <View style={styles.skillsCard}>
-            <View style={styles.cardHeader}>
-              <Icon name="stars" size={24} color="#059669" />
-              <Text style={styles.cardTitle}>Specialized Areas</Text>
+        {/* Specializations - Thin Pills */}
+        {specialized.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionIconBox}>
+                <Icon name="stars" size={rfs(18)} color="#F59E0B" />
+              </View>
+              <Text style={styles.sectionTitle}>Specializations</Text>
             </View>
             <View style={styles.skillsContainer}>
-              {profile.Specialized.map((area, index) => (
-                <View key={index} style={[styles.skillChip, styles.specializedChip]}>
-                  <Text style={styles.specializedText}>{area}</Text>
+              {specialized.map((area, index) => (
+                <View key={`spec-${index}`} style={styles.specPill}>
+                  <Icon name="star" size={rfs(12)} color="#F59E0B" />
+                  <Text style={styles.specText} numberOfLines={1}>{area}</Text>
                 </View>
               ))}
             </View>
           </View>
         )}
 
-        {/* Contact Information */}
-        <View style={styles.contactCard}>
-          <View style={styles.cardHeader}>
-            <Icon name="contact-phone" size={24} color="#059669" />
-            <Text style={styles.cardTitle}>Contact Information</Text>
-          </View>
-          
-          <View style={styles.contactItem}>
-            <Icon name="phone" size={20} color="#64748B" />
-            <Text style={styles.contactText}>+91 {expert.phone}</Text>
-          </View>
-
-          {expert.email && (
-            <View style={styles.contactItem}>
-              <Icon name="email" size={20} color="#64748B" />
-              <Text style={styles.contactText}>{expert.email}</Text>
-            </View>
-          )}
-
-          {/* Verification Status */}
-          <View style={styles.verificationStatus}>
-            <View style={styles.verificationItem}>
-              <Icon 
-                name={expert.aadharVerified ? "verified" : "pending"} 
-                size={16} 
-                color={expert.aadharVerified ? "#10B981" : "#F59E0B"} 
-              />
-              <Text style={[
-                styles.verificationText,
-                { color: expert.aadharVerified ? "#10B981" : "#F59E0B" }
-              ]}>
-                {expert.aadharVerified ? "Identity Verified" : "Verification Pending"}
-              </Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Availability Status */}
-        {(availability !== 'Available' || profile.availableTimePerDay) && (
-          <View style={styles.availabilityCard}>
-            <View style={styles.availabilityHeader}>
-              <Icon name="schedule" size={24} color="#059669" />
-              <Text style={styles.cardTitle}>Availability</Text>
-              <View style={styles.availableNow}>
-                <View style={styles.availableDot} />
-                <Text style={styles.availableText}>Available</Text>
+        {/* Session Details */}
+        {(sessionFee || availability || languages.length > 0 || profile.availableTimePerDay) && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionIconBox}>
+                <Icon name="schedule" size={rfs(18)} color="#059669" />
               </View>
+              <Text style={styles.sectionTitle}>Session Details</Text>
             </View>
             
+            {sessionFee && (
+              <View style={styles.infoRow}>
+                <View style={styles.infoLeft}>
+                  <Icon name="attach-money" size={rfs(18)} color="#64748B" />
+                  <Text style={styles.infoLabel}>Fee</Text>
+                </View>
+                <Text style={styles.infoValue}>₹{sessionFee}/30 min</Text>
+              </View>
+            )}
+
+            {availability && (
+              <View style={styles.infoRow}>
+                <View style={styles.infoLeft}>
+                  <Icon name="calendar-today" size={rfs(18)} color="#64748B" />
+                  <Text style={styles.infoLabel}>Available</Text>
+                </View>
+                <Text style={styles.infoValue} numberOfLines={2}>{availability}</Text>
+              </View>
+            )}
+
             {profile.availableTimePerDay && (
-              <Text style={styles.availabilityDescription}>
-                Available {profile.availableTimePerDay} daily
-              </Text>
+              <View style={styles.infoRow}>
+                <View style={styles.infoLeft}>
+                  <Icon name="access-time" size={rfs(18)} color="#64748B" />
+                  <Text style={styles.infoLabel}>Hours/Day</Text>
+                </View>
+                <Text style={styles.infoValue}>{profile.availableTimePerDay}</Text>
+              </View>
+            )}
+
+            {languages.length > 0 && (
+              <View style={styles.infoRow}>
+                <View style={styles.infoLeft}>
+                  <Icon name="language" size={rfs(18)} color="#64748B" />
+                  <Text style={styles.infoLabel}>Languages</Text>
+                </View>
+                <View style={styles.languagesWrap}>
+                  {languages.map((lang, index) => (
+                    <View key={`lang-${index}`} style={styles.langTag}>
+                      <Text style={styles.langText}>{lang}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
             )}
           </View>
         )}
 
-        {/* Bottom Spacing for action buttons */}
-        <View style={styles.bottomSpacing} />
+        {/* Education */}
+        {(profile.qualification || profile.university) && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionIconBox}>
+                <Icon name="school" size={rfs(18)} color="#059669" />
+              </View>
+              <Text style={styles.sectionTitle}>Education</Text>
+            </View>
+            
+            <View style={styles.educationBox}>
+              {profile.qualification && (
+                <Text style={styles.degreeText}>{profile.qualification}</Text>
+              )}
+              {profile.fieldOfStudy && (
+                <Text style={styles.fieldStudyText}>in {profile.fieldOfStudy}</Text>
+              )}
+              {profile.university && (
+                <View style={styles.uniRow}>
+                  <Icon name="account-balance" size={rfs(14)} color="#64748B" />
+                  <Text style={styles.uniText}>{profile.university}</Text>
+                </View>
+              )}
+              {profile.graduationYear && (
+                <View style={styles.yearRow}>
+                  <Icon name="event" size={rfs(14)} color="#94A3B8" />
+                  <Text style={styles.yearText}>Graduated {profile.graduationYear}</Text>
+                </View>
+              )}
+            </View>
+          </View>
+        )}
+
+        {/* Contact */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <View style={styles.sectionIconBox}>
+              <Icon name="contact-phone" size={rfs(18)} color="#059669" />
+            </View>
+            <Text style={styles.sectionTitle}>Contact</Text>
+          </View>
+          
+          {expert?.phone && (
+            <View style={styles.infoRow}>
+              <View style={styles.infoLeft}>
+                <Icon name="phone" size={rfs(18)} color="#64748B" />
+                <Text style={styles.infoLabel}>Phone</Text>
+              </View>
+              <Text style={styles.infoValue}>+91 {expert.phone}</Text>
+            </View>
+          )}
+
+          {expert?.email && (
+            <View style={styles.infoRow}>
+              <View style={styles.infoLeft}>
+                <Icon name="email" size={rfs(18)} color="#64748B" />
+                <Text style={styles.infoLabel}>Email</Text>
+              </View>
+              <Text style={styles.infoValue} numberOfLines={1}>{expert.email}</Text>
+            </View>
+          )}
+
+          <View style={[styles.infoRow, styles.lastInfoRow]}>
+            <View style={styles.infoLeft}>
+              <Icon 
+                name={expert?.aadharVerified ? "verified" : "pending"} 
+                size={rfs(18)} 
+                color={expert?.aadharVerified ? "#10B981" : "#F59E0B"} 
+              />
+              <Text style={styles.infoLabel}>Status</Text>
+            </View>
+            <View style={[
+              styles.statusTag,
+              expert?.aadharVerified ? styles.verifiedTag : styles.pendingTag
+            ]}>
+              <Text style={[
+                styles.statusTagText,
+                expert?.aadharVerified ? styles.verifiedTagText : styles.pendingTagText
+              ]}>
+                {expert?.aadharVerified ? "Verified" : "Pending"}
+              </Text>
+            </View>
+          </View>
+        </View>
       </ScrollView>
 
-      {/* Fixed Action Buttons */}
-      <View style={styles.actionContainer}>
-        <TouchableOpacity 
-          style={[
-            styles.messageButton,
-            isStartingChat && styles.buttonDisabled
-          ]}
-          onPress={handleMessage}
-          activeOpacity={0.8}
-          disabled={isStartingChat}
-        >
-          {isStartingChat ? (
-            <ActivityIndicator size={16} color="#059669" />
-          ) : (
-            <Icon name="chat-bubble-outline" size={20} color="#059669" />
-          )}
-          <Text style={[
-            styles.messageButtonText,
-            isStartingChat && styles.buttonTextDisabled
-          ]}>
-            {isStartingChat ? 'Starting...' : 'Message'}
-          </Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={styles.bookButton}
-          onPress={handleBookNow}
-          activeOpacity={0.8}
-        >
-          <Icon name="event" size={20} color="#ffffff" />
-          <Text style={styles.bookButtonText}>Book Session</Text>
-        </TouchableOpacity>
-      </View>
+      {/* Fixed Action Buttons with proper safe area */}
+      <SafeAreaView style={styles.actionContainer} edges={['bottom']}>
+        <View style={styles.actionButtons}>
+          <TouchableOpacity 
+            style={[
+              styles.actionButton,
+              styles.messageButton,
+              isStartingChat && styles.buttonDisabled
+            ]}
+            onPress={handleMessage}
+            activeOpacity={0.8}
+            disabled={isStartingChat}
+          >
+            {isStartingChat ? (
+              <ActivityIndicator size="small" color="#059669" />
+            ) : (
+              <>
+                <Icon name="chat-bubble-outline" size={rfs(20)} color="#059669" />
+                <Text style={styles.messageButtonText}>Message</Text>
+              </>
+            )}
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={[styles.actionButton, styles.bookButton]}
+            onPress={handleBookNow}
+            activeOpacity={0.8}
+          >
+            <Icon name="event" size={rfs(20)} color="#FFFFFF" />
+            <Text style={styles.bookButtonText}>Book Session</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
 
-      {/* Unified Booking Modal */}
+      {/* Booking Modal */}
       {showBookingModal && (
         <UnifiedBookingModal
           visible={showBookingModal}
-          onClose={handleCloseBookingModal}
+          onClose={() => setShowBookingModal(false)}
           expert={expert}
           navigation={navigation}
         />
@@ -598,577 +609,405 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F8FAFC',
   },
-
-  // Header Container - Fixed positioning
-  headerContainer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 1000,
-    backgroundColor: '#059669',
-  },
   headerSafeArea: {
-    backgroundColor: '#059669',
+    backgroundColor: '#FFFFFF',
+    zIndex: 10,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#059669',
-    elevation: 10,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+    elevation: 3,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
-    minHeight: 56,
+    shadowRadius: 3,
   },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: wp(20),
+    paddingVertical: hp(16),
+  },
+  headerBtn: {
+    width: wp(40),
+    height: wp(40),
+    borderRadius: wp(20),
+    backgroundColor: '#F1F5F9',
     justifyContent: 'center',
     alignItems: 'center',
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#ffffff',
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
     flex: 1,
+    fontSize: rfs(18),
+    fontWeight: '600',
+    color: '#1E293B',
     textAlign: 'center',
-    marginHorizontal: 16,
+    marginHorizontal: wp(12),
   },
-  headerAction: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  // Scroll Container
-  scrollContainer: {
+  scrollView: {
     flex: 1,
   },
   scrollContent: {
-    paddingTop: Platform.OS === 'ios' ? 100 : 80,
+    flexGrow: 1,
+    paddingTop: hp(16), // Space from header
+    paddingBottom: hp(180), // Space from bottom buttons (accounting for action container)
   },
-
-  // Hero Section
-  heroSection: {
-    backgroundColor: '#ffffff',
-    paddingTop: 40,
-    paddingBottom: 30,
-    paddingHorizontal: 24,
-    alignItems: 'center',
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-    marginBottom: 20,
-    elevation: 2,
+  profileCard: {
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: wp(16),
+    borderRadius: wp(20),
+    padding: wp(20),
+    elevation: 3,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 8,
+    marginBottom: hp(12),
   },
-  profileImageContainer: {
+  profileHeader: {
+    flexDirection: 'row',
+    marginBottom: hp(20),
+  },
+  imageWrapper: {
     position: 'relative',
-    marginBottom: 20,
+    marginRight: wp(16),
   },
   profileImage: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: wp(90),
+    height: wp(90),
+    borderRadius: wp(45),
     backgroundColor: '#F1F5F9',
-    borderWidth: 4,
-    borderColor: '#D1FAE5',
+    borderWidth: 3,
+    borderColor: '#F0FDF4',
   },
-  onlineIndicator: {
+  verifiedBadge: {
     position: 'absolute',
-    bottom: 8,
-    right: -10,
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#D1FAE5',
-    elevation: 2,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-  },
-  onlineDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#10B981',
-    marginRight: 4,
-  },
-  onlineText: {
-    fontSize: 12,
-    color: '#10B981',
-    fontWeight: '600',
-  },
-  badgeContainer: {
-    position: 'absolute',
-    top: -5,
-    right: -5,
-    flexDirection: 'column',
-    gap: 4,
-  },
-  verificationBadge: {
-    backgroundColor: '#F0FDF4',
-    borderRadius: 12,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#D1FAE5',
-  },
-  expertBadge: {
-    backgroundColor: '#FFFBEB',
-    borderColor: '#FDE68A',
-  },
-  badgeText: {
-    fontSize: 10,
-    color: '#10B981',
-    fontWeight: '600',
-    marginLeft: 2,
-  },
-
-  // Profile Info
-  profileInfo: {
-    alignItems: 'center',
-    width: '100%',
-  },
-  expertName: {
-    fontSize: 26,
-    fontWeight: '700',
-    color: '#1E293B',
-    textAlign: 'center',
-    marginBottom: 4,
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
-    letterSpacing: -0.3,
-  },
-  expertSpecialty: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#059669',
-    textAlign: 'center',
-    marginBottom: 2,
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
-  },
-  expertField: {
-    fontSize: 14,
-    color: '#64748B',
-    textAlign: 'center',
-    marginBottom: 12,
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
-  },
-
-  // Rating Section
-  ratingContainer: {
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  starsContainer: {
-    flexDirection: 'row',
-    marginBottom: 4,
-  },
-  ratingText: {
-    fontSize: 14,
-    color: '#64748B',
-    fontWeight: '500',
-  },
-
-  // Quick Stats
-  quickStats: {
-    flexDirection: 'row',
+    bottom: 0,
+    right: 0,
+    backgroundColor: '#FFFFFF',
+    width: wp(28),
+    height: wp(28),
+    borderRadius: wp(14),
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#D1FAE5',
+  },
+  profileInfo: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  expertName: {
+    fontSize: rfs(22),
+    fontWeight: '700',
+    color: '#1E293B',
+    marginBottom: hp(6),
+  },
+  categoryContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: hp(4),
+  },
+  categoryText: {
+    fontSize: rfs(14),
+    fontWeight: '600',
+    color: '#059669',
+    marginLeft: wp(6),
+  },
+  fieldContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: hp(4),
+  },
+  fieldText: {
+    fontSize: rfs(13),
+    color: '#64748B',
+    marginLeft: wp(6),
+  },
+  locationContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  locationText: {
+    fontSize: rfs(12),
+    color: '#94A3B8',
+    marginLeft: wp(6),
+    flex: 1,
+  },
+  statsRow: {
+    flexDirection: 'row',
     backgroundColor: '#F8FAFC',
-    borderRadius: 16,
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderRadius: wp(12),
+    padding: wp(12),
+    justifyContent: 'space-around',
   },
   statItem: {
     alignItems: 'center',
-    paddingHorizontal: 20,
+    flex: 1,
   },
-  statNumber: {
-    fontSize: 20,
+  statIcon: {
+    width: wp(40),
+    height: wp(40),
+    borderRadius: wp(20),
+    backgroundColor: '#F0FDF4',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: hp(6),
+  },
+  statValue: {
+    fontSize: rfs(16),
     fontWeight: '700',
-    color: '#059669',
-    marginBottom: 2,
+    color: '#1E293B',
+    marginBottom: hp(2),
   },
   statLabel: {
-    fontSize: 12,
+    fontSize: rfs(11),
     color: '#64748B',
-    fontWeight: '500',
+    textAlign: 'center',
   },
-  statDivider: {
-    width: 1,
-    height: 30,
-    backgroundColor: '#E2E8F0',
-  },
-
-  // Card Styles
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1E293B',
-    marginLeft: 8,
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
-  },
-
-  // Session Card
-  sessionCard: {
-    backgroundColor: '#ffffff',
-    marginHorizontal: 16,
-    marginBottom: 16,
-    borderRadius: 16,
-    padding: 20,
+  section: {
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: wp(16),
+    marginBottom: hp(12),
+    borderRadius: wp(16),
+    padding: wp(18),
     elevation: 2,
     shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
   },
-  sessionHeader: {
+  sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: hp(14),
   },
-  sessionTitle: {
-    fontSize: 18,
+  sectionIconBox: {
+    width: wp(32),
+    height: wp(32),
+    borderRadius: wp(8),
+    backgroundColor: '#F0FDF4',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: wp(10),
+  },
+  sectionTitle: {
+    fontSize: rfs(16),
     fontWeight: '600',
     color: '#1E293B',
-    marginLeft: 8,
-  },
-  sessionDetails: {
-    gap: 12,
-  },
-  sessionRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
-  sessionItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  sessionLabel: {
-    fontSize: 15,
-    color: '#1E293B',
-    fontWeight: '500',
-    marginLeft: 8,
-  },
-  sessionValue: {
-    fontSize: 15,
-    color: '#64748B',
-    fontWeight: '600',
-    textAlign: 'right',
-    flex: 1,
-  },
-
-  // About Card
-  aboutCard: {
-    backgroundColor: '#ffffff',
-    marginHorizontal: 16,
-    marginBottom: 16,
-    borderRadius: 16,
-    padding: 20,
-    elevation: 2,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
   },
   aboutText: {
-    fontSize: 15,
-    color: '#374151',
-    lineHeight: 24,
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+    fontSize: rfs(14),
+    color: '#475569',
+    lineHeight: rfs(22),
   },
-
-  // Education Card
-  educationCard: {
-    backgroundColor: '#ffffff',
-    marginHorizontal: 16,
-    marginBottom: 16,
-    borderRadius: 16,
-    padding: 20,
-    elevation: 2,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  educationItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-  },
-  educationDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#10B981',
-    marginTop: 6,
-    marginRight: 12,
-  },
-  educationContent: {
-    flex: 1,
-  },
-  educationDegree: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1E293B',
-    marginBottom: 2,
-  },
-  educationField: {
-    fontSize: 14,
-    color: '#059669',
-    marginBottom: 4,
-  },
-  educationUniversity: {
-    fontSize: 14,
-    color: '#64748B',
-    marginBottom: 2,
-  },
-  educationYear: {
-    fontSize: 13,
-    color: '#94A3B8',
-  },
-
-  // Skills Card
-  skillsCard: {
-    backgroundColor: '#ffffff',
-    marginHorizontal: 16,
-    marginBottom: 16,
-    borderRadius: 16,
-    padding: 20,
-    elevation: 2,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
+  // Optimized Thin Pills for Skills
   skillsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: wp(8),
   },
-  skillChip: {
+  skillPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#F0FDF4',
-    borderColor: '#D1FAE5',
     borderWidth: 1,
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    borderColor: '#BBF7D0',
+    borderRadius: wp(20),
+    paddingHorizontal: wp(12),
+    paddingVertical: hp(6),
+    gap: wp(6),
   },
   skillText: {
-    fontSize: 13,
+    fontSize: rfs(12),
     color: '#059669',
-    fontWeight: '500',
+    fontWeight: '600',
   },
-  specializedChip: {
+  specPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#FEF3C7',
+    borderWidth: 1,
     borderColor: '#FDE68A',
+    borderRadius: wp(20),
+    paddingHorizontal: wp(12),
+    paddingVertical: hp(6),
+    gap: wp(6),
   },
-  specializedText: {
-    fontSize: 13,
+  specText: {
+    fontSize: rfs(12),
     color: '#D97706',
-    fontWeight: '500',
+    fontWeight: '600',
   },
-
-  // Contact Card
-  contactCard: {
-    backgroundColor: '#ffffff',
-    marginHorizontal: 16,
-    marginBottom: 16,
-    borderRadius: 16,
-    padding: 20,
-    elevation: 2,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  contactItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  contactText: {
-    fontSize: 15,
-    color: '#374151',
-    marginLeft: 12,
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
-  },
-  verificationStatus: {
-    marginTop: 8,
-  },
-  verificationItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  verificationText: {
-    fontSize: 13,
-    fontWeight: '500',
-    marginLeft: 6,
-  },
-
-  // Availability Card
-  availabilityCard: {
-    backgroundColor: '#ffffff',
-    marginHorizontal: 16,
-    marginBottom: 16,
-    borderRadius: 16,
-    padding: 20,
-    elevation: 2,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  availabilityHeader: {
+  infoRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 12,
+    paddingVertical: hp(10),
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
   },
-  availableNow: {
+  lastInfoRow: {
+    borderBottomWidth: 0,
+  },
+  infoLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F0FDF4',
-    borderRadius: 20,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderWidth: 1,
-    borderColor: '#D1FAE5',
+    flex: 1,
+    marginRight: wp(12),
   },
-  availableDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#10B981',
-    marginRight: 6,
+  infoLabel: {
+    fontSize: rfs(14),
+    color: '#1E293B',
+    fontWeight: '500',
+    marginLeft: wp(8),
   },
-  availableText: {
-    fontSize: 12,
-    color: '#10B981',
+  infoValue: {
+    fontSize: rfs(13),
+    color: '#64748B',
+    fontWeight: '600',
+    textAlign: 'right',
+    maxWidth: '50%',
+  },
+  languagesWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: wp(6),
+    maxWidth: '50%',
+    justifyContent: 'flex-end',
+  },
+  langTag: {
+    backgroundColor: '#EFF6FF',
+    borderRadius: wp(12),
+    paddingHorizontal: wp(10),
+    paddingVertical: hp(4),
+  },
+  langText: {
+    fontSize: rfs(11),
+    color: '#2563EB',
+    fontWeight: '500',
+  },
+  statusTag: {
+    paddingHorizontal: wp(12),
+    paddingVertical: hp(5),
+    borderRadius: wp(12),
+  },
+  verifiedTag: {
+    backgroundColor: '#D1FAE5',
+  },
+  pendingTag: {
+    backgroundColor: '#FEF3C7',
+  },
+  statusTagText: {
+    fontSize: rfs(12),
     fontWeight: '600',
   },
-  availabilityDescription: {
-    fontSize: 14,
+  verifiedTagText: {
+    color: '#059669',
+  },
+  pendingTagText: {
+    color: '#D97706',
+  },
+  educationBox: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: wp(12),
+    padding: wp(14),
+    gap: hp(6),
+  },
+  degreeText: {
+    fontSize: rfs(15),
+    fontWeight: '600',
+    color: '#1E293B',
+  },
+  fieldStudyText: {
+    fontSize: rfs(13),
+    color: '#059669',
+    fontWeight: '500',
+  },
+  uniRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: wp(6),
+    marginTop: hp(2),
+  },
+  uniText: {
+    fontSize: rfs(12),
     color: '#64748B',
-    textAlign: 'center',
-    fontStyle: 'italic',
+    flex: 1,
   },
-
-  // Bottom Spacing
-  bottomSpacing: {
-    height: 100, // Space for action buttons
+  yearRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: wp(6),
   },
-
-  // Fixed Action Container
+  yearText: {
+    fontSize: rfs(11),
+    color: '#94A3B8',
+  },
   actionContainer: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    flexDirection: 'row',
-    backgroundColor: '#ffffff',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    paddingBottom: Platform.OS === 'ios' ? 34 : 16,
+    backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
     borderTopColor: '#E2E8F0',
-    gap: 12,
-    elevation: 10,
+    paddingBottom: hp(16), // Added margin from bottom
+    elevation: 12,
     shadowColor: '#000000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    zIndex: 100,
   },
-  messageButton: {
+  actionButtons: {
+    flexDirection: 'row',
+    paddingHorizontal: wp(16),
+    paddingTop: hp(16), // Increased top padding
+    paddingBottom: hp(8), // Bottom padding before safe area
+    gap: wp(12),
+    marginBottom: hp(8), // Extra margin from bottom
+  },
+  actionButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: wp(14),
+    paddingVertical: hp(14),
+    gap: wp(8),
+    minHeight: hp(50),
+  },
+  messageButton: {
     backgroundColor: '#F0FDF4',
-    borderWidth: 1.5,
+    borderWidth: 2,
     borderColor: '#059669',
-    borderRadius: 12,
-    paddingVertical: 14,
-    gap: 8,
   },
   messageButtonText: {
     color: '#059669',
-    fontSize: 16,
-    fontWeight: '600',
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+    fontSize: rfs(15),
+    fontWeight: '700',
   },
   bookButton: {
-    flex: 2,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
     backgroundColor: '#059669',
-    borderRadius: 12,
-    paddingVertical: 14,
-    gap: 8,
-    elevation: 2,
+    flex: 1.2,
+    elevation: 4,
     shadowColor: '#059669',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
   },
   bookButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
+    color: '#FFFFFF',
+    fontSize: rfs(15),
     fontWeight: '700',
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
-
-  // Button States
   buttonDisabled: {
-    opacity: 0.7,
+    opacity: 0.5,
     backgroundColor: '#F3F4F6',
     borderColor: '#D1D5DB',
-  },
-  buttonTextDisabled: {
-    color: '#9CA3AF',
   },
 });
 
