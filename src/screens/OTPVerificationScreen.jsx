@@ -1,4 +1,4 @@
-// src/screens/OTPVerificationScreen.jsx - Production Ready
+// src/screens/OTPVerificationScreen.jsx - Modern Production Ready UI with White Background & Auto-Capture OTP
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   View,
@@ -15,12 +15,12 @@ import {
   StatusBar,
   Animated,
   Keyboard,
+  NativeModules,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useAuth } from '../context/AuthContext';
 import { hp, wp, rfs, ms, isTablet } from '../utils/ResponsiveUtils';
-
 
 const { width, height } = Dimensions.get('window');
 
@@ -34,10 +34,64 @@ const OTPVerificationScreen = ({ navigation, route }) => {
   const [canResend, setCanResend] = useState(false);
   const [focusedIndex, setFocusedIndex] = useState(-1);
   const [otpFilled, setOtpFilled] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
   const [scaleAnim] = useState(new Animated.Value(1));
+  const [pulseAnim] = useState(new Animated.Value(1));
   const otpInputRefs = useRef([]);
+  const autoFillTimeoutRef = useRef(null);
 
   const { verifyOTP, sendOTP, loading, error, clearError } = useAuth();
+
+  // ==================== AUTO-FILL OTP FROM SMS ====================
+  useEffect(() => {
+    startOTPListening();
+    return () => {
+      if (autoFillTimeoutRef.current) {
+        clearTimeout(autoFillTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const startOTPListening = useCallback(() => {
+    if (Platform.OS === 'android') {
+      try {
+        const RNOtpVerify = NativeModules.RNOtpVerify;
+        if (RNOtpVerify && RNOtpVerify.getOtp) {
+          RNOtpVerify.getOtp()
+            .then((result) => {
+              const extractedOTP = result.match(/\d{6}/)?.[0];
+              if (extractedOTP) {
+                handleAutoFillOTP(extractedOTP);
+              }
+            })
+            .catch((error) => {
+              console.log('OTP Auto-fill: Manual entry required');
+            });
+        }
+      } catch (error) {
+        console.log('OTP Auto-fill not available');
+      }
+    }
+  }, []);
+
+  const handleAutoFillOTP = useCallback((autoOtp) => {
+    setOtp(autoOtp);
+    setOtpFilled(true);
+    
+    // Trigger pulse animation
+    Animated.sequence([
+      Animated.timing(pulseAnim, {
+        toValue: 1.1,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.timing(pulseAnim, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [pulseAnim]);
 
   // ==================== TIMER LOGIC ====================
   useEffect(() => {
@@ -59,15 +113,12 @@ const OTPVerificationScreen = ({ navigation, route }) => {
   }, []);
 
   const handleOTPChange = useCallback((value, index) => {
-    // Only accept numeric input
     const numericValue = value.replace(/[^0-9]/g, '');
 
-    // Don't exceed 1 character per field
     if (numericValue.length > 1) {
       return;
     }
 
-    // Update OTP state
     const newOtp = otp.split('');
     newOtp[index] = numericValue;
     const updatedOtp = newOtp.join('');
@@ -75,7 +126,6 @@ const OTPVerificationScreen = ({ navigation, route }) => {
     setOtp(updatedOtp);
     setOtpFilled(updatedOtp.length === 6);
 
-    // Auto-focus to next field
     if (numericValue && index < 5) {
       otpInputRefs.current[index + 1]?.focus();
     }
@@ -86,13 +136,11 @@ const OTPVerificationScreen = ({ navigation, route }) => {
   const handleOTPKeyPress = useCallback((key, index) => {
     if (key === 'Backspace') {
       if (otp[index]) {
-        // Clear current field
         const newOtp = otp.split('');
         newOtp[index] = '';
         setOtp(newOtp.join(''));
         setOtpFilled(false);
       } else if (index > 0) {
-        // Move to previous field
         const newOtp = otp.split('');
         newOtp[index - 1] = '';
         setOtp(newOtp.join(''));
@@ -135,16 +183,15 @@ const OTPVerificationScreen = ({ navigation, route }) => {
       return;
     }
 
+    setIsVerifying(true);
     Keyboard.dismiss();
     const result = await verifyOTP(otp, phone);
+    setIsVerifying(false);
 
     if (result.success) {
-      // Haptic feedback
       try {
         require('react-native').NativeModules?.HapticFeedback?.perform?.('notificationSuccess');
-      } catch (e) {
-        // Silent fail
-      }
+      } catch (e) {}
 
       if (type === 'signup') {
         Alert.alert(
@@ -163,7 +210,6 @@ const OTPVerificationScreen = ({ navigation, route }) => {
           ]
         );
       } else {
-        // For login with OTP only
         Alert.alert(
           'Success',
           'You have been logged in successfully!',
@@ -184,7 +230,6 @@ const OTPVerificationScreen = ({ navigation, route }) => {
       Alert.alert('Error', result.error || 'Invalid OTP. Please try again.', [
         { text: 'OK', onPress: clearError }
       ]);
-      // Clear OTP on error
       setOtp('');
       otpInputRefs.current[0]?.focus();
     }
@@ -197,18 +242,16 @@ const OTPVerificationScreen = ({ navigation, route }) => {
     const result = await sendOTP(phone);
 
     if (result.success) {
-      // Haptic feedback
       try {
         require('react-native').NativeModules?.HapticFeedback?.perform?.('notificationSuccess');
-      } catch (e) {
-        // Silent fail
-      }
+      } catch (e) {}
 
       setOtp('');
       setResendTimer(30);
       setCanResend(false);
       setOtpFilled(false);
       otpInputRefs.current[0]?.focus();
+      startOTPListening();
 
       Alert.alert(
         'OTP Sent',
@@ -220,7 +263,7 @@ const OTPVerificationScreen = ({ navigation, route }) => {
         { text: 'OK', onPress: clearError }
       ]);
     }
-  }, [canResend, phone, sendOTP, clearError]);
+  }, [canResend, phone, sendOTP, clearError, startOTPListening]);
 
   // ==================== FORMAT PHONE ====================
   const formatPhone = useCallback((phoneNum) => {
@@ -236,16 +279,24 @@ const OTPVerificationScreen = ({ navigation, route }) => {
   // ==================== RESPONSIVE STYLES ====================
   const responsiveStyles = useMemo(() => ({
     containerPadding: wp(20),
-    titleFontSize: isTablet() ? rfs(32) : rfs(28),
-    subtitleFontSize: isTablet() ? rfs(16) : rfs(14),
+    titleFontSize: isTablet() ? rfs(36) : rfs(32),
+    subtitleFontSize: isTablet() ? rfs(16) : rfs(15),
     otpBoxSize: isTablet() ? wp(50) : wp(45),
-    iconSize: rfs(22),
+    iconSize: rfs(28),
   }), []);
 
   // ==================== RENDER OTP INPUT BOXES ====================
   const renderOTPInput = useCallback((index) => {
     return (
-      <View key={index} style={{ flex: 1, marginHorizontal: wp(4) }}>
+      <Animated.View
+        key={index}
+        style={[
+          { flex: 1, marginHorizontal: wp(3.5) },
+          otpFilled && {
+            transform: [{ scale: pulseAnim }]
+          }
+        ]}
+      >
         <TextInput
           ref={(ref) => {
             otpInputRefs.current[index] = ref;
@@ -255,14 +306,16 @@ const OTPVerificationScreen = ({ navigation, route }) => {
             {
               width: responsiveStyles.otpBoxSize,
               height: responsiveStyles.otpBoxSize,
-              fontSize: rfs(24),
+              fontSize: rfs(20),
               borderColor:
-                focusedIndex === index ? '#4CAF50' :
+                focusedIndex === index ? '#059669' :
                 otp[index] ? '#10B981' :
-                'rgba(255, 255, 255, 0.2)',
+                '#E5E7EB',
+              borderWidth: focusedIndex === index || otp[index] ? 2 : 1,
               backgroundColor:
-                focusedIndex === index ? 'rgba(76, 175, 80, 0.1)' :
-                'rgba(255, 255, 255, 0.08)',
+                focusedIndex === index ? '#F0FDF4' :
+                otp[index] ? '#F0FDF4' :
+                '#F9FAFB',
             }
           ]}
           maxLength={1}
@@ -276,156 +329,167 @@ const OTPVerificationScreen = ({ navigation, route }) => {
           selectTextOnFocus
           textContentType="oneTimeCode"
         />
-      </View>
+      </Animated.View>
     );
-  }, [otp, focusedIndex, loading, handleOTPChange, handleOTPKeyPress, responsiveStyles.otpBoxSize]);
+  }, [otp, focusedIndex, loading, handleOTPChange, handleOTPKeyPress, responsiveStyles.otpBoxSize, otpFilled, pulseAnim]);
 
   // ==================== RENDER ====================
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+      <StatusBar barStyle="dark-content" backgroundColor="#ffffff" translucent={false} />
 
-      <LinearGradient
-        colors={['#1a3c5c', '#2d5a87', '#1a3c5c']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.gradient}
+      <KeyboardAvoidingView
+        behavior={keyboardBehavior}
+        keyboardVerticalOffset={hp(20)}
+        style={styles.keyboardAvoid}
       >
-        <KeyboardAvoidingView
-          behavior={keyboardBehavior}
-          keyboardVerticalOffset={hp(20)}
-          style={styles.keyboardAvoid}
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          bounces={false}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          <ScrollView
-            contentContainerStyle={styles.scrollContent}
-            bounces={false}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
+          {/* Back Button */}
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            {/* Back Button */}
-            <TouchableOpacity
-              style={styles.backButton}
-              onPress={() => navigation.goBack()}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <Icon name="arrow-back" size={rfs(24)} color="#fff" />
-            </TouchableOpacity>
+            <Icon name="arrow-back" size={rfs(24)} color="#059669" />
+          </TouchableOpacity>
 
-            <View style={[styles.content, { paddingHorizontal: responsiveStyles.containerPadding }]}>
-              {/* Header Section */}
-              <View style={styles.headerSection}>
-                <View style={styles.iconContainer}>
-                  <LinearGradient
-                    colors={['#4CAF50', '#45a049']}
-                    style={styles.iconBackground}
-                  >
-                    <Icon name="verified-user" size={responsiveStyles.iconSize} color="#fff" />
-                  </LinearGradient>
-                </View>
-
-                <Text style={[
-                  styles.title,
-                  { fontSize: responsiveStyles.titleFontSize }
-                ]}>
-                  Verify Phone
-                </Text>
-
-                <Text style={[
-                  styles.subtitle,
-                  { fontSize: responsiveStyles.subtitleFontSize }
-                ]}>
-                  Enter the 6-digit code sent to{'\n'}
-                  <Text style={styles.phoneText}>{formatPhone(phone)}</Text>
-                </Text>
+          {/* Green Header Section with Icon */}
+          <LinearGradient
+            colors={['#059669', '#10B981']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.headerGradient}
+          >
+            <View style={styles.headerContent}>
+              <View style={styles.iconCircle}>
+                <Icon name="verified-user" size={responsiveStyles.iconSize} color="#fff" />
               </View>
 
-              {/* Error Display */}
-              {error && (
-                <View style={styles.errorContainer}>
-                  <Icon name="error-outline" size={rfs(16)} color="#EF4444" />
-                  <Text style={[styles.errorText, { fontSize: rfs(13) }]}>{error}</Text>
-                </View>
-              )}
+              <Text style={[
+                styles.title,
+                { fontSize: responsiveStyles.titleFontSize }
+              ]}>
+                Verify Phone
+              </Text>
 
-              {/* OTP Input Section */}
-              <View style={styles.otpSection}>
-                <View style={styles.otpContainer}>
-                  {[0, 1, 2, 3, 4, 5].map((index) => renderOTPInput(index))}
-                </View>
-              </View>
+              <Text style={[
+                styles.subtitle,
+                { fontSize: responsiveStyles.subtitleFontSize }
+              ]}>
+                Enter the 6-digit code sent to{'\n'}
+                <Text style={styles.phoneText}>{formatPhone(phone)}</Text>
+              </Text>
+            </View>
+          </LinearGradient>
 
-              {/* Verify Button */}
-              <Animated.View
-                style={[
-                  styles.buttonContainer,
-                  { transform: [{ scale: scaleAnim }] }
-                ]}
-              >
-                <TouchableOpacity
-                  style={[
-                    styles.button,
-                    {
-                      opacity: otpFilled && !loading ? 1 : 0.6,
-                    }
-                  ]}
-                  onPress={handleVerifyOTP}
-                  onPressIn={handlePressIn}
-                  onPressOut={handlePressOut}
-                  disabled={!otpFilled || loading}
-                  activeOpacity={0.8}
-                >
-                  <LinearGradient
-                    colors={['#4CAF50', '#45a049']}
-                    style={styles.buttonGradient}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                  >
-                    {loading ? (
-                      <ActivityIndicator color="#fff" size="small" />
-                    ) : (
-                      <View style={styles.buttonContent}>
-                        <Icon name="check-circle" size={rfs(18)} color="#fff" />
-                        <Text style={[styles.buttonText, { fontSize: rfs(16) }]}>
-                          Verify Code
-                        </Text>
-                      </View>
-                    )}
-                  </LinearGradient>
+          {/* White Content Section */}
+          <View style={[styles.content, { paddingHorizontal: responsiveStyles.containerPadding }]}>
+            {/* Error Display */}
+            {error && (
+              <View style={styles.errorContainer}>
+                <Icon name="error-outline" size={rfs(16)} color="#EF4444" />
+                <Text style={[styles.errorText, { fontSize: rfs(13), marginLeft: wp(8) }]}>
+                  {error}
+                </Text>
+                <TouchableOpacity onPress={clearError} hitSlop={{ top: 5, bottom: 5, right: 5, left: 5 }}>
+                  <Icon name="close" size={rfs(18)} color="#EF4444" />
                 </TouchableOpacity>
-              </Animated.View>
-
-              {/* Resend Section */}
-              <View style={styles.resendSection}>
-                <Text style={[styles.resendText, { fontSize: rfs(14) }]}>
-                  Didn't receive the code?{' '}
-                </Text>
-                {canResend ? (
-                  <TouchableOpacity
-                    onPress={handleResendOTP}
-                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                  >
-                    <Text style={[styles.resendLink, { fontSize: rfs(14) }]}>
-                      Resend OTP
-                    </Text>
-                  </TouchableOpacity>
-                ) : (
-                  <Text style={[styles.timerText, { fontSize: rfs(14) }]}>
-                    Resend in {resendTimer}s
-                  </Text>
-                )}
               </View>
+            )}
 
-              {/* Help Section */}
-              <View style={styles.helpSection}>
-                <Icon name="help-outline" size={rfs(16)} color="rgba(255, 255, 255, 0.6)" />
-                <Text style={[styles.helpText, { fontSize: rfs(11) }]}>
-                  Check your messages. Standard SMS rates may apply.
+            {/* Auto-fill Indicator */}
+            {otpFilled && !loading && isVerifying && (
+              <Animated.View style={[styles.autoFillIndicator, { opacity: pulseAnim }]}>
+                <Icon name="check-circle" size={rfs(14)} color="#10B981" />
+                <Text style={[styles.autoFillText, { fontSize: rfs(12), marginLeft: wp(8) }]}>
+                  OTP received - Verifying...
                 </Text>
+              </Animated.View>
+            )}
+
+            {/* OTP Input Section */}
+            <View style={styles.otpSection}>
+              <View style={styles.otpContainer}>
+                {[0, 1, 2, 3, 4, 5].map((index) => renderOTPInput(index))}
               </View>
             </View>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </LinearGradient>
+
+            {/* Verify Button */}
+            <Animated.View
+              style={[
+                styles.buttonContainer,
+                { transform: [{ scale: scaleAnim }] }
+              ]}
+            >
+              <TouchableOpacity
+                style={[
+                  styles.button,
+                  {
+                    opacity: otpFilled && !loading ? 1 : 0.5,
+                  }
+                ]}
+                onPress={handleVerifyOTP}
+                onPressIn={handlePressIn}
+                onPressOut={handlePressOut}
+                disabled={!otpFilled || loading}
+                activeOpacity={0.8}
+              >
+                <LinearGradient
+                  colors={['#059669', '#10B981']}
+                  style={styles.buttonGradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                >
+                  {loading ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <View style={styles.buttonContent}>
+                      <Icon name="check-circle" size={rfs(18)} color="#fff" />
+                      <Text style={[styles.buttonText, { fontSize: rfs(16) }]}>
+                        Verify Code
+                      </Text>
+                    </View>
+                  )}
+                </LinearGradient>
+              </TouchableOpacity>
+            </Animated.View>
+
+            {/* Resend Section */}
+            <View style={styles.resendSection}>
+              <Text style={[styles.resendText, { fontSize: rfs(14) }]}>
+                Didn't receive the code?{' '}
+              </Text>
+              {canResend ? (
+                <TouchableOpacity
+                  onPress={handleResendOTP}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Text style={[styles.resendLink, { fontSize: rfs(14) }]}>
+                    Resend OTP
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <Text style={[styles.timerText, { fontSize: rfs(14) }]}>
+                  Resend in {resendTimer}s
+                </Text>
+              )}
+            </View>
+
+            {/* Help Section */}
+            <View style={styles.helpSection}>
+              <Icon name="info" size={rfs(14)} color="#059669" />
+              <Text style={[styles.helpText, { fontSize: rfs(11), marginLeft: wp(8) }]}>
+                Check your messages. Standard SMS rates may apply.
+              </Text>
+            </View>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 };
@@ -433,10 +497,7 @@ const OTPVerificationScreen = ({ navigation, route }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a3c5c',
-  },
-  gradient: {
-    flex: 1,
+    backgroundColor: '#ffffff',
   },
   keyboardAvoid: {
     flex: 1,
@@ -452,35 +513,32 @@ const styles = StyleSheet.create({
     width: wp(44),
     height: wp(44),
     borderRadius: wp(22),
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(5, 150, 105, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  content: {
-    flex: 1,
-    justifyContent: 'center',
-    paddingTop: hp(60),
   },
 
-  // Header Section
-  headerSection: {
+  // Header Gradient Section
+  headerGradient: {
+    borderBottomLeftRadius: wp(24),
+    borderBottomRightRadius: wp(24),
+    paddingVertical: hp(40),
+    paddingHorizontal: wp(20),
+    paddingTop: hp(60),
+  },
+  headerContent: {
     alignItems: 'center',
-    marginBottom: hp(40),
   },
-  iconContainer: {
-    marginBottom: hp(16),
-  },
-  iconBackground: {
+  iconCircle: {
     width: hp(70),
     height: hp(70),
     borderRadius: hp(35),
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+    marginBottom: hp(20),
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
   },
   title: {
     color: '#fff',
@@ -489,32 +547,56 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   subtitle: {
-    color: 'rgba(255, 255, 255, 0.8)',
+    color: 'rgba(255, 255, 255, 0.95)',
     textAlign: 'center',
     lineHeight: hp(24),
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
   },
   phoneText: {
     fontWeight: '700',
-    color: '#4CAF50',
+    color: '#fff',
+  },
+
+  // Content Section
+  content: {
+    paddingTop: hp(30),
+    paddingBottom: hp(40),
   },
 
   // Error Display
   errorContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    backgroundColor: '#FEF2F2',
     borderRadius: wp(12),
     paddingHorizontal: wp(12),
     paddingVertical: hp(12),
     marginBottom: hp(24),
-    borderLeftWidth: 4,
+    borderLeftWidth: 3,
     borderLeftColor: '#EF4444',
+    borderWidth: 1,
+    borderColor: '#FECACA',
   },
   errorText: {
-    color: '#FCA5A5',
-    marginLeft: wp(8),
+    color: '#DC2626',
     flex: 1,
+    fontWeight: '500',
+  },
+
+  // Auto-fill Indicator
+  autoFillIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0FDF4',
+    borderRadius: wp(10),
+    paddingHorizontal: wp(12),
+    paddingVertical: hp(10),
+    marginBottom: hp(20),
+    borderWidth: 1,
+    borderColor: '#D1FAE5',
+  },
+  autoFillText: {
+    color: '#15803D',
     fontWeight: '500',
   },
 
@@ -527,13 +609,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
+    width: '100%',
   },
   otpBox: {
-    borderWidth: 2,
     borderRadius: wp(12),
     textAlign: 'center',
     fontWeight: '700',
-    color: '#fff',
+    color: '#1F2937',
     letterSpacing: 2,
   },
 
@@ -542,14 +624,14 @@ const styles = StyleSheet.create({
     marginBottom: hp(24),
   },
   button: {
-    borderRadius: wp(14),
+    borderRadius: wp(12),
     overflow: 'hidden',
     height: hp(56),
-    shadowColor: '#4CAF50',
+    shadowColor: '#059669',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.15,
     shadowRadius: 8,
-    elevation: 8,
+    elevation: 5,
   },
   buttonGradient: {
     flex: 1,
@@ -576,15 +658,16 @@ const styles = StyleSheet.create({
     marginBottom: hp(20),
   },
   resendText: {
-    color: 'rgba(255, 255, 255, 0.8)',
+    color: '#6B7280',
     fontWeight: '500',
   },
   resendLink: {
-    color: '#4CAF50',
+    color: '#059669',
     fontWeight: '700',
+    textDecorationLine: 'underline',
   },
   timerText: {
-    color: 'rgba(255, 255, 255, 0.5)',
+    color: '#9CA3AF',
     fontWeight: '500',
   },
 
@@ -592,14 +675,15 @@ const styles = StyleSheet.create({
   helpSection: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(76, 175, 80, 0.1)',
+    backgroundColor: '#F0FDF4',
     borderRadius: wp(10),
     paddingHorizontal: wp(12),
     paddingVertical: hp(10),
+    borderWidth: 1,
+    borderColor: '#D1FAE5',
   },
   helpText: {
-    color: 'rgba(255, 255, 255, 0.7)',
-    marginLeft: wp(8),
+    color: '#15803D',
     flex: 1,
     fontWeight: '400',
     lineHeight: hp(16),

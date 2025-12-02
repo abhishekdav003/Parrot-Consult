@@ -1,4 +1,4 @@
-// src/screens/LoginScreen.jsx - OTP-Only Login (Production Ready)
+// src/screens/LoginScreen.jsx - Modern Production Ready UI with White Background
 import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
@@ -19,7 +19,6 @@ import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useAuth } from '../context/AuthContext';
 import { hp, wp, rfs, ms, isTablet } from '../utils/ResponsiveUtils';
-
 
 const { width, height } = Dimensions.get('window');
 
@@ -87,12 +86,9 @@ const LoginScreen = ({ navigation }) => {
     const result = await sendOTP(phone);
 
     if (result.success) {
-      // Haptic feedback (if available)
       try {
         require('react-native').NativeModules?.HapticFeedback?.perform?.('notificationSuccess');
-      } catch (e) {
-        // Silent fail if haptic not available
-      }
+      } catch (e) {}
 
       Alert.alert(
         'OTP Sent',
@@ -130,105 +126,107 @@ const LoginScreen = ({ navigation }) => {
   // ==================== RESPONSIVE STYLES ====================
   const responsiveStyles = useMemo(() => ({
     containerPadding: wp(20),
-    titleFontSize: isTablet() ? rfs(32) : rfs(28),
-    subtitleFontSize: isTablet() ? rfs(16) : rfs(14),
+    titleFontSize: isTablet() ? rfs(36) : rfs(32),
+    subtitleFontSize: isTablet() ? rfs(16) : rfs(15),
     inputFontSize: rfs(16),
     inputHeight: hp(56),
     buttonHeight: hp(56),
-    iconSize: rfs(22),
+    iconSize: rfs(28),
     spacing: wp(24),
   }), []);
 
   // ==================== RENDER ====================
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+      <StatusBar barStyle="dark-content" backgroundColor="#ffffff" translucent={false} />
       
-      <LinearGradient
-        colors={['#1a3c5c', '#2d5a87', '#1a3c5c']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.gradient}
+      <KeyboardAvoidingView
+        behavior={keyboardBehavior}
+        keyboardVerticalOffset={keyboardVerticalOffset}
+        style={styles.keyboardAvoid}
       >
-        <KeyboardAvoidingView
-          behavior={keyboardBehavior}
-          keyboardVerticalOffset={keyboardVerticalOffset}
-          style={styles.keyboardAvoid}
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          bounces={false}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          <ScrollView
-            contentContainerStyle={styles.scrollContent}
-            bounces={false}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
-            <View style={[styles.content, { paddingHorizontal: responsiveStyles.containerPadding }]}>
-              {/* Header Section */}
-              <View style={styles.headerSection}>
-                <View style={styles.iconContainer}>
-                  <LinearGradient
-                    colors={['#4CAF50', '#45a049']}
-                    style={styles.iconBackground}
-                  >
-                    <Icon name="phone-in-talk" size={responsiveStyles.iconSize} color="#fff" />
-                  </LinearGradient>
+          <View style={[styles.content, { paddingHorizontal: responsiveStyles.containerPadding }]}>
+            {/* Green Header Section with Icon */}
+            <LinearGradient
+              colors={['#059669', '#10B981']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.headerGradient}
+            >
+              <View style={styles.headerContent}>
+                <View style={styles.iconCircle}>
+                  <Icon name="login" size={responsiveStyles.iconSize} color="#fff" />
                 </View>
 
                 <Text style={[
                   styles.title,
                   { fontSize: responsiveStyles.titleFontSize }
                 ]}>
-                  Sign In
+                  Welcome Back
                 </Text>
 
                 <Text style={[
                   styles.subtitle,
                   { fontSize: responsiveStyles.subtitleFontSize }
                 ]}>
-                  Enter your phone number to get started
+                  Sign in to your account
                 </Text>
               </View>
+            </LinearGradient>
 
+            {/* White Content Section */}
+            <View style={styles.formSection}>
               {/* Error Display */}
               {error && (
                 <View style={styles.errorContainer}>
                   <Icon name="error-outline" size={rfs(16)} color="#EF4444" />
-                  <Text style={styles.errorText}>{error}</Text>
+                  <Text style={[styles.errorText, { fontSize: rfs(13), marginLeft: wp(8) }]}>
+                    {error}
+                  </Text>
+                  <TouchableOpacity onPress={clearError} hitSlop={{ top: 5, bottom: 5, right: 5, left: 5 }}>
+                    <Icon name="close" size={rfs(18)} color="#EF4444" />
+                  </TouchableOpacity>
                 </View>
               )}
 
               {/* Phone Input Section */}
               <View style={styles.inputSection}>
-                <Text style={[
-                  styles.label,
-                  { fontSize: rfs(14) }
-                ]}>
-                  Phone Number
-                </Text>
+                <View style={styles.labelContainer}>
+                  <Icon name="phone" size={rfs(16)} color="#059669" />
+                  <Text style={[
+                    styles.label,
+                    { fontSize: rfs(14), marginLeft: wp(8) }
+                  ]}>
+                    Phone Number
+                  </Text>
+                </View>
 
                 <View style={[
                   styles.inputContainer,
                   {
-                    borderColor: isFocused ? '#4CAF50' : isValidPhone ? '#10B981' : 'rgba(255, 255, 255, 0.2)',
-                    backgroundColor: isFocused ? 'rgba(76, 175, 80, 0.1)' : 'rgba(255, 255, 255, 0.08)',
-                    height: responsiveStyles.inputHeight,
+                    borderColor: isFocused ? '#059669' : isValidPhone ? '#10B981' : '#E5E7EB',
+                    borderWidth: isFocused || isValidPhone ? 2 : 1,
                   }
                 ]}>
-                  {/* Country Code */}
                   <Text style={[styles.countryCode, { fontSize: responsiveStyles.inputFontSize }]}>
                     +91
                   </Text>
 
-                  {/* Divider */}
                   <View style={styles.divider} />
 
-                  {/* Phone Input */}
                   <TextInput
                     style={[
                       styles.input,
                       { fontSize: responsiveStyles.inputFontSize }
                     ]}
-                    placeholder="Enter 10-digit number"
-                    placeholderTextColor="rgba(255, 255, 255, 0.5)"
+                    placeholder="10-digit number"
+                    placeholderTextColor="#9CA3AF"
                     value={phone}
                     onChangeText={handlePhoneChange}
                     keyboardType="number-pad"
@@ -238,21 +236,22 @@ const LoginScreen = ({ navigation }) => {
                     onBlur={() => setIsFocused(false)}
                   />
 
-                  {/* Validation Indicator */}
                   {phone.length > 0 && (
                     <Icon
                       name={isValidPhone ? 'check-circle' : 'cancel'}
                       size={rfs(20)}
-                      color={isValidPhone ? '#10B981' : '#FCA5A5'}
+                      color={isValidPhone ? '#10B981' : '#EF4444'}
                     />
                   )}
                 </View>
 
-                {/* Helper Text */}
                 {phone.length > 0 && !isValidPhone && (
-                  <Text style={[styles.helperText, { fontSize: rfs(12) }]}>
-                    Please enter a valid 10-digit phone number starting with 6-9
-                  </Text>
+                  <View style={styles.helperContainer}>
+                    <Icon name="info" size={rfs(12)} color="#EF4444" />
+                    <Text style={[styles.helperText, { fontSize: rfs(12), marginLeft: wp(6) }]}>
+                      Valid format: 10 digits starting with 6-9
+                    </Text>
+                  </View>
                 )}
               </View>
 
@@ -268,7 +267,7 @@ const LoginScreen = ({ navigation }) => {
                     styles.button,
                     {
                       height: responsiveStyles.buttonHeight,
-                      opacity: isValidPhone && !loading ? 1 : 0.6,
+                      opacity: isValidPhone && !loading ? 1 : 0.5,
                     }
                   ]}
                   onPress={handleSendOTP}
@@ -278,7 +277,7 @@ const LoginScreen = ({ navigation }) => {
                   activeOpacity={0.8}
                 >
                   <LinearGradient
-                    colors={['#4CAF50', '#45a049']}
+                    colors={['#059669', '#10B981']}
                     style={styles.buttonGradient}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 0 }}
@@ -301,7 +300,7 @@ const LoginScreen = ({ navigation }) => {
               <View style={styles.dividerContainer}>
                 <View style={styles.dividerLine} />
                 <Text style={[styles.dividerText, { fontSize: rfs(12) }]}>
-                  or
+                  New here?
                 </Text>
                 <View style={styles.dividerLine} />
               </View>
@@ -316,22 +315,22 @@ const LoginScreen = ({ navigation }) => {
                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
                   <Text style={[styles.signupLink, { fontSize: rfs(14) }]}>
-                    Sign Up
+                    Create Account
                   </Text>
                 </TouchableOpacity>
               </View>
 
               {/* Info Section */}
               <View style={styles.infoSection}>
-                <Icon name="info" size={rfs(16)} color="rgba(255, 255, 255, 0.6)" />
-                <Text style={[styles.infoText, { fontSize: rfs(11) }]}>
-                  We'll send you a 6-digit verification code via SMS
+                <Icon name="shield" size={rfs(14)} color="#059669" />
+                <Text style={[styles.infoText, { fontSize: rfs(11), marginLeft: wp(8) }]}>
+                  We'll send you a secure 6-digit verification code
                 </Text>
               </View>
             </View>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </LinearGradient>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 };
@@ -339,42 +338,41 @@ const LoginScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a3c5c',
-  },
-  gradient: {
-    flex: 1,
+    backgroundColor: '#ffffff',
   },
   keyboardAvoid: {
     flex: 1,
   },
   scrollContent: {
     flexGrow: 1,
-    justifyContent: 'center',
   },
   content: {
-    justifyContent: 'center',
-    minHeight: height * 0.85,
+    flex: 1,
   },
 
-  // Header Section
-  headerSection: {
+  // Header Gradient Section
+  headerGradient: {
+    borderBottomLeftRadius: wp(24),
+    borderBottomRightRadius: wp(24),
+    paddingVertical: hp(40),
+    paddingHorizontal: wp(20),
+    marginHorizontal: -wp(20),
+    marginTop: -hp(20),
+    paddingTop: hp(60),
+  },
+  headerContent: {
     alignItems: 'center',
-    marginBottom: hp(40),
   },
-  iconContainer: {
-    marginBottom: hp(16),
-  },
-  iconBackground: {
+  iconCircle: {
     width: hp(70),
     height: hp(70),
     borderRadius: hp(35),
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+    marginBottom: hp(20),
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
   },
   title: {
     color: '#fff',
@@ -383,85 +381,100 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   subtitle: {
-    color: 'rgba(255, 255, 255, 0.8)',
+    color: 'rgba(255, 255, 255, 0.95)',
     textAlign: 'center',
-    lineHeight: hp(22),
-    letterSpacing: 0.3,
+    lineHeight: hp(24),
+    letterSpacing: 0.2,
+  },
+
+  // Form Section
+  formSection: {
+    marginTop: hp(30),
+    marginBottom: hp(40),
   },
 
   // Error Display
   errorContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    backgroundColor: '#FEF2F2',
     borderRadius: wp(12),
     paddingHorizontal: wp(12),
     paddingVertical: hp(12),
     marginBottom: hp(24),
-    borderLeftWidth: 4,
+    borderLeftWidth: 3,
     borderLeftColor: '#EF4444',
+    borderWidth: 1,
+    borderColor: '#FECACA',
   },
   errorText: {
-    color: '#FCA5A5',
-    fontSize: rfs(13),
-    marginLeft: wp(8),
+    color: '#DC2626',
     flex: 1,
     fontWeight: '500',
   },
 
   // Input Section
   inputSection: {
-    marginBottom: hp(28),
+    marginBottom: hp(24),
+  },
+  labelContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: hp(10),
   },
   label: {
-    color: '#fff',
-    marginBottom: hp(10),
+    color: '#1F2937',
     fontWeight: '600',
     letterSpacing: 0.3,
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: wp(14),
-    borderWidth: 1.5,
+    borderRadius: wp(12),
     paddingHorizontal: wp(14),
+    paddingVertical: hp(12),
+    backgroundColor: '#F9FAFB',
     overflow: 'hidden',
-    transition: 'all 0.3s ease',
   },
   countryCode: {
-    color: '#fff',
+    color: '#374151',
     fontWeight: '600',
     marginRight: wp(8),
   },
   divider: {
     width: 1,
     height: '60%',
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: '#E5E7EB',
     marginRight: wp(12),
   },
   input: {
     flex: 1,
-    color: '#fff',
+    color: '#1F2937',
     fontWeight: '500',
     letterSpacing: 1,
   },
+  helperContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: hp(8),
+    paddingHorizontal: wp(4),
+  },
   helperText: {
-    color: '#FCA5A5',
-    marginTop: hp(6),
+    color: '#DC2626',
     fontWeight: '400',
     letterSpacing: 0.2,
   },
 
   // Button
   buttonContainer: {
-    marginBottom: hp(28),
+    marginBottom: hp(24),
   },
   button: {
-    borderRadius: wp(14),
+    borderRadius: wp(12),
     overflow: 'hidden',
-    shadowColor: '#4CAF50',
+    shadowColor: '#059669',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.2,
     shadowRadius: 8,
     elevation: 8,
   },
@@ -486,15 +499,15 @@ const styles = StyleSheet.create({
   dividerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: hp(28),
+    marginBottom: hp(24),
   },
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: '#E5E7EB',
   },
   dividerText: {
-    color: 'rgba(255, 255, 255, 0.5)',
+    color: '#6B7280',
     marginHorizontal: wp(12),
     fontWeight: '500',
   },
@@ -507,26 +520,28 @@ const styles = StyleSheet.create({
     marginBottom: hp(24),
   },
   signupText: {
-    color: 'rgba(255, 255, 255, 0.8)',
+    color: '#6B7280',
     fontWeight: '500',
   },
   signupLink: {
-    color: '#4CAF50',
+    color: '#059669',
     fontWeight: '700',
+    textDecorationLine: 'underline',
   },
 
   // Info Section
   infoSection: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(76, 175, 80, 0.1)',
+    backgroundColor: '#F0FDF4',
     borderRadius: wp(10),
     paddingHorizontal: wp(12),
     paddingVertical: hp(10),
+    borderWidth: 1,
+    borderColor: '#D1FAE5',
   },
   infoText: {
-    color: 'rgba(255, 255, 255, 0.7)',
-    marginLeft: wp(8),
+    color: '#15803D',
     flex: 1,
     fontWeight: '400',
     lineHeight: hp(16),
