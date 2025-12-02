@@ -5,7 +5,7 @@ import RNBlobUtil from 'react-native-blob-util';
 
 // const BASE_URL = 'http://192.168.0.177:8011/api/v1';
 // const BASE_URL = 'http://10.0.2.2:8011/api/v1';
-// const BASE_URL = 'http://10.0.2.2:8011/api/v1';
+const BASE_URL = 'http://10.0.2.2:8011/api/v1';
 // const BASE_URL = 'http://10.33.116.48:8011/api/v1';
 // const BASE_URL = 'http://192.168.0.116:8011/api/v1';
 // const BASE_URL = 'http://10.224.232.48:8011/api/v1';
@@ -16,7 +16,7 @@ import RNBlobUtil from 'react-native-blob-util';
 
 
 
-const BASE_URL = 'https://api.parrotconsult.com/api/v1';
+// const BASE_URL = 'https://api.parrotconsult.com/api/v1';
 
 
 const toLocalDateOnly = (date) => {
@@ -184,87 +184,391 @@ class ApiService {
     }
   }
 
-  // Auth APIs
-  async signUp(userData) {
-    return await this.apiCall('/user/registeruser', {
-      method: 'POST',
-      body: JSON.stringify(userData),
-    });
-  }
+  // ==================== OTP AUTHENTICATION METHODS ====================
 
-  async sendOTP(phone) {
-    return await this.apiCall('/auth/send-otp', {
+/**
+ * Sign up user with phone and name (OTP-only flow)
+ * @param {Object} userData - { fullName, phone }
+ * @returns {Promise<Object>}
+ */
+async signUp(userData) {
+  console.log('[API] Signing up user:', userData.fullName);
+  
+  try {
+    const result = await this.apiCall('/user/registeruser', {
+      method: 'POST',
+      body: JSON.stringify({
+        fullName: userData.fullName,
+        phone: userData.phone,
+        // Password no longer required for OTP-only flow
+      }),
+      headers: {
+        'Content-Type': 'application/json',
+      }
+    });
+
+    if (result.success) {
+      console.log('[API] Sign up successful');
+      return {
+        success: true,
+        data: result.data || { id: result.data?.user?._id, ...userData }
+      };
+    } else {
+      console.warn('[API] Sign up failed:', result.error);
+      return {
+        success: false,
+        error: result.error || 'Failed to create account. Please try again.',
+      };
+    }
+  } catch (error) {
+    console.error('[API] Sign up error:', error);
+    return {
+      success: false,
+      error: error.message || 'Network error during sign up',
+    };
+  }
+}
+
+/**
+ * Send OTP to phone number
+ * @param {string} phone - 10-digit phone number
+ * @returns {Promise<Object>}
+ */
+async sendOTP(phone) {
+  console.log('[API] Sending OTP to phone:', phone);
+
+  try {
+    if (!phone || !/^[0-9]{10}$/.test(phone)) {
+      return {
+        success: false,
+        error: 'Invalid phone number format',
+      };
+    }
+
+    const result = await this.apiCall('/auth/send-otp', {
       method: 'POST',
       body: JSON.stringify({ phone }),
+      headers: {
+        'Content-Type': 'application/json',
+      }
     });
-  }
 
-  async verifyOTP(sessionId, otp) {
-    return await this.apiCall('/auth/verify-otp', {
-      method: 'POST',
-      body: JSON.stringify({ sessionId, otp }),
-    });
+    if (result.success) {
+      console.log('[API] OTP sent successfully');
+      console.log('[API] Session ID:', result.data?.sessionID);
+      
+      return {
+        success: true,
+        data: {
+          sessionID: result.data?.sessionID || result.data?.sessionId,
+          message: result.message || 'OTP sent successfully'
+        }
+      };
+    } else {
+      console.warn('[API] Failed to send OTP:', result.error);
+      return {
+        success: false,
+        error: result.error || 'Failed to send OTP. Please try again.',
+      };
+    }
+  } catch (error) {
+    console.error('[API] Send OTP error:', error);
+    return {
+      success: false,
+      error: error.message || 'Network error while sending OTP',
+    };
   }
+}
 
-  async login(phone, password) {
+/**
+ * Verify OTP and login user (OTP-only flow)
+ * @param {string} sessionId - Session ID from sendOTP
+ * @param {string} otp - 6-digit OTP
+ * @returns {Promise<Object>}
+ */
+async verifyOTP(sessionId, otp, phone) {
+  console.log('[API] Verifying OTP with session:', sessionId, 'phone:', phone);
+
+  try {
+    if (!sessionId || !otp || !phone) {
+      return {
+        success: false,
+        error: 'Session ID, phone and OTP are required',
+      };
+    }
+
+    if (!/^[0-9]{6}$/.test(otp)) {
+      return {
+        success: false,
+        error: 'OTP must be a 6-digit number',
+      };
+    }
+
+    if (!/^[0-9]{10}$/.test(phone)) {
+      return {
+        success: false,
+        error: 'Invalid phone number format',
+      };
+    }
+
+    // OTP-only login flow (no password needed)
     const result = await this.apiCall('/user/loginuser', {
       method: 'POST',
       body: JSON.stringify({
         phoneNumber: phone,
-        password: password,
-        OTPverified: true
+        sessionID: sessionId,
+        otp: otp,
+        // No password in OTP-only flow
       }),
+      headers: {
+        'Content-Type': 'application/json',
+      }
     });
 
-    if (result.success && result.data) {
-      const user = result.data.user || result.data;
-      const token = result.data.accessToken;
+    if (result.success) {
+      console.log('[API] OTP verification successful');
 
+      // Extract user and token from response
+      const userData = result.data?.user || result.data;
+      const token = result.data?.accessToken;
+
+      // Store token
       if (token) {
         await this.setAuthToken(token);
-        console.log('[API] Token saved:', token);
+        console.log('[API] Auth token saved');
       }
 
-      await AsyncStorage.setItem('userData', JSON.stringify(user));
-      console.log('[API] User data saved:', user);
-    }
-
-    return result;
-  }
-
-  async logout() {
-    try {
-      const result = await this.apiCall('/user/logoutuser', {
-        method: 'POST',
-      });
-
-      await this.removeAuthToken();
-      await AsyncStorage.removeItem('userData');
-      
-      console.log('[API] Local data cleared on logout');
-
-      return { success: true, message: 'Logged out successfully' };
-    } catch (error) {
-      console.error('[API] Logout error:', error);
-      
-      await this.removeAuthToken();
-      await AsyncStorage.removeItem('userData');
-      
-      return { success: true, message: 'Logged out successfully' };
-    }
-  }
-
-  async getUserProfile() {
-    try {
-      const result = await this.apiCall('/user/profile', {
-        method: 'GET',
-      });
-      
-      if (result.success) {
-        await AsyncStorage.setItem('userData', JSON.stringify(result.data));
-        return result;
+      // Store user data
+      if (userData) {
+        await AsyncStorage.setItem('userData', JSON.stringify(userData));
+        console.log('[API] User data saved');
       }
+
+      return {
+        success: true,
+        data: {
+          user: userData,
+          accessToken: token,
+          refreshToken: result.data?.refreshToken,
+        }
+      };
+    } else {
+      console.warn('[API] OTP verification failed:', result.error);
       
+      // Handle session-related errors
+      if (result.error?.includes('session') || result.error?.includes('expired')) {
+        return {
+          success: false,
+          error: 'Session expired. Please request OTP again.',
+          sessionExpired: true,
+        };
+      }
+
+      return {
+        success: false,
+        error: result.error || 'Invalid OTP. Please try again.',
+      };
+    }
+  } catch (error) {
+    console.error('[API] Verify OTP error:', error);
+    return {
+      success: false,
+      error: error.message || 'Network error during OTP verification',
+    };
+  }
+}
+
+/**
+ * Resend OTP (used when user didn't receive the code)
+ * @param {string} phone - 10-digit phone number
+ * @returns {Promise<Object>}
+ */
+async resendOTP(phone) {
+  console.log('[API] Resending OTP to phone:', phone);
+
+  try {
+    if (!phone || !/^[0-9]{10}$/.test(phone)) {
+      return {
+        success: false,
+        error: 'Invalid phone number format',
+      };
+    }
+
+    // Use the same sendOTP endpoint
+    const result = await this.sendOTP(phone);
+    
+    if (result.success) {
+      console.log('[API] OTP resent successfully');
+      return {
+        success: true,
+        data: result.data,
+        message: 'OTP has been resent to your phone'
+      };
+    } else {
+      return result;
+    }
+  } catch (error) {
+    console.error('[API] Resend OTP error:', error);
+    return {
+      success: false,
+      error: error.message || 'Failed to resend OTP',
+    };
+  }
+}
+
+/**
+ * Validate OTP without logging in (for verification purposes)
+ * @param {string} sessionId - Session ID from sendOTP
+ * @param {string} otp - 6-digit OTP
+ * @returns {Promise<Object>}
+ */
+async validateOTP(sessionId, otp) {
+  console.log('[API] Validating OTP');
+
+  try {
+    const result = await this.apiCall('/auth/verify-otp', {
+      method: 'POST',
+      body: JSON.stringify({
+        sessionId: sessionId,
+        otp: otp,
+      }),
+      headers: {
+        'Content-Type': 'application/json',
+      }
+    });
+
+    if (result.success) {
+      console.log('[API] OTP validation successful');
+      return {
+        success: true,
+        data: result.data || { verified: true }
+      };
+    } else {
+      console.warn('[API] OTP validation failed:', result.error);
+      return {
+        success: false,
+        error: result.error || 'OTP validation failed',
+      };
+    }
+  } catch (error) {
+    console.error('[API] Validate OTP error:', error);
+    return {
+      success: false,
+      error: error.message || 'Network error',
+    };
+  }
+}
+
+/**
+ * OTP-only logout (clears local data and revokes token)
+ * @returns {Promise<Object>}
+ */
+async logout() {
+  try {
+    console.log('[API] Logging out...');
+    
+    // Call logout endpoint to revoke token on server
+    await this.apiCall('/user/logoutuser', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      }
+    });
+
+    // Clear local storage
+    await this.removeAuthToken();
+    await AsyncStorage.removeItem('userData');
+    
+    console.log('[API] Local data cleared on logout');
+    return { success: true, message: 'Logged out successfully' };
+  } catch (error) {
+    console.error('[API] Logout error:', error);
+    
+    // Still clear local data even if server call fails
+    await this.removeAuthToken();
+    await AsyncStorage.removeItem('userData');
+    
+    return { success: true, message: 'Logged out successfully' };
+  }
+}
+
+/**
+ * Check if phone number is already registered
+ * @param {string} phone - 10-digit phone number
+ * @returns {Promise<Object>}
+ */
+async checkPhoneExists(phone) {
+  console.log('[API] Checking if phone is registered:', phone);
+
+  try {
+    const result = await this.apiCall('/auth/check-phone', {
+      method: 'POST',
+      body: JSON.stringify({ phone }),
+      headers: {
+        'Content-Type': 'application/json',
+      }
+    });
+
+    if (result.success) {
+      return {
+        success: true,
+        exists: result.data?.exists || false,
+        data: result.data,
+      };
+    } else {
+      console.warn('[API] Failed to check phone:', result.error);
+      return {
+        success: false,
+        error: result.error || 'Failed to check phone availability',
+      };
+    }
+  } catch (error) {
+    console.error('[API] Check phone error:', error);
+    return {
+      success: false,
+      error: error.message || 'Network error',
+    };
+  }
+}
+
+/**
+ * Get current user profile (OTP-authenticated)
+ * @returns {Promise<Object>}
+ */
+async getUserProfile() {
+  try {
+    console.log('[API] Getting user profile...');
+    
+    const result = await this.apiCall('/user/profile', {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+      }
+    });
+
+    if (result.success) {
+      await AsyncStorage.setItem('userData', JSON.stringify(result.data));
+      return result;
+    }
+
+    // Fallback to stored data
+    const userData = await AsyncStorage.getItem('userData');
+    if (userData) {
+      return {
+        success: true,
+        data: JSON.parse(userData),
+      };
+    }
+
+    return {
+      success: false,
+      error: 'No user data found',
+      needsLogin: true
+    };
+  } catch (error) {
+    console.error('[API] Error getting user profile:', error);
+    
+    try {
       const userData = await AsyncStorage.getItem('userData');
       if (userData) {
         return {
@@ -272,33 +576,16 @@ class ApiService {
           data: JSON.parse(userData),
         };
       }
-      
-      return {
-        success: false,
-        error: 'No user data found',
-        needsLogin: true
-      };
-    } catch (error) {
-      console.error('[API] Error getting user profile:', error);
-      
-      try {
-        const userData = await AsyncStorage.getItem('userData');
-        if (userData) {
-          return {
-            success: true,
-            data: JSON.parse(userData),
-          };
-        }
-      } catch (localError) {
-        console.error('[API] Error reading local user data:', localError);
-      }
-      
-      return {
-        success: false,
-        error: 'Failed to get user profile',
-      };
+    } catch (localError) {
+      console.error('[API] Error reading local user data:', localError);
     }
+
+    return {
+      success: false,
+      error: 'Failed to get user profile',
+    };
   }
+}
 
   // FIXED: Profile update to match backend expectations exactly
   async updateProfile(profileData) {

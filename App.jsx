@@ -1,26 +1,25 @@
-// Production-Ready Responsive App.jsx with Industry-Standard Optimization
+// Updated App.jsx - OTP-Only Authentication Flow
 import React, { useEffect, useMemo } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { AuthProvider } from './src/context/AuthContext';
-import { 
-  StatusBar, 
-  Platform, 
-  Dimensions, 
+import {
+  StatusBar,
+  Platform,
+  Dimensions,
   PixelRatio,
   StyleSheet,
-  useWindowDimensions 
+  useWindowDimensions
 } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-// Import all screens
+// Import screens
 import SplashScreen from './src/screens/SplashScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import SignUpScreen from './src/screens/SignUpScreen';
 import OTPVerificationScreen from './src/screens/OTPVerificationScreen';
-import PasswordVerificationScreen from './src/screens/PasswordVerificationScreen';
 import DashboardScreen from './src/screens/DashboardScreen';
 import ReelsScreen from './src/screens/ReelsScreen';
 import InboxScreen from './src/screens/InboxScreen';
@@ -32,72 +31,36 @@ import ExpertListScreen from './src/screens/ExpertListScreen';
 import ChatBot from './src/screens/ChatBot';
 import VideoCallScreen from './src/screens/VideoCallScreen';
 
-// Import Navigation Components
+// Navigation components
 import Navbar from './src/components/Navbar/Navbar';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
-// ==========================================
-// RESPONSIVE UTILITIES - Industry Standard
-// ==========================================
+// ==================== RESPONSIVE UTILITIES ====================
+const DESIGN_WIDTH = 375;
+const DESIGN_HEIGHT = 812;
 
-// Base dimensions for design (adjust these to your design mockup dimensions)
-const DESIGN_WIDTH = 375;  // iPhone X/11/12/13 width
-const DESIGN_HEIGHT = 812; // iPhone X/11/12/13 height
-
-// Get device dimensions
 const { width: DEVICE_WIDTH, height: DEVICE_HEIGHT } = Dimensions.get('window');
 
-// Calculate scale factors
 const widthScale = DEVICE_WIDTH / DESIGN_WIDTH;
 const heightScale = DEVICE_HEIGHT / DESIGN_HEIGHT;
 
-/**
- * Responsive width calculation
- * @param {number} size - Width from design
- * @returns {number} Scaled width for current device
- */
-const wp = (size) => {
-  return Math.round(size * widthScale);
-};
+export const wp = (size) => Math.round(size * widthScale);
+export const hp = (size) => Math.round(size * heightScale);
 
-/**
- * Responsive height calculation
- * @param {number} size - Height from design
- * @returns {number} Scaled height for current device
- */
-const hp = (size) => {
-  return Math.round(size * heightScale);
-};
-
-/**
- * Responsive font size with pixel ratio normalization
- * @param {number} size - Font size from design
- * @returns {number} Scaled and normalized font size
- */
-const rfs = (size) => {
+export const rfs = (size) => {
   const scale = Math.min(widthScale, heightScale);
   const newSize = size * scale;
   return Math.round(PixelRatio.roundToNearestPixel(newSize));
 };
 
-/**
- * Moderately scaled size (for elements that shouldn't scale too much)
- * @param {number} size - Base size
- * @param {number} factor - Scale factor (0-1)
- * @returns {number} Moderately scaled size
- */
-const ms = (size, factor = 0.5) => {
+export const ms = (size, factor = 0.5) => {
   const scale = Math.min(widthScale, heightScale);
   return Math.round(size + (scale - 1) * size * factor);
 };
 
-/**
- * Get responsive spacing based on screen size
- * @returns {object} Spacing values
- */
-const getSpacing = () => ({
+export const getSpacing = () => ({
   xs: wp(4),
   sm: wp(8),
   md: wp(16),
@@ -106,37 +69,26 @@ const getSpacing = () => ({
   xxl: wp(48),
 });
 
-/**
- * Check if device is tablet
- * @returns {boolean}
- */
-const isTablet = () => {
+export const isTablet = () => {
   const pixelDensity = PixelRatio.get();
   const adjustedWidth = DEVICE_WIDTH * pixelDensity;
   const adjustedHeight = DEVICE_HEIGHT * pixelDensity;
-  
+
   if (pixelDensity < 2 && (adjustedWidth >= 1000 || adjustedHeight >= 1000)) {
     return true;
   }
-  
+
   return (
     (DEVICE_WIDTH >= 600 && DEVICE_HEIGHT >= 600) ||
     (DEVICE_WIDTH >= 768)
   );
 };
 
-/**
- * Get device orientation
- * @returns {string} 'portrait' or 'landscape'
- */
-const getOrientation = () => {
+export const getOrientation = () => {
   return DEVICE_WIDTH < DEVICE_HEIGHT ? 'portrait' : 'landscape';
 };
 
-/**
- * Responsive dimension object
- */
-const responsiveDimensions = {
+export const responsiveDimensions = {
   width: DEVICE_WIDTH,
   height: DEVICE_HEIGHT,
   isTablet: isTablet(),
@@ -145,41 +97,38 @@ const responsiveDimensions = {
   isLargeDevice: DEVICE_WIDTH >= 414,
   orientation: getOrientation(),
   spacing: getSpacing(),
-  // Safe percentages for content
   contentWidthPercent: isTablet() ? 0.85 : 0.92,
   maxContentWidth: isTablet() ? 600 : DEVICE_WIDTH * 0.92,
 };
 
-// ==========================================
-// NAVIGATION CONFIGURATION
-// ==========================================
+// ==================== NAVIGATION UTILITIES ====================
 
-/**
- * Custom Tab Bar with responsive handling
- */
-const CustomTabBar = (props) => {
-  return <Navbar {...props} />;
-};
+const CustomTabBar = (props) => <Navbar {...props} />;
 
-/**
- * Tab Bar visibility configuration
- */
 const getTabBarVisibility = (route) => {
-  const routesWithHiddenTabBar = ['Reels', 'ChatBot', 'ExpertProfile', 'Categories', 'ConsultantList', 'ExpertsList', 'ExpertProfileScreen'];
-  
+  const routesWithHiddenTabBar = [
+    'Reels',
+    'ChatBot',
+    'ExpertProfile',
+    'Categories',
+    'ConsultantList',
+    'ExpertsList',
+    'ExpertProfileScreen',
+    'VideoCall',
+  ];
+
   if (routesWithHiddenTabBar.includes(route.name)) {
     return { display: 'none' };
   }
-  
+
   return {};
 };
 
-/**
- * Main Tab Navigator with responsive configuration
- */
+// ==================== TAB NAVIGATOR ====================
+
 const MainTabNavigator = () => {
   const dimensions = useWindowDimensions();
-  
+
   const tabBarStyle = useMemo(() => ({
     height: Platform.select({
       ios: hp(85),
@@ -208,122 +157,91 @@ const MainTabNavigator = () => {
         lazy: true,
         tabBarHideOnKeyboard: true,
         tabBarStyle: getTabBarVisibility(route),
-        // Optimize performance
         unmountOnBlur: false,
         freezeOnBlur: true,
       })}
     >
-      {/* Main visible tabs */}
-      <Tab.Screen 
-        name="Home" 
+      <Tab.Screen
+        name="Home"
         component={HomeScreen}
-        options={{
-          tabBarLabel: 'Home',
-        }}
+        options={{ tabBarLabel: 'Home' }}
       />
-      
-      <Tab.Screen 
-        name="Search" 
+
+      <Tab.Screen
+        name="Search"
         component={ChatBot}
-        options={{
-          tabBarLabel: 'AI Chat',
-        }}
+        options={{ tabBarLabel: 'AI Chat' }}
       />
-      
-      <Tab.Screen 
-        name="Reels" 
+
+      <Tab.Screen
+        name="Reels"
         component={ReelsScreen}
         options={{
           tabBarStyle: { display: 'none' },
           tabBarLabel: 'Reels',
         }}
       />
-      
-      <Tab.Screen 
-        name="Notifications" 
+
+      <Tab.Screen
+        name="Notifications"
         component={InboxScreen}
-        options={{
-          tabBarLabel: 'Messages',
-        }}
+        options={{ tabBarLabel: 'Messages' }}
       />
-      
-      <Tab.Screen 
-        name="Login" 
+
+      <Tab.Screen
+        name="Login"
         component={LoginScreen}
-        options={{
-          tabBarLabel: 'Profile',
-        }}
+        options={{ tabBarLabel: 'Profile' }}
       />
-      
-      {/* Hidden screens accessible via navigation */}
-      <Tab.Screen 
-        name="Dashboard" 
+
+      {/* Hidden screens */}
+      <Tab.Screen
+        name="Dashboard"
         component={DashboardScreen}
-        options={{
-          tabBarButton: () => null,
-        }}
+        options={{ tabBarButton: () => null }}
       />
-      
-      <Tab.Screen 
-        name="ChatBot" 
+
+      <Tab.Screen
+        name="ChatBot"
         component={ChatBot}
-        options={{
-          tabBarButton: () => null,
-          tabBarStyle: { display: 'none' },
-        }}
+        options={{ tabBarButton: () => null, tabBarStyle: { display: 'none' } }}
       />
-      
-      <Tab.Screen 
-        name="ExpertProfile" 
+
+      <Tab.Screen
+        name="ExpertProfile"
         component={ExpertProfileScreen}
-        options={{
-          tabBarButton: () => null,
-          tabBarStyle: { display: 'none' },
-        }}
+        options={{ tabBarButton: () => null, tabBarStyle: { display: 'none' } }}
       />
-      
-      <Tab.Screen 
-        name="Categories" 
+
+      <Tab.Screen
+        name="Categories"
         component={CategoriesScreen}
-        options={{
-          tabBarButton: () => null,
-          tabBarStyle: { display: 'none' },
-        }}
+        options={{ tabBarButton: () => null, tabBarStyle: { display: 'none' } }}
       />
-      
-      <Tab.Screen 
-        name="ConsultantList" 
+
+      <Tab.Screen
+        name="ConsultantList"
         component={ConsultantListScreen}
-        options={{
-          tabBarButton: () => null,
-          tabBarStyle: { display: 'none' },
-        }}
+        options={{ tabBarButton: () => null, tabBarStyle: { display: 'none' } }}
       />
-      
-      <Tab.Screen 
-        name="ExpertsList" 
+
+      <Tab.Screen
+        name="ExpertsList"
         component={ExpertListScreen}
-        options={{
-          tabBarButton: () => null,
-          tabBarStyle: { display: 'none' },
-        }}
+        options={{ tabBarButton: () => null, tabBarStyle: { display: 'none' } }}
       />
-      
-      <Tab.Screen 
-        name="ExpertProfileScreen" 
+
+      <Tab.Screen
+        name="ExpertProfileScreen"
         component={ExpertProfileScreen}
-        options={{
-          tabBarButton: () => null,
-          tabBarStyle: { display: 'none' },
-        }}
+        options={{ tabBarButton: () => null, tabBarStyle: { display: 'none' } }}
       />
     </Tab.Navigator>
   );
 };
 
-/**
- * Stack navigation configuration with responsive animations
- */
+// ==================== STACK SCREEN OPTIONS ====================
+
 const getStackScreenOptions = () => ({
   headerShown: false,
   animation: Platform.select({
@@ -333,11 +251,7 @@ const getStackScreenOptions = () => ({
   presentation: 'card',
   gestureEnabled: true,
   gestureDirection: 'horizontal',
-  // Optimize for responsive screens
-  contentStyle: {
-    backgroundColor: '#FFFFFF',
-  },
-  // Better performance on lower-end devices
+  contentStyle: { backgroundColor: '#FFFFFF' },
   animationTypeForReplace: 'pop',
   animationDuration: Platform.select({
     ios: 300,
@@ -345,9 +259,6 @@ const getStackScreenOptions = () => ({
   }),
 });
 
-/**
- * Modal screen configuration
- */
 const getModalScreenOptions = () => ({
   ...getStackScreenOptions(),
   presentation: 'modal',
@@ -359,26 +270,18 @@ const getModalScreenOptions = () => ({
   gestureEnabled: true,
 });
 
-/**
- * Full screen modal configuration (for video calls)
- */
 const getFullScreenModalOptions = () => ({
   headerShown: false,
   presentation: 'fullScreenModal',
   animation: 'fade',
   gestureEnabled: false,
   animationDuration: 200,
-  contentStyle: {
-    backgroundColor: '#000000',
-  },
+  contentStyle: { backgroundColor: '#000000' },
 });
 
-// ==========================================
-// MAIN APP COMPONENT
-// ==========================================
+// ==================== MAIN APP ====================
 
 const App = () => {
-  // Configure StatusBar with responsive settings
   useEffect(() => {
     if (Platform.OS === 'android') {
       StatusBar.setBackgroundColor('#FFFFFF', true);
@@ -387,17 +290,13 @@ const App = () => {
     }
   }, []);
 
-  // Listen to dimension changes for better responsiveness
   useEffect(() => {
     const subscription = Dimensions.addEventListener('change', ({ window, screen }) => {
-      // Update any responsive logic if needed
-      console.log('Dimensions changed:', { window, screen });
+      console.log('[APP] Dimensions changed');
     });
-
     return () => subscription?.remove();
   }, []);
 
-  // Memoize status bar props for performance
   const statusBarProps = useMemo(() => ({
     barStyle: 'dark-content',
     backgroundColor: '#FFFFFF',
@@ -405,9 +304,7 @@ const App = () => {
     networkActivityIndicatorVisible: false,
     animated: true,
     ...Platform.select({
-      ios: {
-        hidden: false,
-      },
+      ios: { hidden: false },
     }),
   }), []);
 
@@ -415,18 +312,18 @@ const App = () => {
     <SafeAreaProvider>
       <AuthProvider>
         <StatusBar {...statusBarProps} />
-        
+
         <NavigationContainer>
-          <Stack.Navigator 
-            initialRouteName="Splash" 
+          <Stack.Navigator
+            initialRouteName="Splash"
             screenOptions={getStackScreenOptions()}
           >
-            {/* ============================================ */}
-            {/* AUTHENTICATION FLOW */}
-            {/* ============================================ */}
-            
-            <Stack.Screen 
-              name="Splash" 
+            {/* ==================== AUTHENTICATION FLOW ==================== */}
+            {/* OTP-Only Authentication Flow */}
+
+            {/* Splash Screen */}
+            <Stack.Screen
+              name="Splash"
               component={SplashScreen}
               options={{
                 ...getStackScreenOptions(),
@@ -434,37 +331,31 @@ const App = () => {
                 gestureEnabled: false,
               }}
             />
-            
-            <Stack.Screen 
-              name="SignUp" 
+
+            {/* Sign Up - Register with name and phone */}
+            <Stack.Screen
+              name="SignUp"
               component={SignUpScreen}
               options={getModalScreenOptions()}
             />
-            
-            <Stack.Screen 
-              name="OTPVerification" 
+
+            {/* OTP Verification - Verify with OTP code */}
+            {/* Used for both signup and login flows */}
+            <Stack.Screen
+              name="OTPVerification"
               component={OTPVerificationScreen}
               options={{
                 ...getStackScreenOptions(),
-                gestureEnabled: false, // Prevent accidental back during OTP
-              }}
-            />
-            
-            <Stack.Screen 
-              name="PasswordVerification" 
-              component={PasswordVerificationScreen}
-              options={{
-                ...getStackScreenOptions(),
                 gestureEnabled: false,
+                animationTypeForReplace: 'pop',
               }}
             />
 
-            {/* ============================================ */}
-            {/* MAIN APP FLOW */}
-            {/* ============================================ */}
-            
-            <Stack.Screen 
-              name="Main" 
+            {/* ==================== MAIN APP FLOW ==================== */}
+
+            {/* Main Tab Navigator */}
+            <Stack.Screen
+              name="Main"
               component={MainTabNavigator}
               options={{
                 ...getStackScreenOptions(),
@@ -473,102 +364,92 @@ const App = () => {
               }}
             />
 
-            {/* ============================================ */}
-            {/* STACK-ONLY SCREENS */}
-            {/* ============================================ */}
-            
-            <Stack.Screen 
-              name="ChatBotStack" 
+            {/* ==================== ADDITIONAL SCREENS ==================== */}
+
+            {/* Chat and Messaging */}
+            <Stack.Screen
+              name="ChatBotStack"
               component={ChatBot}
               options={getStackScreenOptions()}
             />
-            
-            <Stack.Screen 
-              name="ChatScreen" 
+
+            <Stack.Screen
+              name="ChatScreen"
               component={ChatScreen}
               options={getStackScreenOptions()}
             />
 
-            {/* ============================================ */}
-            {/* EXPERT/CONSULTANT SCREENS */}
-            {/* ============================================ */}
-            
-            <Stack.Screen 
-              name="CategoriesStack" 
+            {/* Experts and Consultants */}
+            <Stack.Screen
+              name="CategoriesStack"
               component={CategoriesScreen}
               options={getStackScreenOptions()}
             />
-            
-            <Stack.Screen 
-              name="ConsultantListStack" 
+
+            <Stack.Screen
+              name="ConsultantListStack"
               component={ConsultantListScreen}
               options={getStackScreenOptions()}
             />
-            
-            <Stack.Screen 
-              name="ExpertsListStack" 
+
+            <Stack.Screen
+              name="ExpertsListStack"
               component={ExpertListScreen}
               options={getStackScreenOptions()}
             />
-            
-            <Stack.Screen 
-              name="ExpertProfileStack" 
+
+            <Stack.Screen
+              name="ExpertProfileStack"
               component={ExpertProfileScreen}
               options={getStackScreenOptions()}
             />
 
-            {/* ============================================ */}
-            {/* LEGACY ROUTES - Backward Compatibility */}
-            {/* ============================================ */}
-            
-            <Stack.Screen 
-              name="Categories" 
+            {/* Backward Compatibility Routes */}
+            <Stack.Screen
+              name="Categories"
               component={CategoriesScreen}
               options={getStackScreenOptions()}
             />
-            
-            <Stack.Screen 
-              name="ConsultantList" 
+
+            <Stack.Screen
+              name="ConsultantList"
               component={ConsultantListScreen}
               options={getStackScreenOptions()}
             />
-            
-            <Stack.Screen 
-              name="ConsultantListScreen" 
+
+            <Stack.Screen
+              name="ConsultantListScreen"
               component={ConsultantListScreen}
               options={getStackScreenOptions()}
             />
-            
-            <Stack.Screen 
-              name="ExpertsList" 
+
+            <Stack.Screen
+              name="ExpertsList"
               component={ExpertListScreen}
               options={getStackScreenOptions()}
             />
-            
-            <Stack.Screen 
-              name="ExpertsListScreen" 
+
+            <Stack.Screen
+              name="ExpertsListScreen"
               component={ExpertListScreen}
               options={getStackScreenOptions()}
             />
-            
-            <Stack.Screen 
-              name="ExpertProfileScreen" 
-              component={ExpertProfileScreen}
-              options={getStackScreenOptions()}
-            />
-            
-            <Stack.Screen 
-              name="ExpertProfile" 
+
+            <Stack.Screen
+              name="ExpertProfileScreen"
               component={ExpertProfileScreen}
               options={getStackScreenOptions()}
             />
 
-            {/* ============================================ */}
-            {/* VIDEO CALL - Full Screen Modal */}
-            {/* ============================================ */}
-            
-            <Stack.Screen 
-              name="VideoCall" 
+            <Stack.Screen
+              name="ExpertProfile"
+              component={ExpertProfileScreen}
+              options={getStackScreenOptions()}
+            />
+
+            {/* Video Call - Full Screen Modal */}
+            <Stack.Screen
+              name="VideoCall"
               component={VideoCallScreen}
               options={getFullScreenModalOptions()}
             />
@@ -577,20 +458,6 @@ const App = () => {
       </AuthProvider>
     </SafeAreaProvider>
   );
-};
-
-// Export utilities for use in other components
-export {
-  wp,
-  hp,
-  rfs,
-  ms,
-  getSpacing,
-  isTablet,
-  getOrientation,
-  responsiveDimensions,
-  DEVICE_WIDTH,
-  DEVICE_HEIGHT,
 };
 
 export default App;

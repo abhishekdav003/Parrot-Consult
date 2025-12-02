@@ -1,4 +1,4 @@
-// src/components/Dashboard/UploadReelSection.jsx - PRODUCTION READY
+// src/components/Dashboard/UploadReelSection.jsx - PRODUCTION READY & FULLY OPTIMIZED
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
@@ -16,18 +16,30 @@ import {
   Modal,
   Animated,
   RefreshControl,
-  StatusBar,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { launchImageLibrary } from 'react-native-image-picker';
 import ApiService from '../../services/ApiService';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-const IS_SMALL_DEVICE = SCREEN_WIDTH < 375;
-const IS_TABLET = SCREEN_WIDTH >= 768;
+
+// Responsive sizing
+const getResponsiveSizes = () => {
+  if (SCREEN_WIDTH < 360) return { small: true, tablet: false, scale: 0.8 };
+  if (SCREEN_WIDTH < 768) return { small: SCREEN_WIDTH < 400, tablet: false, scale: 1 };
+  return { small: false, tablet: true, scale: 1.2 };
+};
+
+const SIZES = getResponsiveSizes();
+
+// Video format validation
+const ALLOWED_VIDEO_FORMATS = ['video/mp4', 'video/quicktime', 'video/x-matroska', 'video/avi', 'video/x-msvideo'];
+const MAX_VIDEO_SIZE = 50 * 1024 * 1024; // 50MB
+const MAX_VIDEO_DURATION = 60; // 60 seconds
+const MAX_DESCRIPTION_LENGTH = 500;
 
 const UploadReelSection = ({ user, onRefresh }) => {
-  // States
+  // State management
   const [description, setDescription] = useState('');
   const [selectedVideo, setSelectedVideo] = useState(null);
   const [uploading, setUploading] = useState(false);
@@ -38,21 +50,20 @@ const UploadReelSection = ({ user, onRefresh }) => {
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [reelToDelete, setReelToDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
-  const [activeTab, setActiveTab] = useState('upload'); // 'upload' or 'myReels'
+  const [activeTab, setActiveTab] = useState('upload');
 
   // Animations
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
-  // Check if user is consultant
+  // Check consultant status
   const isConsultant = user?.role === 'consultant' || user?.consultantRequest?.status === 'approved';
 
   useEffect(() => {
     if (isConsultant && activeTab === 'myReels') {
       fetchMyReels();
     }
-    
-    // Fade in animation
+
     Animated.timing(fadeAnim, {
       toValue: 1,
       duration: 300,
@@ -60,27 +71,26 @@ const UploadReelSection = ({ user, onRefresh }) => {
     }).start();
   }, [isConsultant, activeTab]);
 
-  // Fetch user's reels
+  /**
+   * Fetch user's reels with error handling
+   */
   const fetchMyReels = async (showLoading = true) => {
-    if (showLoading) {
-      setLoadingReels(true);
-    }
-    
+    if (showLoading) setLoadingReels(true);
+
     try {
       const result = await ApiService.getUserReels();
-      
+
       if (result.success) {
         setMyReels(result.data || []);
       } else {
-        console.warn('[REEL_UPLOAD] Failed to fetch reels:', result.error);
         if (!showLoading) {
-          Alert.alert('Error', result.error || 'Failed to load your reels');
+          Alert.alert('Error', result.error || 'Failed to load reels');
         }
       }
     } catch (error) {
-      console.error('[REEL_UPLOAD] Error fetching reels:', error);
+      console.error('[UploadReel] Fetch error:', error);
       if (!showLoading) {
-        Alert.alert('Error', 'Failed to load your reels');
+        Alert.alert('Error', 'Failed to load reels');
       }
     } finally {
       setLoadingReels(false);
@@ -88,68 +98,118 @@ const UploadReelSection = ({ user, onRefresh }) => {
     }
   };
 
-  // Handle refresh
+  /**
+   * Handle refresh
+   */
   const handleRefresh = useCallback(() => {
     setRefreshing(true);
     fetchMyReels(false);
   }, []);
 
-  // Video selection with validation
+  /**
+   * Validate video file
+   */
+  const validateVideo = (video) => {
+    // Check file existence
+    if (!video || !video.uri) {
+      return { valid: false, error: 'Invalid video file' };
+    }
+
+    // Check file size
+    if (video.fileSize && video.fileSize > MAX_VIDEO_SIZE) {
+      return { 
+        valid: false, 
+        error: `Video size must be less than ${Math.round(MAX_VIDEO_SIZE / (1024 * 1024))}MB` 
+      };
+    }
+
+    // Check duration
+    if (video.duration && video.duration > MAX_VIDEO_DURATION) {
+      return { 
+        valid: false, 
+        error: `Video duration must be under ${MAX_VIDEO_DURATION} seconds` 
+      };
+    }
+
+    // Check format
+    if (video.type && !ALLOWED_VIDEO_FORMATS.includes(video.type.toLowerCase())) {
+      return { 
+        valid: false, 
+        error: 'Invalid video format. Use MP4, MOV, or AVI' 
+      };
+    }
+
+    return { valid: true };
+  };
+
+  /**
+   * Select video with comprehensive validation
+   */
   const selectVideo = useCallback(() => {
     const options = {
       mediaType: 'video',
       quality: 0.8,
       videoQuality: 'medium',
-      durationLimit: 60, // 60 seconds max
+      durationLimit: MAX_VIDEO_DURATION,
       selectionLimit: 1,
+      includeBase64: false,
+      includeExtra: true,
     };
 
     launchImageLibrary(options, (response) => {
       if (response.didCancel) {
-        console.log('[REEL_UPLOAD] User cancelled video selection');
+        console.log('[UploadReel] User cancelled video selection');
         return;
       }
 
-      if (response.error || response.errorCode) {
-        console.error('[REEL_UPLOAD] ImagePicker Error:', response.error);
-        Alert.alert('Error', 'Failed to select video. Please try again.');
+      if (response.errorCode) {
+        console.error('[UploadReel] ImagePicker Error:', response.errorCode);
+        Alert.alert('Error', response.errorMessage || 'Failed to select video');
         return;
       }
 
-      if (response.assets && response.assets[0]) {
+      if (response.error) {
+        console.error('[UploadReel] ImagePicker Error:', response.error);
+        Alert.alert('Error', 'Failed to select video');
+        return;
+      }
+
+      if (response.assets && response.assets.length > 0) {
         const video = response.assets[0];
-
-        // Validate file size (max 50MB)
-        const maxSize = 50 * 1024 * 1024; // 50MB
-        if (video.fileSize > maxSize) {
-          Alert.alert(
-            'File Too Large',
-            'Video size should be less than 50MB. Please select a smaller video.'
-          );
-          return;
-        }
-
-        // Validate duration (max 60 seconds)
-        if (video.duration && video.duration > 60) {
-          Alert.alert(
-            'Video Too Long',
-            'Video duration should be less than 60 seconds. Please select a shorter video.'
-          );
-          return;
-        }
-
-        // Validate video format
-        const validFormats = ['video/mp4', 'video/quicktime', 'video/x-matroska'];
-        if (video.type && !validFormats.includes(video.type)) {
-          Alert.alert(
-            'Invalid Format',
-            'Please select a video in MP4, MOV, or MKV format.'
-          );
-          return;
-        }
-
-        setSelectedVideo(video);
         
+        console.log('[UploadReel] Video selected:', {
+          fileName: video.fileName,
+          fileSize: video.fileSize,
+          duration: video.duration,
+          type: video.type,
+          uri: video.uri
+        });
+
+        // Validate video
+        const validation = validateVideo(video);
+        if (!validation.valid) {
+          Alert.alert('Invalid Video', validation.error);
+          return;
+        }
+
+        // Ensure proper file name
+        const fileName = video.fileName || `video_${Date.now()}.mp4`;
+        const fileType = video.type || 'video/mp4';
+
+        // Set selected video with normalized data
+        const normalizedVideo = {
+          uri: video.uri,
+          fileName: fileName,
+          name: fileName,
+          type: fileType,
+          fileSize: video.fileSize,
+          duration: video.duration,
+          width: video.width,
+          height: video.height,
+        };
+
+        setSelectedVideo(normalizedVideo);
+
         // Animate selection
         Animated.sequence([
           Animated.timing(scaleAnim, {
@@ -164,25 +224,26 @@ const UploadReelSection = ({ user, onRefresh }) => {
           }),
         ]).start();
 
-        console.log('[REEL_UPLOAD] Video selected:', {
-          name: video.fileName,
-          size: (video.fileSize / (1024 * 1024)).toFixed(2) + 'MB',
-          duration: video.duration ? video.duration.toFixed(1) + 's' : 'N/A',
-        });
+        console.log('[UploadReel] ✅ Video validated and selected');
+      } else {
+        Alert.alert('Error', 'No video selected');
       }
     });
   }, []);
 
-  // Remove selected video
-  const removeSelectedVideo = useCallback(() => {
-    setSelectedVideo(null);
-    setUploadProgress(0);
-  }, []);
-
-  // Upload reel with progress
+  /**
+   * Upload reel with comprehensive error handling
+   */
   const uploadReel = async () => {
+    // Validation checks
     if (!selectedVideo) {
-      Alert.alert('No Video', 'Please select a video to upload');
+      Alert.alert('No Video', 'Please select a video first');
+      return;
+    }
+
+    if (!selectedVideo.uri) {
+      Alert.alert('Invalid Video', 'Video file is missing. Please select again.');
+      setSelectedVideo(null);
       return;
     }
 
@@ -191,33 +252,47 @@ const UploadReelSection = ({ user, onRefresh }) => {
       return;
     }
 
-    // Confirm upload
+    if (description.trim().length > MAX_DESCRIPTION_LENGTH) {
+      Alert.alert('Description Too Long', `Maximum ${MAX_DESCRIPTION_LENGTH} characters allowed`);
+      return;
+    }
+
+    // Revalidate video before upload
+    const validation = validateVideo(selectedVideo);
+    if (!validation.valid) {
+      Alert.alert('Invalid Video', validation.error);
+      setSelectedVideo(null);
+      return;
+    }
+
     Alert.alert(
       'Upload Reel',
-      'Are you sure you want to upload this reel?',
+      'Upload this reel to your profile?',
       [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
+        { text: 'Cancel', style: 'cancel' },
         {
           text: 'Upload',
           onPress: async () => {
             setUploading(true);
             setUploadProgress(0);
 
-            // Simulate progress (since we can't track actual upload progress)
+            // Progress simulation
             const progressInterval = setInterval(() => {
               setUploadProgress((prev) => {
-                if (prev >= 90) {
-                  clearInterval(progressInterval);
-                  return 90;
-                }
-                return prev + 10;
+                if (prev >= 90) return 90;
+                return prev + 5;
               });
-            }, 500);
+            }, 300);
 
             try {
+              console.log('[UploadReel] 🚀 Starting upload...', {
+                videoUri: selectedVideo.uri,
+                videoName: selectedVideo.fileName,
+                videoType: selectedVideo.type,
+                description: description.trim().substring(0, 50) + '...',
+              });
+
+              // Call API with proper parameters
               const result = await ApiService.uploadReel({
                 video: selectedVideo,
                 description: description.trim(),
@@ -227,8 +302,10 @@ const UploadReelSection = ({ user, onRefresh }) => {
               setUploadProgress(100);
 
               if (result.success) {
+                console.log('[UploadReel] ✅ Upload successful!');
+                
                 Alert.alert(
-                  'Success!',
+                  '✅ Success!',
                   'Your reel has been uploaded successfully',
                   [
                     {
@@ -239,25 +316,35 @@ const UploadReelSection = ({ user, onRefresh }) => {
                         setSelectedVideo(null);
                         setUploadProgress(0);
                         
-                        // Switch to My Reels tab and refresh
+                        // Switch to My Reels tab
                         setActiveTab('myReels');
                         fetchMyReels();
                         
-                        // Callback
-                        onRefresh && onRefresh();
+                        // Notify parent to refresh feed
+                        if (onRefresh) {
+                          onRefresh();
+                        }
                       },
                     },
                   ]
                 );
               } else {
-                Alert.alert('Upload Failed', result.error || 'Failed to upload reel. Please try again.');
+                console.error('[UploadReel] ❌ Upload failed:', result.error);
+                Alert.alert(
+                  'Upload Failed',
+                  result.error || 'Failed to upload reel. Please try again.'
+                );
               }
             } catch (error) {
               clearInterval(progressInterval);
-              console.error('[REEL_UPLOAD] Upload error:', error);
-              Alert.alert('Error', 'An unexpected error occurred. Please try again.');
+              console.error('[UploadReel] ❌ Upload exception:', error);
+              Alert.alert(
+                'Upload Error',
+                error.message || 'An error occurred while uploading. Please check your connection and try again.'
+              );
             } finally {
               setUploading(false);
+              setUploadProgress(0);
             }
           },
         },
@@ -265,12 +352,9 @@ const UploadReelSection = ({ user, onRefresh }) => {
     );
   };
 
-  // Delete reel with confirmation
-  const confirmDeleteReel = useCallback((reel) => {
-    setReelToDelete(reel);
-    setDeleteModalVisible(true);
-  }, []);
-
+  /**
+   * Delete reel with confirmation
+   */
   const deleteReel = async () => {
     if (!reelToDelete) return;
 
@@ -280,7 +364,7 @@ const UploadReelSection = ({ user, onRefresh }) => {
       const result = await ApiService.deleteReel(reelToDelete._id);
 
       if (result.success) {
-        Alert.alert('Success', 'Reel deleted successfully');
+        Alert.alert('✅ Success', 'Reel deleted successfully');
         setDeleteModalVisible(false);
         setReelToDelete(null);
         fetchMyReels(false);
@@ -288,30 +372,59 @@ const UploadReelSection = ({ user, onRefresh }) => {
         Alert.alert('Error', result.error || 'Failed to delete reel');
       }
     } catch (error) {
-      console.error('[REEL_UPLOAD] Delete error:', error);
+      console.error('[UploadReel] Delete error:', error);
       Alert.alert('Error', 'Failed to delete reel');
     } finally {
       setDeleting(false);
     }
   };
 
-  // Format file size
+  /**
+   * Format file size
+   */
   const formatFileSize = (bytes) => {
-    if (!bytes) return '0 B';
+    if (!bytes || bytes === 0) return '0 B';
     const sizes = ['B', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(1024));
-    return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
+    return (bytes / Math.pow(1024, i)).toFixed(2) + ' ' + sizes[i];
   };
 
-  // Format duration
+  /**
+   * Format duration
+   */
   const formatDuration = (seconds) => {
-    if (!seconds) return '0:00';
+    if (!seconds || seconds === 0) return '0:00';
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Render reel item
+  /**
+   * Remove selected video
+   */
+  const removeSelectedVideo = () => {
+    if (uploading) return;
+    
+    Alert.alert(
+      'Remove Video',
+      'Remove selected video?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => {
+            setSelectedVideo(null);
+            setUploadProgress(0);
+          },
+        },
+      ]
+    );
+  };
+
+  /**
+   * Render reel item
+   */
   const renderReelItem = ({ item }) => (
     <View style={styles.reelCard}>
       <View style={styles.reelThumbnailContainer}>
@@ -325,11 +438,11 @@ const UploadReelSection = ({ user, onRefresh }) => {
         </View>
         <View style={styles.reelStats}>
           <View style={styles.reelStat}>
-            <Ionicons name="heart" size={14} color="#fff" />
+            <Ionicons name="heart" size={12} color="#fff" />
             <Text style={styles.reelStatText}>{item.likes || 0}</Text>
           </View>
           <View style={styles.reelStat}>
-            <Ionicons name="chatbubble" size={14} color="#fff" />
+            <Ionicons name="chatbubble" size={12} color="#fff" />
             <Text style={styles.reelStatText}>{item.comments?.length || 0}</Text>
           </View>
         </View>
@@ -350,15 +463,20 @@ const UploadReelSection = ({ user, onRefresh }) => {
 
       <TouchableOpacity
         style={styles.deleteButton}
-        onPress={() => confirmDeleteReel(item)}
+        onPress={() => {
+          setReelToDelete(item);
+          setDeleteModalVisible(true);
+        }}
         activeOpacity={0.7}
       >
-        <Ionicons name="trash-outline" size={20} color="#EF4444" />
+        <Ionicons name="trash-outline" size={18} color="#EF4444" />
       </TouchableOpacity>
     </View>
   );
 
-  // Render upload tab
+  /**
+   * Render upload tab
+   */
   const renderUploadTab = () => (
     <ScrollView
       style={styles.tabContent}
@@ -366,47 +484,45 @@ const UploadReelSection = ({ user, onRefresh }) => {
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
     >
-      {/* Header */}
       <View style={styles.uploadHeader}>
-        <Ionicons name="videocam" size={32} color="#8B5CF6" />
+        <Ionicons name="videocam" size={32 * SIZES.scale} color="#8B5CF6" />
         <Text style={styles.uploadTitle}>Upload Your Reel</Text>
         <Text style={styles.uploadSubtitle}>
           Share your expertise with the community
         </Text>
       </View>
 
-      {/* Video Selector */}
       <View style={styles.videoSelectorContainer}>
         {selectedVideo ? (
           <Animated.View style={[styles.videoSelected, { transform: [{ scale: scaleAnim }] }]}>
             <View style={styles.videoPreview}>
-              {selectedVideo.uri && (
-                <Image
-                  source={{ uri: selectedVideo.uri }}
-                  style={styles.videoPreviewImage}
-                  resizeMode="cover"
-                />
-              )}
+              <Image
+                source={{ uri: selectedVideo.uri }}
+                style={styles.videoPreviewImage}
+                resizeMode="cover"
+              />
               <View style={styles.videoPreviewOverlay}>
-                <Ionicons name="checkmark-circle" size={48} color="#10B981" />
+                <Ionicons name="checkmark-circle" size={40} color="#10B981" />
               </View>
             </View>
 
             <View style={styles.videoDetails}>
               <Text style={styles.videoName} numberOfLines={1}>
-                {selectedVideo.fileName || 'Video selected'}
+                {selectedVideo.fileName || selectedVideo.name || 'Video selected'}
               </Text>
               <View style={styles.videoMeta}>
-                <Text style={styles.videoMetaText}>
-                  {formatFileSize(selectedVideo.fileSize)}
-                </Text>
+                {selectedVideo.fileSize && (
+                  <Text style={styles.videoMetaText}>
+                    {formatFileSize(selectedVideo.fileSize)}
+                  </Text>
+                )}
+                {selectedVideo.duration && selectedVideo.fileSize && (
+                  <Text style={styles.videoMetaDot}>•</Text>
+                )}
                 {selectedVideo.duration && (
-                  <>
-                    <Text style={styles.videoMetaDot}>•</Text>
-                    <Text style={styles.videoMetaText}>
-                      {formatDuration(selectedVideo.duration)}
-                    </Text>
-                  </>
+                  <Text style={styles.videoMetaText}>
+                    {formatDuration(selectedVideo.duration)}
+                  </Text>
                 )}
               </View>
             </View>
@@ -416,7 +532,7 @@ const UploadReelSection = ({ user, onRefresh }) => {
               onPress={removeSelectedVideo}
               disabled={uploading}
             >
-              <Ionicons name="close-circle" size={24} color="#EF4444" />
+              <Ionicons name="close-circle" size={22} color="#EF4444" />
             </TouchableOpacity>
           </Animated.View>
         ) : (
@@ -426,7 +542,7 @@ const UploadReelSection = ({ user, onRefresh }) => {
             disabled={uploading}
             activeOpacity={0.7}
           >
-            <Ionicons name="cloud-upload-outline" size={48} color="#8B5CF6" />
+            <Ionicons name="cloud-upload-outline" size={44 * SIZES.scale} color="#8B5CF6" />
             <Text style={styles.videoSelectorTitle}>Select Video</Text>
             <Text style={styles.videoSelectorSubtitle}>
               MP4, MOV • Max 50MB • Up to 60s
@@ -435,7 +551,6 @@ const UploadReelSection = ({ user, onRefresh }) => {
         )}
       </View>
 
-      {/* Description Input */}
       <View style={styles.descriptionContainer}>
         <Text style={styles.inputLabel}>
           Description <Text style={styles.required}>*</Text>
@@ -447,32 +562,36 @@ const UploadReelSection = ({ user, onRefresh }) => {
             placeholderTextColor="#94A3B8"
             value={description}
             onChangeText={setDescription}
-            maxLength={500}
+            maxLength={MAX_DESCRIPTION_LENGTH}
             multiline
             numberOfLines={4}
             textAlignVertical="top"
             editable={!uploading}
           />
           <Text style={styles.characterCount}>
-            {description.length}/500
+            {description.length}/{MAX_DESCRIPTION_LENGTH}
           </Text>
         </View>
       </View>
 
-      {/* Upload Progress */}
       {uploading && (
         <View style={styles.progressContainer}>
           <View style={styles.progressHeader}>
-            <Text style={styles.progressText}>Uploading...</Text>
+            <Text style={styles.progressText}>Uploading your reel...</Text>
             <Text style={styles.progressPercentage}>{uploadProgress}%</Text>
           </View>
           <View style={styles.progressBarContainer}>
-            <View style={[styles.progressBar, { width: `${uploadProgress}%` }]} />
+            <Animated.View 
+              style={[
+                styles.progressBar, 
+                { width: `${uploadProgress}%` }
+              ]} 
+            />
           </View>
+          <Text style={styles.progressNote}>Please don't close the app</Text>
         </View>
       )}
 
-      {/* Upload Button */}
       <TouchableOpacity
         style={[
           styles.uploadButton,
@@ -486,36 +605,37 @@ const UploadReelSection = ({ user, onRefresh }) => {
           <ActivityIndicator color="#fff" size="small" />
         ) : (
           <>
-            <Ionicons name="cloud-upload" size={20} color="#fff" />
+            <Ionicons name="cloud-upload" size={18} color="#fff" />
             <Text style={styles.uploadButtonText}>Upload Reel</Text>
           </>
         )}
       </TouchableOpacity>
 
-      {/* Guidelines */}
       <View style={styles.guidelinesContainer}>
-        <Text style={styles.guidelinesTitle}>Upload Guidelines</Text>
+        <Text style={styles.guidelinesTitle}>📋 Upload Guidelines</Text>
         <View style={styles.guideline}>
-          <Ionicons name="checkmark-circle" size={16} color="#10B981" />
+          <Ionicons name="checkmark-circle" size={14} color="#10B981" />
           <Text style={styles.guidelineText}>Keep videos under 60 seconds</Text>
         </View>
         <View style={styles.guideline}>
-          <Ionicons name="checkmark-circle" size={16} color="#10B981" />
-          <Text style={styles.guidelineText}>Use high-quality vertical videos (9:16 ratio recommended)</Text>
+          <Ionicons name="checkmark-circle" size={14} color="#10B981" />
+          <Text style={styles.guidelineText}>Use vertical videos (9:16 ratio preferred)</Text>
         </View>
         <View style={styles.guideline}>
-          <Ionicons name="checkmark-circle" size={16} color="#10B981" />
-          <Text style={styles.guidelineText}>Add clear descriptions to help users find your content</Text>
+          <Ionicons name="checkmark-circle" size={14} color="#10B981" />
+          <Text style={styles.guidelineText}>Add clear, descriptive captions</Text>
         </View>
         <View style={styles.guideline}>
-          <Ionicons name="checkmark-circle" size={16} color="#10B981" />
-          <Text style={styles.guidelineText}>Ensure content is relevant to your expertise</Text>
+          <Ionicons name="checkmark-circle" size={14} color="#10B981" />
+          <Text style={styles.guidelineText}>File size must be under 50MB</Text>
         </View>
       </View>
     </ScrollView>
   );
 
-  // Render my reels tab
+  /**
+   * Render my reels tab
+   */
   const renderMyReelsTab = () => (
     <View style={styles.tabContent}>
       {loadingReels ? (
@@ -525,7 +645,7 @@ const UploadReelSection = ({ user, onRefresh }) => {
         </View>
       ) : myReels.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Ionicons name="videocam-outline" size={64} color="#CBD5E1" />
+          <Ionicons name="videocam-outline" size={56} color="#CBD5E1" />
           <Text style={styles.emptyTitle}>No Reels Yet</Text>
           <Text style={styles.emptySubtitle}>
             Upload your first reel to start sharing your expertise
@@ -535,7 +655,7 @@ const UploadReelSection = ({ user, onRefresh }) => {
             onPress={() => setActiveTab('upload')}
             activeOpacity={0.7}
           >
-            <Ionicons name="add-circle" size={20} color="#fff" />
+            <Ionicons name="add-circle" size={18} color="#fff" />
             <Text style={styles.emptyButtonText}>Upload Reel</Text>
           </TouchableOpacity>
         </View>
@@ -543,7 +663,7 @@ const UploadReelSection = ({ user, onRefresh }) => {
         <FlatList
           data={myReels}
           renderItem={renderReelItem}
-          keyExtractor={(item, index) => item._id || index.toString()}
+          keyExtractor={(item) => item._id}
           contentContainerStyle={styles.reelsList}
           showsVerticalScrollIndicator={false}
           refreshControl={
@@ -566,28 +686,17 @@ const UploadReelSection = ({ user, onRefresh }) => {
     </View>
   );
 
-  // Not a consultant view
+  // Not consultant - Show upgrade message
   if (!isConsultant) {
     return (
       <View style={styles.notConsultantContainer}>
-        <Ionicons name="lock-closed" size={64} color="#CBD5E1" />
+        <Ionicons name="lock-closed" size={56} color="#CBD5E1" />
         <Text style={styles.notConsultantTitle}>Consultant Access Only</Text>
         <Text style={styles.notConsultantSubtitle}>
-          You need to be an approved consultant to upload reels
+          Apply to become a consultant to upload and share reels
         </Text>
-        <TouchableOpacity
-          style={styles.notConsultantButton}
-          onPress={() => {
-            // Navigate to upgrade section or show info
-            Alert.alert(
-              'Become a Consultant',
-              'Apply to become a consultant to start uploading reels and sharing your expertise.',
-              [{ text: 'OK' }]
-            );
-          }}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.notConsultantButtonText}>Learn More</Text>
+        <TouchableOpacity style={styles.notConsultantButton} activeOpacity={0.7}>
+          <Text style={styles.notConsultantButtonText}>Apply Now</Text>
         </TouchableOpacity>
       </View>
     );
@@ -604,7 +713,7 @@ const UploadReelSection = ({ user, onRefresh }) => {
         >
           <Ionicons
             name="cloud-upload-outline"
-            size={20}
+            size={18}
             color={activeTab === 'upload' ? '#8B5CF6' : '#64748B'}
           />
           <Text style={[styles.tabText, activeTab === 'upload' && styles.activeTabText]}>
@@ -619,7 +728,7 @@ const UploadReelSection = ({ user, onRefresh }) => {
         >
           <Ionicons
             name="albums-outline"
-            size={20}
+            size={18}
             color={activeTab === 'myReels' ? '#8B5CF6' : '#64748B'}
           />
           <Text style={[styles.tabText, activeTab === 'myReels' && styles.activeTabText]}>
@@ -641,29 +750,24 @@ const UploadReelSection = ({ user, onRefresh }) => {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalIcon}>
-              <Ionicons name="trash-outline" size={32} color="#EF4444" />
+              <Ionicons name="trash-outline" size={28} color="#EF4444" />
             </View>
-
             <Text style={styles.modalTitle}>Delete Reel?</Text>
             <Text style={styles.modalMessage}>
-              Are you sure you want to delete this reel? This action cannot be undone.
+              This action cannot be undone. Your reel will be permanently deleted.
             </Text>
-
             <View style={styles.modalButtons}>
               <TouchableOpacity
                 style={[styles.modalButton, styles.modalCancelButton]}
                 onPress={() => setDeleteModalVisible(false)}
                 disabled={deleting}
-                activeOpacity={0.7}
               >
                 <Text style={styles.modalCancelText}>Cancel</Text>
               </TouchableOpacity>
-
               <TouchableOpacity
                 style={[styles.modalButton, styles.modalDeleteButton]}
                 onPress={deleteReel}
                 disabled={deleting}
-                activeOpacity={0.7}
               >
                 {deleting ? (
                   <ActivityIndicator color="#fff" size="small" />
@@ -684,15 +788,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F8FAFC',
   },
-
-  // Tab Selector
   tabSelector: {
     flexDirection: 'row',
     backgroundColor: '#fff',
-    marginHorizontal: IS_SMALL_DEVICE ? 12 : 16,
-    marginTop: IS_SMALL_DEVICE ? 12 : 16,
-    borderRadius: 12,
-    padding: 4,
+    marginHorizontal: SIZES.small ? 10 : 14,
+    marginTop: SIZES.small ? 10 : 14,
+    borderRadius: 10,
+    padding: 3,
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
@@ -704,15 +806,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: IS_SMALL_DEVICE ? 10 : 12,
+    paddingVertical: SIZES.small ? 8 : 10,
     borderRadius: 8,
-    gap: 8,
+    gap: 6,
   },
   activeTab: {
     backgroundColor: '#F3F4F6',
   },
   tabText: {
-    fontSize: IS_SMALL_DEVICE ? 14 : 15,
+    fontSize: SIZES.small ? 12 : 13,
     fontWeight: '500',
     color: '#64748B',
   },
@@ -720,65 +822,57 @@ const styles = StyleSheet.create({
     color: '#8B5CF6',
     fontWeight: '600',
   },
-
-  // Tab Content
   tabContent: {
     flex: 1,
   },
-
-  // Upload Tab
   uploadContainer: {
-    padding: IS_SMALL_DEVICE ? 12 : 16,
-    paddingBottom: 32,
+    padding: SIZES.small ? 10 : 14,
+    paddingBottom: 28,
   },
   uploadHeader: {
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 20,
   },
   uploadTitle: {
-    fontSize: IS_SMALL_DEVICE ? 20 : 24,
+    fontSize: SIZES.small ? 18 : 22,
     fontWeight: '700',
     color: '#1E293B',
-    marginTop: 12,
+    marginTop: 10,
   },
   uploadSubtitle: {
-    fontSize: IS_SMALL_DEVICE ? 13 : 14,
+    fontSize: SIZES.small ? 12 : 13,
     color: '#64748B',
-    marginTop: 8,
+    marginTop: 6,
     textAlign: 'center',
   },
-
-  // Video Selector
   videoSelectorContainer: {
-    marginBottom: 20,
+    marginBottom: 16,
   },
   videoSelector: {
     backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: IS_SMALL_DEVICE ? 32 : 40,
+    borderRadius: 12,
+    padding: SIZES.small ? 24 : 32,
     alignItems: 'center',
     borderWidth: 2,
     borderColor: '#E2E8F0',
     borderStyle: 'dashed',
   },
   videoSelectorTitle: {
-    fontSize: IS_SMALL_DEVICE ? 16 : 18,
+    fontSize: SIZES.small ? 14 : 16,
     fontWeight: '600',
     color: '#1E293B',
-    marginTop: 16,
+    marginTop: 12,
   },
   videoSelectorSubtitle: {
-    fontSize: IS_SMALL_DEVICE ? 12 : 13,
+    fontSize: SIZES.small ? 11 : 12,
     color: '#94A3B8',
-    marginTop: 8,
+    marginTop: 6,
     textAlign: 'center',
   },
-
-  // Video Selected
   videoSelected: {
     backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: IS_SMALL_DEVICE ? 12 : 16,
+    borderRadius: 12,
+    padding: SIZES.small ? 10 : 12,
     flexDirection: 'row',
     alignItems: 'center',
     elevation: 2,
@@ -788,9 +882,9 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
   },
   videoPreview: {
-    width: IS_SMALL_DEVICE ? 80 : 100,
-    height: IS_SMALL_DEVICE ? 80 : 100,
-    borderRadius: 12,
+    width: SIZES.small ? 70 : 85,
+    height: SIZES.small ? 70 : 85,
+    borderRadius: 10,
     backgroundColor: '#F1F5F9',
     overflow: 'hidden',
   },
@@ -806,71 +900,67 @@ const styles = StyleSheet.create({
   },
   videoDetails: {
     flex: 1,
-    marginLeft: IS_SMALL_DEVICE ? 12 : 16,
-    marginRight: 8,
+    marginLeft: SIZES.small ? 10 : 12,
+    marginRight: 6,
   },
   videoName: {
-    fontSize: IS_SMALL_DEVICE ? 14 : 15,
+    fontSize: SIZES.small ? 12 : 13,
     fontWeight: '600',
     color: '#1E293B',
-    marginBottom: 6,
+    marginBottom: 4,
   },
   videoMeta: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   videoMetaText: {
-    fontSize: IS_SMALL_DEVICE ? 12 : 13,
+    fontSize: SIZES.small ? 11 : 12,
     color: '#64748B',
   },
   videoMetaDot: {
-    marginHorizontal: 6,
+    marginHorizontal: 4,
     color: '#CBD5E1',
   },
   removeVideoButton: {
-    padding: 4,
+    padding: 2,
   },
-
-  // Description
   descriptionContainer: {
-    marginBottom: 20,
+    marginBottom: 16,
   },
   inputLabel: {
-    fontSize: IS_SMALL_DEVICE ? 14 : 15,
+    fontSize: SIZES.small ? 12 : 13,
     fontWeight: '600',
     color: '#1E293B',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   required: {
     color: '#EF4444',
   },
   descriptionInputWrapper: {
     backgroundColor: '#fff',
-    borderRadius: 12,
+    borderRadius: 10,
     borderWidth: 1.5,
     borderColor: '#E2E8F0',
   },
   descriptionInput: {
-    padding: IS_SMALL_DEVICE ? 12 : 16,
-    fontSize: IS_SMALL_DEVICE ? 14 : 15,
+    padding: SIZES.small ? 10 : 12,
+    fontSize: SIZES.small ? 13 : 14,
     color: '#1E293B',
-    minHeight: IS_SMALL_DEVICE ? 80 : 100,
-    maxHeight: IS_SMALL_DEVICE ? 120 : 150,
+    minHeight: SIZES.small ? 70 : 85,
+    maxHeight: SIZES.small ? 100 : 120,
   },
   characterCount: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#94A3B8',
-    paddingHorizontal: 16,
-    paddingBottom: 12,
+    paddingHorizontal: 12,
+    paddingBottom: 10,
     textAlign: 'right',
   },
-
-  // Progress
   progressContainer: {
     backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: IS_SMALL_DEVICE ? 14 : 16,
-    marginBottom: 20,
+    borderRadius: 10,
+    padding: SIZES.small ? 12 : 14,
+    marginBottom: 16,
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
@@ -881,40 +971,38 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 10,
   },
   progressText: {
-    fontSize: IS_SMALL_DEVICE ? 13 : 14,
+    fontSize: SIZES.small ? 12 : 13,
     fontWeight: '600',
     color: '#1E293B',
   },
   progressPercentage: {
-    fontSize: IS_SMALL_DEVICE ? 13 : 14,
+    fontSize: SIZES.small ? 12 : 13,
     fontWeight: '700',
     color: '#8B5CF6',
   },
   progressBarContainer: {
-    height: 8,
+    height: 6,
     backgroundColor: '#F1F5F9',
-    borderRadius: 4,
+    borderRadius: 3,
     overflow: 'hidden',
   },
   progressBar: {
     height: '100%',
     backgroundColor: '#8B5CF6',
-    borderRadius: 4,
+    borderRadius: 3,
   },
-
-  // Upload Button
   uploadButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#8B5CF6',
-    paddingVertical: IS_SMALL_DEVICE ? 14 : 16,
-    borderRadius: 12,
-    marginBottom: 24,
-    gap: 8,
+    paddingVertical: SIZES.small ? 12 : 14,
+    borderRadius: 10,
+    marginBottom: 20,
+    gap: 6,
     elevation: 3,
     shadowColor: '#8B5CF6',
     shadowOffset: { width: 0, height: 2 },
@@ -928,15 +1016,13 @@ const styles = StyleSheet.create({
   },
   uploadButtonText: {
     color: '#fff',
-    fontSize: IS_SMALL_DEVICE ? 15 : 16,
+    fontSize: SIZES.small ? 13 : 14,
     fontWeight: '700',
   },
-
-  // Guidelines
   guidelinesContainer: {
     backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: IS_SMALL_DEVICE ? 14 : 16,
+    borderRadius: 10,
+    padding: SIZES.small ? 12 : 14,
     elevation: 1,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
@@ -944,42 +1030,40 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
   },
   guidelinesTitle: {
-    fontSize: IS_SMALL_DEVICE ? 14 : 15,
+    fontSize: SIZES.small ? 12 : 13,
     fontWeight: '600',
     color: '#1E293B',
-    marginBottom: 12,
+    marginBottom: 10,
   },
   guideline: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    marginBottom: 10,
-    gap: 10,
+    marginBottom: 8,
+    gap: 8,
   },
   guidelineText: {
     flex: 1,
-    fontSize: IS_SMALL_DEVICE ? 12 : 13,
+    fontSize: SIZES.small ? 11 : 12,
     color: '#64748B',
-    lineHeight: IS_SMALL_DEVICE ? 18 : 20,
+    lineHeight: SIZES.small ? 16 : 18,
   },
-
-  // My Reels Tab
   reelsHeader: {
-    paddingHorizontal: IS_SMALL_DEVICE ? 12 : 16,
-    paddingVertical: IS_SMALL_DEVICE ? 12 : 16,
+    paddingHorizontal: SIZES.small ? 10 : 14,
+    paddingVertical: SIZES.small ? 10 : 12,
   },
   reelsCount: {
-    fontSize: IS_SMALL_DEVICE ? 16 : 18,
+    fontSize: SIZES.small ? 14 : 16,
     fontWeight: '700',
     color: '#1E293B',
   },
   reelsList: {
-    paddingHorizontal: IS_SMALL_DEVICE ? 12 : 16,
-    paddingBottom: 20,
+    paddingHorizontal: SIZES.small ? 10 : 14,
+    paddingBottom: 16,
   },
   reelCard: {
     backgroundColor: '#fff',
-    borderRadius: 12,
-    marginBottom: IS_SMALL_DEVICE ? 12 : 16,
+    borderRadius: 10,
+    marginBottom: SIZES.small ? 10 : 12,
     overflow: 'hidden',
     elevation: 2,
     shadowColor: '#000',
@@ -1005,47 +1089,47 @@ const styles = StyleSheet.create({
   },
   reelStats: {
     position: 'absolute',
-    bottom: 12,
-    left: 12,
+    bottom: 10,
+    left: 10,
     flexDirection: 'row',
-    gap: 16,
+    gap: 12,
   },
   reelStat: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 20,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 16,
   },
   reelStatText: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '600',
     color: '#fff',
   },
   reelInfo: {
-    padding: IS_SMALL_DEVICE ? 12 : 16,
-    paddingRight: 48,
+    padding: SIZES.small ? 10 : 12,
+    paddingRight: 40,
   },
   reelDescription: {
-    fontSize: IS_SMALL_DEVICE ? 13 : 14,
+    fontSize: SIZES.small ? 12 : 13,
     color: '#1E293B',
-    lineHeight: IS_SMALL_DEVICE ? 18 : 20,
-    marginBottom: 6,
+    lineHeight: SIZES.small ? 16 : 18,
+    marginBottom: 4,
   },
   reelDate: {
-    fontSize: 11,
+    fontSize: 10,
     color: '#94A3B8',
   },
   deleteButton: {
     position: 'absolute',
-    top: 8,
-    right: 8,
+    top: 6,
+    right: 6,
     backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
     elevation: 2,
@@ -1054,138 +1138,130 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 2,
   },
-
-  // Loading States
   loadingContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 60,
+    paddingVertical: 40,
   },
   loadingText: {
-    marginTop: 16,
-    fontSize: IS_SMALL_DEVICE ? 13 : 14,
+    marginTop: 12,
+    fontSize: SIZES.small ? 12 : 13,
     color: '#64748B',
   },
-
-  // Empty State
   emptyContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 40,
-    paddingVertical: 60,
+    paddingHorizontal: 32,
+    paddingVertical: 40,
   },
   emptyTitle: {
-    fontSize: IS_SMALL_DEVICE ? 18 : 20,
+    fontSize: SIZES.small ? 16 : 18,
     fontWeight: '700',
     color: '#1E293B',
-    marginTop: 20,
-    marginBottom: 8,
+    marginTop: 16,
+    marginBottom: 6,
   },
   emptySubtitle: {
-    fontSize: IS_SMALL_DEVICE ? 13 : 14,
+    fontSize: SIZES.small ? 12 : 13,
     color: '#64748B',
     textAlign: 'center',
-    lineHeight: IS_SMALL_DEVICE ? 20 : 22,
-    marginBottom: 24,
+    lineHeight: SIZES.small ? 18 : 20,
+    marginBottom: 20,
   },
   emptyButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
     backgroundColor: '#8B5CF6',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
   },
   emptyButtonText: {
     color: '#fff',
-    fontSize: IS_SMALL_DEVICE ? 14 : 15,
+    fontSize: SIZES.small ? 12 : 13,
     fontWeight: '600',
   },
-
-  // Not Consultant
   notConsultantContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 40,
+    paddingHorizontal: 32,
     backgroundColor: '#F8FAFC',
   },
   notConsultantTitle: {
-    fontSize: IS_SMALL_DEVICE ? 18 : 20,
+    fontSize: SIZES.small ? 16 : 18,
     fontWeight: '700',
     color: '#1E293B',
-    marginTop: 20,
-    marginBottom: 8,
+    marginTop: 16,
+    marginBottom: 6,
   },
   notConsultantSubtitle: {
-    fontSize: IS_SMALL_DEVICE ? 13 : 14,
+    fontSize: SIZES.small ? 12 : 13,
     color: '#64748B',
     textAlign: 'center',
-    lineHeight: IS_SMALL_DEVICE ? 20 : 22,
-    marginBottom: 24,
+    lineHeight: SIZES.small ? 18 : 20,
+    marginBottom: 20,
   },
   notConsultantButton: {
     backgroundColor: '#8B5CF6',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
   },
   notConsultantButtonText: {
     color: '#fff',
-    fontSize: IS_SMALL_DEVICE ? 14 : 15,
+    fontSize: SIZES.small ? 12 : 13,
     fontWeight: '600',
   },
-
-  // Delete Modal
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 20,
+    padding: 16,
   },
   modalContent: {
     backgroundColor: '#fff',
-    borderRadius: 20,
-    padding: IS_SMALL_DEVICE ? 20 : 24,
+    borderRadius: 16,
+    padding: SIZES.small ? 16 : 20,
     width: '100%',
-    maxWidth: 400,
+    maxWidth: 360,
     alignItems: 'center',
   },
   modalIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: '#FEE2E2',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   modalTitle: {
-    fontSize: IS_SMALL_DEVICE ? 18 : 20,
+    fontSize: SIZES.small ? 16 : 18,
     fontWeight: '700',
     color: '#1E293B',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   modalMessage: {
-    fontSize: IS_SMALL_DEVICE ? 13 : 14,
+    fontSize: SIZES.small ? 12 : 13,
     color: '#64748B',
     textAlign: 'center',
-    lineHeight: IS_SMALL_DEVICE ? 20 : 22,
-    marginBottom: 24,
+    lineHeight: SIZES.small ? 18 : 20,
+    marginBottom: 20,
   },
   modalButtons: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 10,
     width: '100%',
   },
   modalButton: {
     flex: 1,
-    paddingVertical: IS_SMALL_DEVICE ? 12 : 14,
-    borderRadius: 10,
+    paddingVertical: SIZES.small ? 10 : 12,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1193,7 +1269,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F1F5F9',
   },
   modalCancelText: {
-    fontSize: IS_SMALL_DEVICE ? 14 : 15,
+    fontSize: SIZES.small ? 12 : 13,
     fontWeight: '600',
     color: '#64748B',
   },
@@ -1201,7 +1277,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#EF4444',
   },
   modalDeleteText: {
-    fontSize: IS_SMALL_DEVICE ? 14 : 15,
+    fontSize: SIZES.small ? 12 : 13,
     fontWeight: '600',
     color: '#fff',
   },

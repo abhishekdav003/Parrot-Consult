@@ -85,7 +85,11 @@ const ReelsScreen = ({ navigation }) => {
           baseReels.current = newReels;
           const loopedReels = createLoopedReels(newReels);
           setReels(loopedReels);
-          setHasMore(newReels.length >= 15);
+          setHasMore(
+      typeof result.hasMore === 'boolean'
+        ? result.hasMore
+        : newReels.length >= 15
+    );
           
           if (loopedReels.length > 0) {
             const middleIndex = Math.floor(loopedReels.length / 3);
@@ -107,7 +111,11 @@ const ReelsScreen = ({ navigation }) => {
             baseReels.current = [...baseReels.current, ...uniqueNewReels];
             const loopedReels = createLoopedReels(baseReels.current);
             setReels(loopedReels);
-            setHasMore(newReels.length >= 15);
+            setHasMore(
+      typeof result.hasMore === 'boolean'
+        ? result.hasMore
+        : newReels.length >= 15
+    );
           } else {
             setHasMore(false);
             isLooping.current = true;

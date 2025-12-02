@@ -9,6 +9,7 @@ import {
   Image,
   StatusBar,
   Platform,
+  ScrollView, 
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 
@@ -105,120 +106,127 @@ const ToggleMenu = ({
         />
 
         <View style={styles.menu}>
-          {/* Header */}
-          <View style={styles.header}>
-            <TouchableOpacity 
-              style={styles.userInfo} 
-              onPress={() => {
-                onItemPress('profile');
-                onClose();
-              }}
-              activeOpacity={0.8}
-            >
-              <View style={styles.avatarContainer}>
-                <Image
-                  source={{
-                    uri: user?.profileImage || 'https://via.placeholder.com/60x60/10B981/ffffff?text=U',
-                  }}
-                  style={styles.avatar}
-                />
-                <View style={styles.avatarBorder} />
-              </View>
-              <View style={styles.userDetails}>
-                <Text style={styles.userName}>
-                  {user?.fullName || 'Guest User'}
-                </Text>
-                <Text style={styles.userPhone}>{user?.phone || 'Not provided'}</Text>
-                {isConsultant && (
-                  <View style={styles.consultantBadge}>
-                    <Ionicons name="star" size={12} color="#F59E0B" />
-                    <Text style={styles.consultantBadgeText}>Consultant</Text>
-                  </View>
-                )}
-              </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.closeButton} 
-              onPress={onClose}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="close" size={24} color="#64748B" />
-            </TouchableOpacity>
+  {/* Header (fixed) */}
+  <View style={styles.header}>
+    <TouchableOpacity 
+      style={styles.userInfo} 
+      onPress={() => {
+        onItemPress('profile');
+        onClose();
+      }}
+      activeOpacity={0.8}
+    >
+      <View style={styles.avatarContainer}>
+        <Image
+          source={{
+            uri: user?.profileImage || 'https://via.placeholder.com/60x60/10B981/ffffff?text=U',
+          }}
+          style={styles.avatar}
+        />
+        <View style={styles.avatarBorder} />
+      </View>
+      <View style={styles.userDetails}>
+        <Text style={styles.userName}>
+          {user?.fullName || 'Guest User'}
+        </Text>
+        <Text style={styles.userPhone}>{user?.phone || 'Not provided'}</Text>
+        {isConsultant && (
+          <View style={styles.consultantBadge}>
+            <Ionicons name="star" size={12} color="#F59E0B" />
+            <Text style={styles.consultantBadgeText}>Consultant</Text>
           </View>
+        )}
+      </View>
+    </TouchableOpacity>
 
-          {/* Menu Items */}
-          <View style={styles.menuItems}>
-            <Text style={styles.menuSectionTitle}>Navigation</Text>
-            {menuItems.map(renderMenuItem)}
+    <TouchableOpacity 
+      style={styles.closeButton} 
+      onPress={onClose}
+      activeOpacity={0.7}
+    >
+      <Ionicons name="close" size={24} color="#64748B" />
+    </TouchableOpacity>
+  </View>
+
+  {/* Scrollable content */}
+  <ScrollView
+    style={styles.menuScroll}
+    contentContainerStyle={styles.menuScrollContent}
+    showsVerticalScrollIndicator={false}
+  >
+    {/* Menu Items */}
+    <View style={styles.menuItems}>
+      <Text style={styles.menuSectionTitle}>Navigation</Text>
+      {menuItems.map(renderMenuItem)}
+    </View>
+
+    {/* Quick Actions Section */}
+    <View style={styles.actionSection}>
+      <Text style={styles.menuSectionTitle}>Quick Actions</Text>
+
+      {isConsultant && (
+        <TouchableOpacity
+          style={styles.actionButton}
+          onPress={() => {
+            onItemPress('uploadreel');
+            onClose();
+          }}
+          activeOpacity={0.7}
+        >
+          <View style={[styles.actionIcon, { backgroundColor: '#8B5CF6' }]}>
+            <Ionicons name="videocam" size={20} color="#ffffff" />
           </View>
-
-          {/* Quick Actions Section */}
-          <View style={styles.actionSection}>
-            <Text style={styles.menuSectionTitle}>Quick Actions</Text>
-            
-            {/* Upload Reel - Only for consultants */}
-            {isConsultant && (
-              <TouchableOpacity
-                style={styles.actionButton}
-                onPress={() => {
-                  onItemPress('uploadreel'); // Navigate to upload reel section
-                  onClose();
-                }}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.actionIcon, { backgroundColor: '#8B5CF6' }]}>
-                  <Ionicons name="videocam" size={20} color="#ffffff" />
-                </View>
-                <View style={styles.actionContent}>
-                  <Text style={styles.actionText}>Upload Reel</Text>
-                  <Text style={styles.actionSubtext}>Share your expertise</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={16} color="#94A3B8" />
-              </TouchableOpacity>
-            )}
-
-            <TouchableOpacity
-              style={styles.actionButton}
-              onPress={() => {
-                // Handle help action
-                onClose();
-              }}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.actionIcon, { backgroundColor: '#10B981' }]}>
-                <Ionicons name="help-circle" size={20} color="#ffffff" />
-              </View>
-              <View style={styles.actionContent}>
-                <Text style={styles.actionText}>Help & Support</Text>
-                <Text style={styles.actionSubtext}>Get assistance</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color="#94A3B8" />
-            </TouchableOpacity>
+          <View style={styles.actionContent}>
+            <Text style={styles.actionText}>Upload Reel</Text>
+            <Text style={styles.actionSubtext}>Share your expertise</Text>
           </View>
+          <Ionicons name="chevron-forward" size={16} color="#94A3B8" />
+        </TouchableOpacity>
+      )}
 
-          {/* Footer - Logout */}
-          <View style={styles.footer}>
-            <TouchableOpacity 
-              style={styles.logoutButton} 
-              onPress={onLogout}
-              activeOpacity={0.7}
-            >
-              <View style={styles.logoutIcon}>
-                <Ionicons name="log-out-outline" size={22} color="#EF4444" />
-              </View>
-              <View style={styles.logoutContent}>
-                <Text style={styles.logoutText}>Logout</Text>
-                <Text style={styles.logoutSubtext}>Sign out of your account</Text>
-              </View>
-            </TouchableOpacity>
-          </View>
-
-          {/* App Version */}
-          <View style={styles.versionContainer}>
-            <Text style={styles.versionText}>ConsultApp v1.0.0</Text>
-          </View>
+      <TouchableOpacity
+        style={styles.actionButton}
+        onPress={() => {
+          // Handle help action
+          onClose();
+        }}
+        activeOpacity={0.7}
+      >
+        <View style={[styles.actionIcon, { backgroundColor: '#10B981' }]}>
+          <Ionicons name="help-circle" size={20} color="#ffffff" />
         </View>
+        <View style={styles.actionContent}>
+          <Text style={styles.actionText}>Help & Support</Text>
+          <Text style={styles.actionSubtext}>Get assistance</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={16} color="#94A3B8" />
+      </TouchableOpacity>
+    </View>
+
+    {/* Footer - Logout */}
+    <View style={styles.footer}>
+      <TouchableOpacity 
+        style={styles.logoutButton} 
+        onPress={onLogout}
+        activeOpacity={0.7}
+      >
+        <View style={styles.logoutIcon}>
+          <Ionicons name="log-out-outline" size={22} color="#EF4444" />
+        </View>
+        <View style={styles.logoutContent}>
+          <Text style={styles.logoutText}>Logout</Text>
+          <Text style={styles.logoutSubtext}>Sign out of your account</Text>
+        </View>
+      </TouchableOpacity>
+    </View>
+
+    {/* App Version */}
+    <View style={styles.versionContainer}>
+      <Text style={styles.versionText}>ConsultApp v1.0.0</Text>
+    </View>
+  </ScrollView>
+</View>
+
       </View>
     </Modal>
   );
@@ -246,6 +254,12 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 2, height: 0 },
     shadowOpacity: 0.25,
     shadowRadius: 10,
+  },
+  menuScroll: {
+    flex: 1,
+  },
+  menuScrollContent: {
+    paddingBottom: 24,
   },
 
   // Header Styles
@@ -401,7 +415,6 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderTopWidth: 1,
     borderTopColor: '#F1F5F9',
-    marginTop: 'auto',
   },
   actionButton: {
     flexDirection: 'row',
