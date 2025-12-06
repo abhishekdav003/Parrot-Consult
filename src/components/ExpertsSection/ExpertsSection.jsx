@@ -182,11 +182,11 @@ const ExpertsSection = ({ onBookNow }) => {
               <Text style={styles.expertCategory} numberOfLines={1}>
                 {profile.category || profile.fieldOfStudy}
               </Text>
-              <View style={styles.ratingContainer}>
+              {/* <View style={styles.ratingContainer}>
                 <Icon name="star" size={14} color="#FBBF24" />
                 <Text style={styles.ratingText}>4.8</Text>
                 <Text style={styles.reviewsText}>(124 reviews)</Text>
-              </View>
+              </View> */}
             </View>
           </View>
 

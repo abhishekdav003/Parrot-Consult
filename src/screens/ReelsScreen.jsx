@@ -86,10 +86,10 @@ const ReelsScreen = ({ navigation }) => {
           const loopedReels = createLoopedReels(newReels);
           setReels(loopedReels);
           setHasMore(
-      typeof result.hasMore === 'boolean'
-        ? result.hasMore
-        : newReels.length >= 15
-    );
+            typeof result.hasMore === 'boolean'
+              ? result.hasMore
+              : newReels.length >= 15
+          );
           
           if (loopedReels.length > 0) {
             const middleIndex = Math.floor(loopedReels.length / 3);
@@ -112,10 +112,10 @@ const ReelsScreen = ({ navigation }) => {
             const loopedReels = createLoopedReels(baseReels.current);
             setReels(loopedReels);
             setHasMore(
-      typeof result.hasMore === 'boolean'
-        ? result.hasMore
-        : newReels.length >= 15
-    );
+              typeof result.hasMore === 'boolean'
+                ? result.hasMore
+                : newReels.length >= 15
+            );
           } else {
             setHasMore(false);
             isLooping.current = true;
@@ -151,15 +151,17 @@ const ReelsScreen = ({ navigation }) => {
     };
   }, []);
 
-  // Handle screen focus - pause videos when screen loses focus
+  // Handle screen focus - OPTIMIZED: Pause ALL videos when screen loses focus
   useFocusEffect(
     useCallback(() => {
       StatusBar.setHidden(true);
       setIsScreenFocused(true);
+      console.log('[Reels] Screen focused - resuming video');
       
       return () => {
         StatusBar.setHidden(false);
         setIsScreenFocused(false);
+        console.log('[Reels] Screen unfocused - pausing all videos');
       };
     }, [])
   );

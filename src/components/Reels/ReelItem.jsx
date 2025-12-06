@@ -62,11 +62,19 @@ const ReelItem = ({ reel, isActive, onLike, onComment, currentUser, navigation }
     }
   }, [reel.isLiked, reel.likes, reel.comments]);
 
-  // Update paused state when active status changes
+  // OPTIMIZED: Update paused state when active status changes
+  // This ensures audio stops completely when screen loses focus
   useEffect(() => {
-    setPaused(!isActive);
+    const newPausedState = !isActive;
+    setPaused(newPausedState);
+    
     if (!isActive && videoRef.current) {
-      videoRef.current.seek(0);
+      // Pause the video when becoming inactive
+      videoRef.current.pause?.();
+      console.log('[ReelItem] Video paused - screen not focused');
+    } else if (isActive && videoRef.current) {
+      // Resume when becoming active
+      console.log('[ReelItem] Video resumed - screen focused');
     }
   }, [isActive]);
 

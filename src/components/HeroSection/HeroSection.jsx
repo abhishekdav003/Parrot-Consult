@@ -169,8 +169,8 @@ const styles = StyleSheet.create({
     marginBottom: 30,
   },
   parrotLogo: {
-    width: 140,
-    height: 170,
+    width: 180,
+    height: 180,
   },
   contentContainer: {
     alignItems: 'center',

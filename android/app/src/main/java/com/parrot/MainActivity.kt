@@ -1,4 +1,4 @@
-package com.parrot
+package com.parrotconsult.app
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate

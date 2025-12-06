@@ -1,4 +1,4 @@
-package com.parrot
+package com.parrotconsult.app
 
 import android.app.Application
 import com.facebook.react.PackageList

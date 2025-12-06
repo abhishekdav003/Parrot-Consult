@@ -198,10 +198,10 @@ const ExpertListScreen = ({ route }) => {
             </Text>
 
             <View style={styles.expertStats}>
-              <View style={styles.statItem}>
+              {/* <View style={styles.statItem}>
                 <Icon name="star" size={14} color="#FBBF24" />
                 <Text style={styles.statText}>4.8 (124)</Text>
-              </View>
+              </View> */}
               <View style={styles.statDivider} />
               <View style={styles.statItem}>
                 <Icon name="language" size={14} color="#6B7280" />

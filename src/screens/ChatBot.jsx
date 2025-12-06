@@ -1,5 +1,5 @@
 // src/components/ChatBot.jsx
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -13,15 +13,66 @@ import {
   Animated,
   ActivityIndicator,
   StatusBar,
+  useWindowDimensions,
+  Keyboard,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import ApiService from '../services/ApiService';
 
-const { width, height } = Dimensions.get('window');
+// Responsive sizing configuration
+const getResponsiveSizes = (insets, dimensions) => {
+  const { width: screenWidth, height: screenHeight } = dimensions;
+  const isSmallScreen = screenHeight < 700;
+  const isTablet = screenWidth > 768;
+  
+  return {
+    // Input area sizing
+    INPUT_CONTAINER_HEIGHT: isSmallScreen ? 44 : 52,
+    INPUT_PADDING_VERTICAL: isSmallScreen ? 8 : 10,
+    INPUT_PADDING_HORIZONTAL: isSmallScreen ? 12 : 16,
+    INPUT_BORDER_RADIUS: 24,
+    
+    // Message sizing
+    MESSAGE_PADDING_HORIZONTAL: isSmallScreen ? 12 : 16,
+    MESSAGE_PADDING_VERTICAL: isSmallScreen ? 8 : 12,
+    MESSAGE_BORDER_RADIUS: 18,
+    MESSAGE_MAX_WIDTH: screenWidth * (isTablet ? 0.65 : 0.75),
+    
+    // Avatar sizing
+    AVATAR_SIZE: isSmallScreen ? 28 : 32,
+    AVATAR_BORDER_RADIUS: isSmallScreen ? 14 : 16,
+    HEADER_AVATAR_SIZE: 40,
+    HEADER_AVATAR_BORDER_RADIUS: 20,
+    
+    // Text sizing
+    HEADER_TITLE_SIZE: isTablet ? 20 : isSmallScreen ? 16 : 18,
+    HEADER_SUBTITLE_SIZE: isSmallScreen ? 11 : 13,
+    MESSAGE_TEXT_SIZE: isSmallScreen ? 14 : 15,
+    TIMESTAMP_SIZE: isSmallScreen ? 10 : 11,
+    
+    // Icon sizing
+    HEADER_ICON_SIZE: isSmallScreen ? 20 : 24,
+    MESSAGE_ICON_SIZE: isSmallScreen ? 14 : 16,
+    
+    // Spacing
+    NAVBAR_HEIGHT: 60,
+    MARGIN_VERTICAL: isSmallScreen ? 2 : 4,
+    PADDING: isSmallScreen ? 12 : 16,
+    HEADER_HEIGHT: isSmallScreen ? 50 : 60,
+    
+    // Safe area consideration
+    BOTTOM_PADDING: insets.bottom + (isSmallScreen ? 8 : 12),
+    TOP_PADDING: insets.top,
+  };
+};
 
 const ChatBot = ({ route, navigation }) => {
   const initialQuery = route?.params?.query || 'hello';
+  const dimensions = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const sizes = useMemo(() => getResponsiveSizes(insets, dimensions), [insets, dimensions]);
+  
   const [messages, setMessages] = useState([
     { 
       id: 1, 
@@ -33,39 +84,60 @@ const ChatBot = ({ route, navigation }) => {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  
   const scrollViewRef = useRef(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
   const typingAnim = useRef(new Animated.Value(0)).current;
+  const inputTransformAnim = useRef(new Animated.Value(0)).current;
 
-  // Keyboard listeners
+  // Enhanced Keyboard listeners with proper tracking
   useEffect(() => {
     const keyboardWillShow = (e) => {
-      setKeyboardHeight(e.endCoordinates.height);
+      const height = e.endCoordinates?.height || 0;
+      setKeyboardHeight(Math.max(0, height));
+      setKeyboardVisible(true);
+      
+      // Animate input up when keyboard shows
+      Animated.timing(inputTransformAnim, {
+        toValue: -Math.max(0, height - (insets.bottom || 0)),
+        duration: 250,
+        useNativeDriver: true,
+      }).start();
     };
+
     const keyboardWillHide = () => {
+      setKeyboardVisible(false);
       setKeyboardHeight(0);
+      
+      // Animate input back down
+      Animated.timing(inputTransformAnim, {
+        toValue: 0,
+        duration: 250,
+        useNativeDriver: true,
+      }).start();
     };
 
     const showListener = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
     const hideListener = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
 
-    const showSubscription = require('react-native').Keyboard.addListener(showListener, keyboardWillShow);
-    const hideSubscription = require('react-native').Keyboard.addListener(hideListener, keyboardWillHide);
+    const showSubscription = Keyboard.addListener(showListener, keyboardWillShow);
+    const hideSubscription = Keyboard.addListener(hideListener, keyboardWillHide);
 
     return () => {
       showSubscription?.remove();
       hideSubscription?.remove();
     };
-  }, []);
+  }, [insets.bottom, inputTransformAnim]);
 
   // Auto-scroll to bottom
-  const scrollToBottom = () => {
+  const scrollToBottom = useCallback(() => {
     setTimeout(() => {
       scrollViewRef.current?.scrollToEnd({ animated: true });
     }, 100);
-  };
+  }, []);
 
   // Initialize with query
   useEffect(() => {
@@ -77,7 +149,7 @@ const ChatBot = ({ route, navigation }) => {
   }, []);
 
   // Message animation
-  const animateMessage = () => {
+  const animateMessage = useCallback(() => {
     fadeAnim.setValue(0);
     slideAnim.setValue(30);
     
@@ -93,7 +165,7 @@ const ChatBot = ({ route, navigation }) => {
         useNativeDriver: true,
       }),
     ]).start();
-  };
+  }, [fadeAnim, slideAnim]);
 
   // Typing animation
   useEffect(() => {
@@ -116,9 +188,9 @@ const ChatBot = ({ route, navigation }) => {
       };
       animate();
     }
-  }, [isTyping]);
+  }, [isTyping, typingAnim]);
 
-  const handleSendMessage = async (messageText = input.trim()) => {
+  const handleSendMessage = useCallback(async (messageText = input.trim()) => {
     if (!messageText || loading) return;
 
     const userMessage = {
@@ -170,20 +242,20 @@ const ChatBot = ({ route, navigation }) => {
       setIsTyping(false);
       scrollToBottom();
     }
-  };
+  }, [input, loading, animateMessage, scrollToBottom]);
 
-  const formatTime = (timestamp) => {
+  const formatTime = useCallback((timestamp) => {
     return new Date(timestamp).toLocaleTimeString([], { 
       hour: '2-digit', 
       minute: '2-digit' 
     });
-  };
+  }, []);
 
-  const handleBackPress = () => {
+  const handleBackPress = useCallback(() => {
     navigation.navigate('Home');
-  };
+  }, [navigation]);
 
-  const MessageBubble = ({ message, index }) => {
+  const MessageBubble = useCallback(({ message, index }) => {
     const isUser = message.sender === 'user';
     const isLatest = index === messages.length - 1;
     
@@ -193,6 +265,7 @@ const ChatBot = ({ route, navigation }) => {
           styles.messageContainer,
           isUser ? styles.userMessageContainer : styles.botMessageContainer,
           {
+            marginVertical: sizes.MARGIN_VERTICAL,
             opacity: isLatest ? fadeAnim : 1,
             transform: [
               {
@@ -204,9 +277,23 @@ const ChatBot = ({ route, navigation }) => {
       >
         {/* Bot Avatar */}
         {!isUser && (
-          <View style={styles.avatarContainer}>
-            <View style={styles.botAvatar}>
-              <Icon name="support-agent" size={16} color="#059669" />
+          <View style={[
+            styles.avatarContainer,
+            { marginHorizontal: sizes.AVATAR_SIZE * 0.25 }
+          ]}>
+            <View style={[
+              styles.botAvatar,
+              {
+                width: sizes.AVATAR_SIZE,
+                height: sizes.AVATAR_SIZE,
+                borderRadius: sizes.AVATAR_BORDER_RADIUS,
+              }
+            ]}>
+              <Icon 
+                name="support-agent" 
+                size={sizes.MESSAGE_ICON_SIZE} 
+                color="#059669" 
+              />
             </View>
           </View>
         )}
@@ -215,14 +302,21 @@ const ChatBot = ({ route, navigation }) => {
         <View style={[
           styles.messageBubble,
           isUser ? styles.userBubble : styles.botBubble,
+          { maxWidth: sizes.MESSAGE_MAX_WIDTH }
         ]}>
           <View style={[
             styles.messageContent,
             isUser ? styles.userMessageContent : styles.botMessageContent,
+            {
+              paddingHorizontal: sizes.INPUT_PADDING_HORIZONTAL,
+              paddingVertical: sizes.MESSAGE_PADDING_VERTICAL,
+              borderRadius: sizes.MESSAGE_BORDER_RADIUS,
+            }
           ]}>
             <Text style={[
               styles.messageText,
               isUser ? styles.userMessageText : styles.botMessageText,
+              { fontSize: sizes.MESSAGE_TEXT_SIZE }
             ]}>
               {message.text}
             </Text>
@@ -231,7 +325,8 @@ const ChatBot = ({ route, navigation }) => {
           {/* Timestamp */}
           <Text style={[
             styles.timestamp,
-            isUser ? styles.userTimestamp : styles.botTimestamp
+            isUser ? styles.userTimestamp : styles.botTimestamp,
+            { fontSize: sizes.TIMESTAMP_SIZE, marginHorizontal: 4 }
           ]}>
             {formatTime(message.timestamp)}
           </Text>
@@ -239,31 +334,71 @@ const ChatBot = ({ route, navigation }) => {
 
         {/* User Avatar */}
         {isUser && (
-          <View style={styles.avatarContainer}>
-            <View style={styles.userAvatar}>
-              <Icon name="person" size={16} color="#ffffff" />
+          <View style={[
+            styles.avatarContainer,
+            { marginHorizontal: sizes.AVATAR_SIZE * 0.25 }
+          ]}>
+            <View style={[
+              styles.userAvatar,
+              {
+                width: sizes.AVATAR_SIZE,
+                height: sizes.AVATAR_SIZE,
+                borderRadius: sizes.AVATAR_BORDER_RADIUS,
+              }
+            ]}>
+              <Icon 
+                name="person" 
+                size={sizes.MESSAGE_ICON_SIZE} 
+                color="#ffffff" 
+              />
             </View>
           </View>
         )}
       </Animated.View>
     );
-  };
+  }, [messages.length, fadeAnim, slideAnim, formatTime, sizes]);
 
-  const TypingIndicator = () => (
+  const TypingIndicator = useCallback(() => (
     <Animated.View 
       style={[
         styles.typingContainer,
-        { opacity: typingAnim }
+        {
+          marginVertical: sizes.MARGIN_VERTICAL,
+          opacity: typingAnim
+        }
       ]}
     >
-      <View style={styles.avatarContainer}>
-        <View style={styles.botAvatar}>
-          <Icon name="support-agent" size={16} color="#059669" />
+      <View style={[
+        styles.avatarContainer,
+        { marginHorizontal: sizes.AVATAR_SIZE * 0.25 }
+      ]}>
+        <View style={[
+          styles.botAvatar,
+          {
+            width: sizes.AVATAR_SIZE,
+            height: sizes.AVATAR_SIZE,
+            borderRadius: sizes.AVATAR_BORDER_RADIUS,
+          }
+        ]}>
+          <Icon 
+            name="support-agent" 
+            size={sizes.MESSAGE_ICON_SIZE} 
+            color="#059669" 
+          />
         </View>
       </View>
       
-      <View style={styles.typingBubble}>
-        <View style={styles.typingContent}>
+      <View style={[
+        styles.typingBubble,
+        { maxWidth: sizes.MESSAGE_MAX_WIDTH }
+      ]}>
+        <View style={[
+          styles.typingContent,
+          {
+            paddingHorizontal: sizes.INPUT_PADDING_HORIZONTAL,
+            paddingVertical: sizes.MESSAGE_PADDING_VERTICAL,
+          }
+        ]}>
           <View style={styles.typingDotsContainer}>
             {[0, 1, 2].map((index) => (
               <Animated.View
@@ -277,44 +412,102 @@ const ChatBot = ({ route, navigation }) => {
               />
             ))}
           </View>
-          <Text style={styles.typingText}>Parry is typing...</Text>
+          <Text style={[
+            styles.typingText,
+            { fontSize: sizes.TIMESTAMP_SIZE }
+          ]}>
+            Parry is typing...
+          </Text>
         </View>
       </View>
     </Animated.View>
-  );
+  ), [typingAnim, sizes]);
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: '#F8FAFC' }]}>
       <StatusBar backgroundColor="#059669" barStyle="light-content" />
       
       {/* Header */}
-      <SafeAreaView style={styles.headerSafeArea}>
-        <View style={styles.header}>
+      <SafeAreaView style={styles.headerSafeArea} edges={['top']}>
+        <View style={[
+          styles.header,
+          { 
+            paddingHorizontal: sizes.PADDING,
+            paddingVertical: sizes.INPUT_PADDING_VERTICAL,
+            minHeight: sizes.HEADER_HEIGHT,
+          }
+        ]}>
           <View style={styles.headerContent}>
             <TouchableOpacity
-              style={styles.backButton}
+              style={[
+                styles.backButton,
+                {
+                  width: sizes.HEADER_AVATAR_SIZE,
+                  height: sizes.HEADER_AVATAR_SIZE,
+                  borderRadius: sizes.HEADER_AVATAR_BORDER_RADIUS,
+                }
+              ]}
               onPress={handleBackPress}
               activeOpacity={0.7}
             >
-              <Icon name="arrow-back" size={24} color="#059669" />
+              <Icon 
+                name="arrow-back" 
+                size={sizes.HEADER_ICON_SIZE} 
+                color="#059669" 
+              />
             </TouchableOpacity>
             
             <View style={styles.headerCenter}>
               <View style={styles.headerAvatarContainer}>
-                <View style={styles.headerAvatar}>
-                  <Icon name="support-agent" size={20} color="#059669" />
+                <View style={[
+                  styles.headerAvatar,
+                  {
+                    width: sizes.HEADER_AVATAR_SIZE,
+                    height: sizes.HEADER_AVATAR_SIZE,
+                    borderRadius: sizes.HEADER_AVATAR_BORDER_RADIUS,
+                  }
+                ]}>
+                  <Icon 
+                    name="support-agent" 
+                    size={sizes.HEADER_ICON_SIZE} 
+                    color="#059669" 
+                  />
                 </View>
                 <View style={styles.onlineIndicator} />
               </View>
               
               <View style={styles.headerTextContainer}>
-                <Text style={styles.headerTitle}>Parry</Text>
-                <Text style={styles.headerSubtitle}>AI Assistant</Text>
+                <Text style={[
+                  styles.headerTitle,
+                  { fontSize: sizes.HEADER_TITLE_SIZE }
+                ]}>
+                  Parry
+                </Text>
+                <Text style={[
+                  styles.headerSubtitle,
+                  { fontSize: sizes.HEADER_SUBTITLE_SIZE }
+                ]}>
+                  AI Assistant
+                </Text>
               </View>
             </View>
             
-            <TouchableOpacity style={styles.moreButton} activeOpacity={0.7}>
-              <Icon name="more-vert" size={24} color="#64748B" />
+            <TouchableOpacity 
+              style={[
+                styles.moreButton,
+                {
+                  width: sizes.HEADER_AVATAR_SIZE,
+                  height: sizes.HEADER_AVATAR_SIZE,
+                  borderRadius: sizes.HEADER_AVATAR_BORDER_RADIUS,
+                }
+              ]} 
+              activeOpacity={0.7}
+            >
+              <Icon 
+                name="more-vert" 
+                size={sizes.HEADER_ICON_SIZE} 
+                color="#64748B" 
+              />
             </TouchableOpacity>
           </View>
           <View style={styles.headerBorder} />
@@ -325,44 +518,71 @@ const ChatBot = ({ route, navigation }) => {
       <KeyboardAvoidingView
         style={styles.chatContainer}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+        keyboardVerticalOffset={0}
       >
         <ScrollView
           ref={scrollViewRef}
           style={styles.messagesScrollView}
           contentContainerStyle={[
             styles.messagesContainer,
-            { paddingBottom: keyboardHeight > 0 ? 20 : 100 }
+            { 
+              paddingHorizontal: sizes.PADDING,
+              paddingTop: sizes.PADDING,
+              paddingBottom: 80,
+            }
           ]}
           showsVerticalScrollIndicator={false}
+          scrollEventThrottle={16}
           onContentSizeChange={scrollToBottom}
         >
           {messages.map((message, index) => (
-            <MessageBubble key={message.id} message={message} index={index} />
+            <MessageBubble 
+              key={message.id} 
+              message={message} 
+              index={index} 
+            />
           ))}
           
           {isTyping && <TypingIndicator />}
         </ScrollView>
 
-        {/* Input Area */}
+        {/* Input Area - Optimized with keyboard animation */}
         <Animated.View
           style={[
             styles.inputContainer,
             {
-              transform: [{ translateY: keyboardHeight > 0 ? -keyboardHeight : 0 }],
+              paddingHorizontal: sizes.PADDING,
+              paddingVertical: sizes.INPUT_PADDING_VERTICAL,
+              paddingBottom: Math.max(sizes.BOTTOM_PADDING, 12),
+              transform: [
+                {
+                  translateY: inputTransformAnim,
+                },
+              ],
             },
           ]}
         >
           <View style={styles.inputWrapper}>
-            <View style={styles.textInputContainer}>
+            <View style={[
+              styles.textInputContainer,
+              {
+                borderRadius: sizes.INPUT_BORDER_RADIUS,
+                paddingHorizontal: sizes.INPUT_PADDING_HORIZONTAL,
+                paddingVertical: Math.max(sizes.INPUT_PADDING_VERTICAL - 2, 4),
+                minHeight: sizes.INPUT_CONTAINER_HEIGHT,
+              }
+            ]}>
               <TextInput
-                style={styles.textInput}
+                style={[
+                  styles.textInput,
+                  { fontSize: sizes.MESSAGE_TEXT_SIZE }
+                ]}
                 value={input}
                 onChangeText={setInput}
                 placeholder="Type your message..."
                 placeholderTextColor="#94A3B8"
                 multiline
-                maxHeight={100}
+                maxHeight={sizes.INPUT_CONTAINER_HEIGHT * 2.5}
                 onSubmitEditing={() => handleSendMessage()}
                 editable={!loading}
               />
@@ -371,6 +591,12 @@ const ChatBot = ({ route, navigation }) => {
             <TouchableOpacity
               style={[
                 styles.sendButton,
+                {
+                  width: sizes.INPUT_CONTAINER_HEIGHT,
+                  height: sizes.INPUT_CONTAINER_HEIGHT,
+                  borderRadius: sizes.INPUT_CONTAINER_HEIGHT / 2,
+                  marginLeft: 10,
+                },
                 (!input.trim() || loading) && styles.sendButtonDisabled,
               ]}
               onPress={() => handleSendMessage()}
@@ -379,6 +605,11 @@ const ChatBot = ({ route, navigation }) => {
             >
               <View style={[
                 styles.sendButtonContent,
+                {
+                  width: sizes.INPUT_CONTAINER_HEIGHT,
+                  height: sizes.INPUT_CONTAINER_HEIGHT,
+                  borderRadius: sizes.INPUT_CONTAINER_HEIGHT / 2,
+                },
                 (!input.trim() || loading) && styles.sendButtonContentDisabled,
               ]}>
                 {loading ? (
@@ -386,7 +617,7 @@ const ChatBot = ({ route, navigation }) => {
                 ) : (
                   <Icon 
                     name="send" 
-                    size={18} 
+                    size={sizes.MESSAGE_ICON_SIZE} 
                     color={!input.trim() ? '#94A3B8' : 'white'} 
                   />
                 )}
@@ -402,7 +633,6 @@ const ChatBot = ({ route, navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
   },
   
   // Header Styles
@@ -411,8 +641,6 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: '#ffffff',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
     elevation: 4,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 2 },
@@ -423,15 +651,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 12,
   },
   backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
     backgroundColor: '#F1F5F9',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
   },
   headerCenter: {
     flex: 1,
@@ -443,9 +668,6 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   headerAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
     backgroundColor: '#D1FAE5',
     alignItems: 'center',
     justifyContent: 'center',
@@ -467,21 +689,16 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   headerTitle: {
-    fontSize: 18,
     fontWeight: '600',
     color: '#1E293B',
     marginBottom: 2,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
   },
   headerSubtitle: {
-    fontSize: 13,
     color: '#64748B',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
   moreButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
     backgroundColor: '#F1F5F9',
     alignItems: 'center',
     justifyContent: 'center',
@@ -499,19 +716,19 @@ const styles = StyleSheet.create({
   // Chat Container
   chatContainer: {
     flex: 1,
+    backgroundColor: '#F8FAFC',
   },
   messagesScrollView: {
     flex: 1,
     backgroundColor: '#F8FAFC',
   },
   messagesContainer: {
-    padding: 16,
+    flexGrow: 1,
   },
 
   // Message Styles
   messageContainer: {
     flexDirection: 'row',
-    marginVertical: 4,
     alignItems: 'flex-end',
   },
   userMessageContainer: {
@@ -522,12 +739,9 @@ const styles = StyleSheet.create({
   },
   
   avatarContainer: {
-    marginHorizontal: 8,
+    flexShrink: 0,
   },
   botAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
     backgroundColor: '#D1FAE5',
     alignItems: 'center',
     justifyContent: 'center',
@@ -535,16 +749,12 @@ const styles = StyleSheet.create({
     borderColor: '#A7F3D0',
   },
   userAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
     backgroundColor: '#059669',
     alignItems: 'center',
     justifyContent: 'center',
   },
 
   messageBubble: {
-    maxWidth: width * 0.75,
     marginBottom: 4,
   },
   
@@ -553,14 +763,10 @@ const styles = StyleSheet.create({
   },
   userMessageContent: {
     backgroundColor: '#059669',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 18,
     borderBottomRightRadius: 4,
   },
   userMessageText: {
     color: '#ffffff',
-    fontSize: 15,
     lineHeight: 20,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
@@ -570,9 +776,6 @@ const styles = StyleSheet.create({
   },
   botMessageContent: {
     backgroundColor: '#ffffff',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 18,
     borderBottomLeftRadius: 4,
     borderWidth: 1,
     borderColor: '#E2E8F0',
@@ -584,7 +787,6 @@ const styles = StyleSheet.create({
   },
   botMessageText: {
     color: '#334155',
-    fontSize: 15,
     lineHeight: 20,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
@@ -594,8 +796,6 @@ const styles = StyleSheet.create({
   },
 
   timestamp: {
-    fontSize: 11,
-    marginHorizontal: 4,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
   userTimestamp: {
@@ -611,11 +811,9 @@ const styles = StyleSheet.create({
   typingContainer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    marginVertical: 4,
   },
   typingBubble: {
     backgroundColor: '#ffffff',
-    borderRadius: 18,
     borderBottomLeftRadius: 4,
     borderWidth: 1,
     borderColor: '#E2E8F0',
@@ -626,8 +824,6 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
   },
   typingContent: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
     flexDirection: 'row',
     alignItems: 'center',
   },
@@ -644,7 +840,6 @@ const styles = StyleSheet.create({
   },
   typingText: {
     color: '#64748B',
-    fontSize: 13,
     fontStyle: 'italic',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
@@ -652,12 +847,10 @@ const styles = StyleSheet.create({
   // Input Styles
   inputContainer: {
     position: 'absolute',
-    bottom: 0,
+    bottom: 60,
     left: 0,
     right: 0,
     backgroundColor: '#ffffff',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
     borderTopWidth: 1,
     borderTopColor: '#E2E8F0',
     elevation: 8,
@@ -669,38 +862,25 @@ const styles = StyleSheet.create({
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    paddingBottom: Platform.OS === 'ios' ? 20 : 0,
+    gap: 8,
   },
   textInputContainer: {
     flex: 1,
     backgroundColor: '#F8FAFC',
-    borderRadius: 24,
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    marginRight: 12,
-    minHeight: 44,
     justifyContent: 'center',
   },
   textInput: {
-    fontSize: 15,
     color: '#334155',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
     textAlignVertical: 'center',
     minHeight: 24,
-    maxHeight: 80,
   },
   sendButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
     marginBottom: 0,
   },
   sendButtonContent: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
     backgroundColor: '#059669',
     alignItems: 'center',
     justifyContent: 'center',

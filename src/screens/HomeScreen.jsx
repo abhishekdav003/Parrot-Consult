@@ -4,7 +4,8 @@ import { View, ScrollView, StyleSheet, Dimensions } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import HeroSection from '../components/HeroSection/HeroSection';
 import ExpertsSection from '../components/ExpertsSection/ExpertsSection';
-import UserReviews from '../components/UserReviews/UserReviews';
+// import UserReviews from '../components/UserGetStartedSection/UserReviews';
+import UserGetStartedSection from '../components/UserGetStartedSection/UserGetStartedSection';
 import GetStartedSection from '../components/GetStartedSection/GetStartedSection';
 import CategorySection from '../components/Category/CategorySection';
 import UnifiedBookingModal from '../screens/UnifiedBookingModal';
@@ -73,7 +74,7 @@ const HomeScreen = () => {
           <HeroSection />
           <CategorySection />
           <ExpertsSection onBookNow={handleOpenBooking} />
-          <UserReviews />
+          <UserGetStartedSection />
           <GetStartedSection 
             onStartApplication={handleStartApplication}
             navigation={navigation}

@@ -3,20 +3,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import RNBlobUtil from 'react-native-blob-util';
 
-// const BASE_URL = 'http://192.168.0.177:8011/api/v1';
-// const BASE_URL = 'http://10.0.2.2:8011/api/v1';
-const BASE_URL = 'http://10.0.2.2:8011/api/v1';
-// const BASE_URL = 'http://10.33.116.48:8011/api/v1';
-// const BASE_URL = 'http://192.168.0.116:8011/api/v1';
-// const BASE_URL = 'http://10.224.232.48:8011/api/v1';
+
 // const BASE_URL = 'http://10.0.2.2:8011/api/v1';
 
 
-// const BASE_URL = 'http://192.168.1.26:8011/api/v1';
 
 
-
-// const BASE_URL = 'https://api.parrotconsult.com/api/v1';
+const BASE_URL = 'https://api.parrotconsult.com/api/v1';
 
 
 const toLocalDateOnly = (date) => {
@@ -997,6 +990,10 @@ async createBooking(bookingData) {
 // Replace existing reel methods with these
 
 // CRITICAL: Optimized for release APK - handles video URLs properly
+// This section replaces the getAllReels method in your ApiService.js
+// Add this optimized version to your existing ApiService class
+
+// CRITICAL FIX: getAllReels must return proper data structure
 async getAllReels(page = 1, limit = 15) {
   console.log(`[API] Getting reels - page: ${page}, limit: ${limit}`);
   
@@ -1009,50 +1006,87 @@ async getAllReels(page = 1, limit = 15) {
       }
     });
     
-    if (result.success && result.data) {
-      // Ensure video URLs are properly formatted for release APK
-      const processedReels = (result.data || []).map(reel => ({
-        ...reel,
-        // Ensure URL is absolute and properly formatted
-        URL: this.processVideoUrl(reel.URL),
-        // Ensure user data exists
-        user: reel.user || { fullName: 'Unknown User', profileImage: null },
-        // Ensure arrays exist
-        comments: reel.comments || [],
-        likedBy: reel.likedBy || [],
-        // Ensure numbers exist
-        likes: reel.likes || 0,
-        // Ensure boolean exists
-        isLiked: reel.isLiked || false,
-      }));
-      
-      console.log(`[API] Processed ${processedReels.length} reels successfully`);
-      
+    console.log('[API] Raw result:', result);
+    
+    // CRITICAL FIX: Handle nested data structure from backend
+    let reelsArray = [];
+    let hasMore = true;
+    let totalCount = 0;
+
+    if (result.success) {
+      // Backend returns: { data: { reels: [], hasMore, totalCount } }
+      if (result.data) {
+        if (result.data.reels && Array.isArray(result.data.reels)) {
+          reelsArray = result.data.reels;
+          hasMore = result.data.hasMore !== undefined ? result.data.hasMore : true;
+          totalCount = result.data.totalCount || 0;
+        } else if (Array.isArray(result.data)) {
+          // If data is directly an array
+          reelsArray = result.data;
+        } else if (result.data.data && Array.isArray(result.data.data)) {
+          // If nested as data.data
+          reelsArray = result.data.data;
+        }
+      }
+
+      console.log(`[API] Processing ${reelsArray.length} reels`);
+
+      // Process and validate each reel
+      const processedReels = reelsArray
+        .filter(reel => reel && reel._id && reel.URL) // Filter out invalid reels
+        .map(reel => ({
+          _id: reel._id,
+          URL: this.processVideoUrl(reel.URL),
+          description: reel.description || '',
+          likes: typeof reel.likes === 'number' ? reel.likes : 0,
+          isLiked: reel.isLiked === true,
+          comments: Array.isArray(reel.comments) ? reel.comments : [],
+          likedBy: Array.isArray(reel.likedBy) ? reel.likedBy : [],
+          user: reel.user ? {
+            _id: reel.user._id,
+            fullName: reel.user.fullName || 'Unknown User',
+            profileImage: reel.user.profileImage || null,
+          } : {
+            _id: '',
+            fullName: 'Unknown User',
+            profileImage: null,
+          },
+          createdAt: reel.createdAt,
+          commentsCount: Array.isArray(reel.comments) ? reel.comments.length : 0,
+        }));
+
+      console.log(`[API] ✓ Successfully processed ${processedReels.length} reels`);
+
       return {
         success: true,
-        data: processedReels
+        data: processedReels, // CRITICAL: Must be array, not nested object
+        hasMore: hasMore,
+        totalCount: totalCount,
+        message: 'Reels fetched successfully'
+      };
+    } else {
+      console.warn('[API] Reels fetch failed:', result.error);
+      return {
+        success: false,
+        data: [], // CRITICAL: Must return empty array, not undefined
+        error: result.error || 'Failed to fetch reels',
+        hasMore: false,
       };
     }
-    
-    console.warn('[API] No data in reels response');
-    return {
-      success: false,
-      data: [],
-      error: result.error || 'No reels found'
-    };
   } catch (error) {
-    console.error('[API] getAllReels error:', error);
+    console.error('[API] getAllReels exception:', error);
     return {
       success: false,
-      data: [],
-      error: error.message || 'Network error'
+      data: [], // CRITICAL: Must return empty array on error
+      error: error.message || 'Network error',
+      hasMore: false,
     };
   }
 }
 
 // Process video URL to ensure it works in release APK
 processVideoUrl(url) {
-  if (!url) return '';
+  if (!url || typeof url !== 'string') return '';
   
   // If URL is already absolute, return as is
   if (url.startsWith('http://') || url.startsWith('https://')) {
@@ -1073,7 +1107,9 @@ async likeReel(reelId) {
   
   try {
     // Extract original reel ID (remove any loop suffix)
-    const originalReelId = reelId.split('_')[0];
+    const originalReelId = reelId.includes('_loop_') 
+      ? reelId.split('_loop_')[0] 
+      : reelId;
     
     const result = await this.apiCall(`/reel/${originalReelId}/like`, {
       method: 'POST',
@@ -1109,13 +1145,15 @@ async likeReel(reelId) {
   }
 }
 
-// Add comment with proper validation
+// Add comment with proper validation and error handling
 async addComment(reelId, comment) {
   console.log('[API] Adding comment to reel:', reelId);
   
   try {
     // Extract original reel ID
-    const originalReelId = reelId.split('_')[0];
+    const originalReelId = reelId.includes('_loop_')
+      ? reelId.split('_loop_')[0]
+      : reelId;
     
     // Validate comment
     if (!comment || !comment.trim()) {
@@ -1143,8 +1181,8 @@ async addComment(reelId, comment) {
     
     if (result.success && result.data) {
       console.log('[API] Comment added successfully');
-      // Ensure comments array is properly formatted
-      const comments = Array.isArray(result.data) ? result.data : [];
+      // Ensure data is an array
+      const comments = Array.isArray(result.data) ? result.data : [result.data];
       return {
         success: true,
         data: comments
@@ -1165,7 +1203,7 @@ async addComment(reelId, comment) {
   }
 }
 
-// Get user's own reels
+// Get user's own reels with proper error handling
 async getUserReels() {
   console.log('[API] Getting user reels');
   
@@ -1178,15 +1216,28 @@ async getUserReels() {
     });
     
     if (result.success && result.data) {
-      const processedReels = (result.data || []).map(reel => ({
-        ...reel,
-        URL: this.processVideoUrl(reel.URL),
-        user: reel.user || { fullName: 'Unknown User', profileImage: null },
-        comments: reel.comments || [],
-        likedBy: reel.likedBy || [],
-        likes: reel.likes || 0,
-        isLiked: reel.isLiked || false,
-      }));
+      const reelsArray = Array.isArray(result.data) ? result.data : [];
+      
+      const processedReels = reelsArray
+        .filter(reel => reel && reel._id && reel.URL)
+        .map(reel => ({
+          _id: reel._id,
+          URL: this.processVideoUrl(reel.URL),
+          description: reel.description || '',
+          likes: typeof reel.likes === 'number' ? reel.likes : 0,
+          isLiked: reel.isLiked === true,
+          comments: Array.isArray(reel.comments) ? reel.comments : [],
+          likedBy: Array.isArray(reel.likedBy) ? reel.likedBy : [],
+          user: reel.user ? {
+            _id: reel.user._id,
+            fullName: reel.user.fullName || 'Unknown User',
+            profileImage: reel.user.profileImage || null,
+          } : {
+            _id: '',
+            fullName: 'Unknown User',
+            profileImage: null,
+          },
+        }));
       
       return {
         success: true,
@@ -1209,12 +1260,14 @@ async getUserReels() {
   }
 }
 
-// Delete a reel
+// Delete a reel with proper error handling
 async deleteReel(reelId) {
   console.log('[API] Deleting reel:', reelId);
   
   try {
-    const originalReelId = reelId.split('_')[0];
+    const originalReelId = reelId.includes('_loop_')
+      ? reelId.split('_loop_')[0]
+      : reelId;
     
     const result = await this.apiCall(`/reel/${originalReelId}`, {
       method: 'DELETE',
@@ -1234,7 +1287,7 @@ async deleteReel(reelId) {
   }
 }
 
-// Upload reel - CRITICAL: Optimized for release APK
+// Upload reel optimized for production
 async uploadReel({ video, description }) {
   console.log('[API] Uploading reel...');
   
@@ -1252,7 +1305,6 @@ async uploadReel({ video, description }) {
     let videoUri = video.uri;
     
     if (Platform.OS === 'android') {
-      // For content:// URIs, copy to cache first
       if (video.uri.startsWith('content://')) {
         try {
           const RNBlobUtil = require('react-native-blob-util').default;
@@ -1262,7 +1314,6 @@ async uploadReel({ video, description }) {
           console.log('[API] Copying content URI to cache:', destPath);
           await RNBlobUtil.fs.cp(video.uri, destPath);
           videoUri = `file://${destPath}`;
-          console.log('[API] Converted URI:', videoUri);
         } catch (e) {
           console.error('[API] Failed to copy content URI:', e);
           return {
@@ -1299,11 +1350,9 @@ async uploadReel({ video, description }) {
       headers: {
         'Accept': 'application/json',
       },
-      timeout: 120000, // 2 minute timeout for video upload
+      timeout: 120000,
     });
 
-    console.log('[API] Upload reel result:', result.success ? 'Success' : 'Failed');
-    
     if (result.success && result.data) {
       return {
         success: true,
