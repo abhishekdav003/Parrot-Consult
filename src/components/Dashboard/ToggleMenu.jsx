@@ -10,6 +10,7 @@ import {
   StatusBar,
   Platform,
   ScrollView, 
+  SafeAreaView,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 
@@ -105,7 +106,7 @@ const ToggleMenu = ({
           activeOpacity={1}
         />
 
-        <View style={styles.menu}>
+        <SafeAreaView style={styles.menu}>
   {/* Header (fixed) */}
   <View style={styles.header}>
     <TouchableOpacity 
@@ -225,9 +226,10 @@ const ToggleMenu = ({
       <Text style={styles.versionText}>ConsultApp v1.0.0</Text>
     </View>
   </ScrollView>
+  
+  </SafeAreaView>
 </View>
 
-      </View>
     </Modal>
   );
 };
@@ -248,7 +250,7 @@ const styles = StyleSheet.create({
     width: '80%',
     maxWidth: 320,
     backgroundColor: '#ffffff',
-    paddingTop: Platform.OS === 'ios' ? 50 : StatusBar.currentHeight + 10,
+    paddingTop: 0, 
     elevation: 16,
     shadowColor: '#000000',
     shadowOffset: { width: 2, height: 0 },
@@ -267,8 +269,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 20,
+    paddingHorizontal: 20,paddingTop: Platform.OS === 'android'
+  ? Math.max(8, StatusBar.currentHeight - 10)
+  : 16,
+
+paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#F1F5F9',
     backgroundColor: '#F8FAFC',

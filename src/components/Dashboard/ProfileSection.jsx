@@ -324,139 +324,173 @@ const ProfileSection = ({ user, onRefresh, onAuthError }) => {
 
   // Enhanced validation function
   const validateForm = useCallback(() => {
-    const errors = [];
+  const errors = [];
 
-    if (!formData.fullName?.trim()) {
-      errors.push('Full name is required');
+  if (!formData.fullName?.trim()) {
+    errors.push('Full name is required');
+  }
+
+  // CRITICAL: Email is now required
+  if (!formData.email?.trim()) {
+    errors.push('Email address is required');
+  } else if (!isValidEmail(formData.email)) {
+    errors.push('Please enter a valid email address');
+  }
+
+  if (formData.phone && !isValidPhone(formData.phone)) {
+    errors.push('Please enter a valid 10-digit mobile number');
+  }
+
+  if (formData.aadharNumber && !isValidAadhar(formData.aadharNumber)) {
+    errors.push('Please enter a valid 12-digit Aadhaar number');
+  }
+
+  if (formData.panNumber && !isValidPAN(formData.panNumber)) {
+    errors.push('Please enter a valid PAN number (e.g., ABCDE1234F)');
+  }
+
+  if (isConsultant) {
+    if (formData.sessionFee && (isNaN(formData.sessionFee) || parseFloat(formData.sessionFee) < 0)) {
+      errors.push('Please enter a valid session fee');
     }
 
-    if (formData.email && !isValidEmail(formData.email)) {
-      errors.push('Please enter a valid email address');
+    if (formData.graduationYear && (isNaN(formData.graduationYear) || 
+        parseInt(formData.graduationYear) < 1950 || 
+        parseInt(formData.graduationYear) > new Date().getFullYear())) {
+      errors.push('Please enter a valid graduation year');
     }
 
-    if (formData.phone && !isValidPhone(formData.phone)) {
-      errors.push('Please enter a valid 10-digit mobile number');
+    if (formData.yearsOfExperience && (isNaN(formData.yearsOfExperience) || 
+        parseFloat(formData.yearsOfExperience) < 0 || 
+        parseFloat(formData.yearsOfExperience) > 50)) {
+      errors.push('Please enter valid years of experience (0-50)');
     }
 
-    if (formData.aadharNumber && !isValidAadhar(formData.aadharNumber)) {
-      errors.push('Please enter a valid 12-digit Aadhaar number');
+    if (!selectedResume && !formData.resume) {
+      errors.push('Resume is required for consultant profile');
     }
+  }
 
-    if (formData.panNumber && !isValidPAN(formData.panNumber)) {
-      errors.push('Please enter a valid PAN number (e.g., ABCDE1234F)');
-    }
-
-    if (isConsultant) {
-      if (formData.sessionFee && (isNaN(formData.sessionFee) || parseFloat(formData.sessionFee) < 0)) {
-        errors.push('Please enter a valid session fee');
-      }
-
-      if (formData.graduationYear && (isNaN(formData.graduationYear) || 
-          parseInt(formData.graduationYear) < 1950 || 
-          parseInt(formData.graduationYear) > new Date().getFullYear())) {
-        errors.push('Please enter a valid graduation year');
-      }
-
-      if (formData.yearsOfExperience && (isNaN(formData.yearsOfExperience) || 
-          parseFloat(formData.yearsOfExperience) < 0 || 
-          parseFloat(formData.yearsOfExperience) > 50)) {
-        errors.push('Please enter valid years of experience (0-50)');
-      }
-
-      if (!selectedResume && !formData.resume) {
-        errors.push('Resume is required for consultant profile');
-      }
-    }
-
-    return errors;
-  }, [formData, isValidEmail, isValidPhone, isValidAadhar, isValidPAN, isConsultant, selectedResume]);
+  return errors;
+}, [formData, isConsultant, isValidEmail, isValidPhone, isValidAadhar, isValidPAN, selectedResume]);
 
   // Handle save with enhanced validation
   const handleSave = useCallback(async () => {
-    try {
-      Keyboard.dismiss();
-      setLoading(true);
+  try {
+    Keyboard.dismiss();
+    setLoading(true);
 
-      const validationErrors = validateForm();
-      if (validationErrors.length > 0) {
-        Alert.alert('Validation Error', validationErrors.join('\n'));
+    console.log('[PROFILE] Starting profile save');
+
+    const validationErrors = validateForm();
+    if (validationErrors.length > 0) {
+      Alert.alert('Validation Error', validationErrors.join('\n'));
+      setLoading(false);
+      return;
+    }
+
+    // CRITICAL: Email validation for ALL profiles (especially consultants)
+    if (!formData.email || !formData.email.trim()) {
+      Alert.alert(
+        'Email Required',
+        'Email address is required to complete your profile. Please add a valid email address.',
+        [{ text: 'OK', style: 'default' }]
+      );
+      setLoading(false);
+      return;
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email.trim())) {
+      Alert.alert('Invalid Email', 'Please enter a valid email address (e.g., user@example.com)');
+      setLoading(false);
+      return;
+    }
+
+    const updateData = {
+      fullName: formData.fullName?.trim(),
+      phone: formData.phone?.trim(),
+      email: formData.email?.trim(),
+      location: formData.location?.trim(),
+    };
+
+    // Add KYC data only if provided
+    if (formData.aadharNumber || formData.panNumber) {
+      Object.assign(updateData, {
+        aadharNumber: formData.aadharNumber?.trim(),
+        aadharURL: formData.aadharURL?.trim() || [],
+        panNumber: formData.panNumber?.trim(),
+        panURL: formData.panURL?.trim(),
+      });
+    }
+
+    // Add consultant data if applicable
+    if (isConsultant) {
+      updateData.role = 'consultant';
+      Object.assign(updateData, {
+        sessionFee: formData.sessionFee?.trim(),
+        daysPerWeek: formData.daysPerWeek?.trim(),
+        days: formData.days?.trim(),
+        availableTimePerDay: formData.availableTimePerDay?.trim(),
+        qualification: formData.qualification?.trim(),
+        fieldOfStudy: formData.fieldOfStudy?.trim(),
+        university: formData.university?.trim(),
+        graduationYear: formData.graduationYear?.trim(),
+        keySkills: formData.keySkills?.trim(),
+        shortBio: formData.shortBio?.trim(),
+        languages: formData.languages?.trim(),
+        yearsOfExperience: formData.yearsOfExperience?.trim(),
+        category: formData.category?.trim(),
+        profileHealth: formData.profileHealth || '0',
+      });
+    }
+
+    // Add files if selected
+    if (selectedProfileImage) {
+      updateData.profileImage = selectedProfileImage;
+    }
+
+    if (selectedResume) {
+      updateData.resume = selectedResume;
+    }
+
+    console.log('[PROFILE] Submitting update with:', {
+      email: updateData.email,
+      isConsultant,
+      hasProfileImage: !!selectedProfileImage,
+      hasResume: !!selectedResume,
+    });
+
+    const result = await updateUserProfile(updateData);
+
+    if (result.success) {
+      console.log('[PROFILE] Update successful, refreshing data');
+      Alert.alert('Success', 'Profile updated successfully', [
+        {
+          text: 'OK',
+          onPress: () => {
+            setEditing(false);
+            setSelectedProfileImage(null);
+            setSelectedResume(null);
+            onRefresh && onRefresh();
+          }
+        }
+      ]);
+    } else {
+      console.error('[PROFILE] Update failed:', result.error);
+      if (onAuthError && result.needsLogin && onAuthError(result)) {
         return;
       }
-
-      const updateData = {
-        fullName: formData.fullName?.trim(),
-        phone: formData.phone?.trim(),
-        email: formData.email?.trim(),
-        location: formData.location?.trim(),
-      };
-
-      // Add KYC data if provided
-      if (formData.aadharNumber || formData.panNumber || formData.aadharURL || formData.panURL) {
-        Object.assign(updateData, {
-          aadharNumber: formData.aadharNumber?.trim(),
-          aadharURL: formData.aadharURL?.trim(),
-          panNumber: formData.panNumber?.trim(),
-          panURL: formData.panURL?.trim(),
-        });
-      }
-
-      // Add consultant data if applicable
-      if (isConsultant) {
-        updateData.role = 'consultant';
-        Object.assign(updateData, {
-          sessionFee: formData.sessionFee?.trim(),
-          daysPerWeek: formData.daysPerWeek?.trim(),
-          days: formData.days?.trim(),
-          availableTimePerDay: formData.availableTimePerDay?.trim(),
-          qualification: formData.qualification?.trim(),
-          fieldOfStudy: formData.fieldOfStudy?.trim(),
-          university: formData.university?.trim(),
-          graduationYear: formData.graduationYear?.trim(),
-          keySkills: formData.keySkills?.trim(),
-          shortBio: formData.shortBio?.trim(),
-          languages: formData.languages?.trim(),
-          yearsOfExperience: formData.yearsOfExperience?.trim(),
-          category: formData.category?.trim(),
-          profileHealth: formData.profileHealth || '0',
-        });
-      }
-
-      // Add files if selected
-      if (selectedProfileImage) {
-        updateData.profileImage = selectedProfileImage;
-      }
-
-      if (selectedResume) {
-        updateData.resume = selectedResume;
-      }
-
-      const result = await updateUserProfile(updateData);
-
-      if (result.success) {
-        Alert.alert('Success', 'Profile updated successfully', [
-          {
-            text: 'OK',
-            onPress: () => {
-              setEditing(false);
-              setSelectedProfileImage(null);
-              setSelectedResume(null);
-              onRefresh && onRefresh();
-            }
-          }
-        ]);
-      } else {
-        if (onAuthError && result.needsLogin && onAuthError(result)) {
-          return;
-        }
-        Alert.alert('Error', result.error || 'Failed to update profile');
-      }
-    } catch (error) {
-      console.error('[PROFILE] Error updating profile:', error);
-      Alert.alert('Error', 'Failed to update profile. Please try again.');
-    } finally {
-      setLoading(false);
+      Alert.alert('Error', result.error || 'Failed to update profile');
     }
-  }, [formData, validateForm, updateUserProfile, onRefresh, onAuthError, isConsultant, selectedProfileImage, selectedResume]);
+  } catch (error) {
+    console.error('[PROFILE] Error updating profile:', error);
+    Alert.alert('Error', 'Failed to update profile. Please try again.');
+  } finally {
+    setLoading(false);
+  }
+}, [formData, validateForm, updateUserProfile, onRefresh, onAuthError, isConsultant, selectedProfileImage, selectedResume]);
 
   // Handle cancel
   const handleCancel = useCallback(() => {

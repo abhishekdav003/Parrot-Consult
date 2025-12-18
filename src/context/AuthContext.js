@@ -244,32 +244,24 @@ export const AuthProvider = ({ children }) => {
       dispatch({ type: 'SET_LOADING', payload: false });
 
       if (result.success) {
-        // result.data expected: { user, accessToken, refreshToken } OR old format
-        const userData = result.data?.user || result.data;
-        const accessToken = result.data?.accessToken;
-        const refreshToken = result.data?.refreshToken;
+  console.log('[AUTH] OTP success, setting user from profile');
 
-        console.log('[AUTH] OTP verification successful');
+  const userFromProfile = result.data?.user || result.data;
 
-        // Store user data
-        if (userData) {
-          dispatch({ type: 'SET_USER', payload: userData });
-          await AsyncStorage.setItem('userData', JSON.stringify(userData));
-        }
+  if (!userFromProfile) {
+    throw new Error('User profile missing after OTP login');
+  }
 
-        // Store tokens if provided
-        if (accessToken) {
-          await AsyncStorage.setItem('authToken', accessToken);
-          console.log('[AUTH] Auth token stored');
-        }
+  // 🔥 THIS IS THE FIX
+  dispatch({ type: 'SET_USER', payload: userFromProfile });
+  await AsyncStorage.setItem(
+    'userData',
+    JSON.stringify(userFromProfile)
+  );
 
-        if (refreshToken) {
-          await AsyncStorage.setItem('refreshToken', refreshToken);
-          console.log('[AUTH] Refresh token stored');
-        }
-
-        return { success: true, data: userData };
-      } else {
+  return { success: true, data: userFromProfile };
+}
+ else {
         dispatch({ type: 'SET_ERROR', payload: result.error });
         return { success: false, error: result.error };
       }

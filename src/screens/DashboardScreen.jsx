@@ -14,6 +14,8 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useAuth } from '../context/AuthContext';
 import { useFocusEffect } from '@react-navigation/native';
 import ApiService from '../services/ApiService';
+import { StatusBar, Platform } from 'react-native';
+
 
 // Import modular components
 import DashboardSection from '../components/Dashboard/DashboardSection';
@@ -44,6 +46,8 @@ const DashboardScreen = ({ navigation, route }) => {
   const [initialLoad, setInitialLoad] = useState(true);
 
   console.log('[DASHBOARD] Component mounted, user:', user?.fullName);
+  console.log('[DEBUG USER FULLNAME]', user?.fullName);
+
 
   // Add this inside your DashboardScreen component, with other useCallback functions
 const handleStartApplication = useCallback(() => {
@@ -84,9 +88,45 @@ const handleStartApplication = useCallback(() => {
   }, [calculateProfileCompletion]);
 
   const handleSectionChange = useCallback((newSection) => {
-  console.log('[DASHBOARD] Section changing from', activeSection, 'to', newSection);
+  console.log('[DASHBOARD] Section change requested:', newSection);
+  
+  // CRITICAL GATE: Prevent access to upgrade without email
+  if (newSection === 'upgrade') {
+    const hasValidEmail = user?.email && user.email.trim().length > 0;
+    
+    if (!hasValidEmail) {
+      console.log('[DASHBOARD] Email validation failed - showing alert');
+      Alert.alert(
+        'Email Required',
+        'An email address is required to become a consultant. Please update your profile with a valid email address first.',
+        [
+          {
+            text: 'Cancel',
+            style: 'cancel',
+            onPress: () => {
+              console.log('[DASHBOARD] User cancelled email requirement');
+            }
+          },
+          {
+            text: 'Go to Profile',
+            style: 'default',
+            onPress: () => {
+              console.log('[DASHBOARD] User redirected to profile section');
+              setActiveSection('profile');
+            },
+          },
+        ]
+      );
+      return; // Don't change section
+    }
+    
+    console.log('[DASHBOARD] Email validation passed, proceeding to upgrade');
+  }
+
+  // All other sections and email-verified upgrade can proceed
+  console.log('[DASHBOARD] Section changed to:', newSection);
   setActiveSection(newSection);
-}, [activeSection]);
+}, [user?.email]);
 
   // Fetch dashboard data function
   const fetchDashboardData = useCallback(async (showLoading = true) => {
@@ -166,21 +206,22 @@ useEffect(() => {
   }
 }, [route?.params?.initialSection]);
   useEffect(() => {
-    if (user) {
-      fetchDashboardData(true);
-    } else {
-      setDashboardData({
-        profileCompletion: 0,
-        scheduledSessions: 0,
-        totalSessions: 0,
-        completedSessions: 0,
-        upcomingBookings: [],
-        allBookings: []
-      });
-      setLoading(false);
-      setInitialLoad(false);
-    }
-  }, [user?.phone]); // Only depend on user phone to avoid excessive re-renders
+  if (user) {
+    fetchDashboardData(true);
+  } else {
+    setDashboardData({
+      profileCompletion: 0,
+      scheduledSessions: 0,
+      totalSessions: 0,
+      completedSessions: 0,
+      upcomingBookings: [],
+      allBookings: []
+    });
+    setLoading(false);
+    setInitialLoad(false);
+  }
+}, [user]);
+ // Only depend on user phone to avoid excessive re-renders
 
   // Refresh data when screen comes into focus
   useFocusEffect(
@@ -363,7 +404,15 @@ useEffect(() => {
   }
 
   // No user state
-  if (!user) {
+  if (!user && loading) {
+  return (
+    <SafeAreaView style={styles.container}>
+      <ActivityIndicator size="large" color="#4CAF50" />
+    </SafeAreaView>
+  );
+}
+
+  if (!user && !loading) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.errorContainer}>
@@ -396,17 +445,6 @@ useEffect(() => {
         </Text>
         
         <View style={styles.headerRight}>
-          <TouchableOpacity 
-            style={styles.refreshButton} 
-            onPress={handleRefresh}
-            disabled={refreshing}
-          >
-            <Ionicons 
-              name="refresh" 
-              size={20} 
-              color={refreshing ? "#ccc" : "#666"} 
-            />
-          </TouchableOpacity>
         </View>
       </View>
 
@@ -420,10 +458,11 @@ useEffect(() => {
         onClose={() => setMenuVisible(false)}
       />
 
-      {/* Main Content */}
-      <View style={styles.content}>
-        {renderActiveSection()}
-      </View>
+     <View style={styles.content}>
+  {renderActiveSection()}
+</View>
+
+
 
       {/* Loading Overlay */}
       {loading && !initialLoad && (
@@ -479,7 +518,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 15,
+     paddingTop: Platform.OS === 'android'
+  ? Math.max(8, StatusBar.currentHeight - 10)
+  : 16,
+
+
+  paddingBottom: 12,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
@@ -515,8 +559,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   content: {
-    flex: 1,
-  },
+  flex: 1,
+},
+
   loadingOverlay: {
     position: 'absolute',
     top: 0,

@@ -257,7 +257,6 @@ const DashboardSection = ({ user, dashboardData, onRefresh, loading, onSectionCh
   const navigation = useNavigation();
 
   console.log('[DASHBOARD_SECTION] Rendering with data:', dashboardData);
-  console.log('[DASHBOARD_SECTION] User data:', user);
 
   // Check if user is consultant
   const isConsultant = useMemo(() => {
@@ -350,22 +349,38 @@ const DashboardSection = ({ user, dashboardData, onRefresh, loading, onSectionCh
   }, []);
 
   const handleBecomeConsultant = useCallback(() => {
+  console.log('[DASHBOARD] Become Consultant clicked');
+  const hasValidEmail = user?.email && user.email.trim().length > 0;
+  
+  if (!hasValidEmail) {
     Alert.alert(
-      'Become a Consultant', 
-      'Would you like to apply to become a consultant on our platform?',
+      'Email Required',
+      'An email address is required to become a consultant. Please update your profile with a valid email address first.',
       [
-        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
         { 
-          text: 'Apply Now', 
+          text: 'Update Profile', 
           onPress: () => {
-            if (onSectionChange) {
-              onSectionChange('upgrade');
-            }
+            console.log('[DASHBOARD] Redirecting to profile for email update');
+            onSectionChange('profile');
+
           }
         }
       ]
     );
-  }, [onSectionChange]);
+    return;
+  }
+  
+  console.log('[DASHBOARD] Opening upgrade section');
+  if (onSectionChange) {
+    onSectionChange('upgrade');
+  } else {
+    setActiveSection('upgrade');
+  }
+}, [user?.email, onSectionChange]);
 
   const handleHelpSupport = useCallback(() => {
     console.log('[DASHBOARD_SECTION] Navigating to ChatBot');
@@ -514,6 +529,9 @@ const DashboardSection = ({ user, dashboardData, onRefresh, loading, onSectionCh
         />
       }
       showsVerticalScrollIndicator={false}
+      contentContainerStyle={{
+        paddingBottom: 100, // Add extra padding to prevent navbar overlap
+      }}
     >
       {/* Welcome Section with Profile Photo */}
       <View style={styles.welcomeSection}>

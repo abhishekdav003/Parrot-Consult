@@ -16,6 +16,10 @@ import {
 } from 'react-native';
 import { pick, isCancel, types } from '@react-native-documents/picker';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import ApiService from '../../services/ApiService';
+import RNBlobUtil from 'react-native-blob-util';
+
+
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -142,38 +146,64 @@ const ProfileUpgradeSection = ({ user, onRefresh, navigation }) => {
     </Modal>
   ), [emailVerified, loading, navigation]);
 
+  const fetchApplicationStatus = useCallback(async () => {
+  try {
+    if (!user) {
+      console.log('[UPGRADE] No user found, skipping status fetch');
+      return;
+    }
+    
+    console.log('[UPGRADE] Fetching application status for user:', user._id);
+    
+    // Get status from user data - do NOT make additional API calls
+    // This prevents the "request sent but backend didn't receive" issue
+    
+    if (user.role === 'consultant' && user.consultantRequest?.status === 'approved') {
+      console.log('[UPGRADE] Status: approved consultant');
+      setApplicationStatus('approved');
+      setCurrentStep(2);
+    } else if (user.consultantRequest?.status === 'pending') {
+      console.log('[UPGRADE] Status: pending application');
+      setApplicationStatus('pending');
+      setCurrentStep(2);
+    } else if (user.consultantRequest?.status === 'rejected') {
+      console.log('[UPGRADE] Status: rejected application');
+      setApplicationStatus('rejected');
+      setCurrentStep(2);
+    } else if (user.aadharVerified) {
+      console.log('[UPGRADE] Status: KYC completed');
+      setApplicationStatus('kyc_completed');
+      setCurrentStep(2);
+    } else {
+      console.log('[UPGRADE] Status: not started');
+      setApplicationStatus('not_started');
+      setCurrentStep(1);
+    }
+  } catch (err) {
+    console.error('[UPGRADE] Error fetching status:', err);
+    setApplicationStatus('not_started');
+    setCurrentStep(1);
+  }
+}, [user]);
+
   // Check email on mount and when user changes
   useEffect(() => {
-    const hasValidEmail = user?.email && user.email.trim() !== '';
-    setEmailVerified(hasValidEmail);
-  }, [user?.email]);
+  console.log('[UPGRADE] Email validation check');
+  const hasValidEmail = user?.email && user.email.trim().length > 0;
+  
+  if (!hasValidEmail) {
+    console.log('[UPGRADE] No valid email found, showing email modal');
+    setEmailVerified(false);
+    setApplicationStatus('loading'); // Keep in loading state until email exists
+  } else {
+    console.log('[UPGRADE] Valid email found:', user.email);
+    setEmailVerified(true);
+    // Fetch status only after email is verified
+    fetchApplicationStatus();
+  }
+}, [user?.email, user?.phone]);
 
-  // Fetch application status
-  useEffect(() => {
-    const fetchStatus = async () => {
-      // Mock API call - replace with actual API
-      try {
-        // Simulate API delay
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        if (user?.role === 'consultant') {
-          setApplicationStatus('approved');
-        } else if (user?.aadharVerified) {
-          setApplicationStatus('kyc_completed');
-          setCurrentStep(2);
-        } else {
-          setApplicationStatus('not_started');
-        }
-      } catch (err) {
-        console.error('[UPGRADE] Error fetching status:', err);
-        setApplicationStatus('not_started');
-      }
-    };
-
-    if (user && emailVerified) {
-      fetchStatus();
-    }
-  }, [user, emailVerified]);
+ 
 
   // File Pickers
   const pickAadhaarFile = useCallback(async () => {
@@ -354,21 +384,99 @@ const ProfileUpgradeSection = ({ user, onRefresh, navigation }) => {
 
   // Submit Handlers
   const handleKYCSubmission = useCallback(async () => {
-    Keyboard.dismiss();
+  Keyboard.dismiss();
+  
+  console.log('[UPGRADE] KYC submission initiated');
+  
+  const validationErrors = validateKYC();
+  if (validationErrors.length > 0) {
+    console.log('[UPGRADE] KYC validation errors:', validationErrors);
+    Alert.alert('Validation Error', validationErrors.join('\n'));
+    return;
+  }
+
+  try {
+    setLoading(true);
+    setUploadProgress({ aadhaar: true, pan: true });
+
+    console.log('[UPGRADE] Submitting KYC with:', {
+      aadharNumber: kycData.aadharNumber.slice(0, 4) + '****',
+      panNumber: kycData.panNumber.slice(0, 3) + '****',
+      hasAadhaarFile: !!kycData.aadhaarFile,
+      hasPanFile: !!kycData.panFile,
+    });
+
+    // Create FormData for file upload
+    const formData = new FormData();
     
-    const validationErrors = validateKYC();
-    if (validationErrors.length > 0) {
-      Alert.alert('Validation Error', validationErrors.join('\n'));
-      return;
+    // Add files
+    if (kycData.aadhaarFile) {
+      let fileUri = kycData.aadhaarFile.uri;
+      
+      // Handle Android content:// URIs
+      if (Platform.OS === 'android' && kycData.aadhaarFile.uri.startsWith('content://')) {
+        try {
+          const destPath = `${RNBlobUtil.fs.dirs.CacheDir}/${kycData.aadhaarFile.name || 'aadhaar.pdf'}`;
+          await RNBlobUtil.fs.cp(kycData.aadhaarFile.uri, destPath);
+          fileUri = `file://${destPath}`;
+        } catch (e) {
+          console.error('[UPGRADE] Failed to process aadhaar file:', e);
+        }
+      }
+      
+      formData.append('aadhaarCard', {
+        uri: fileUri,
+        type: kycData.aadhaarFile.type || 'application/pdf',
+        name: kycData.aadhaarFile.name || 'aadhaar.pdf',
+      });
+    }
+    
+    if (kycData.panFile) {
+      let fileUri = kycData.panFile.uri;
+      
+      // Handle Android content:// URIs
+      if (Platform.OS === 'android' && kycData.panFile.uri.startsWith('content://')) {
+        try {
+          const destPath = `${RNBlobUtil.fs.dirs.CacheDir}/${kycData.panFile.name || 'pan.pdf'}`;
+          await RNBlobUtil.fs.cp(kycData.panFile.uri, destPath);
+          fileUri = `file://${destPath}`;
+        } catch (e) {
+          console.error('[UPGRADE] Failed to process pan file:', e);
+        }
+      }
+      
+      formData.append('panCard', {
+        uri: fileUri,
+        type: kycData.panFile.type || 'application/pdf',
+        name: kycData.panFile.name || 'pan.pdf',
+      });
     }
 
-    try {
-      setLoading(true);
-      setUploadProgress({ aadhaar: true, pan: true });
+    // Add non-file data
+    formData.append('aadharNumber', kycData.aadharNumber);
+    formData.append('panNumber', kycData.panNumber);
 
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 2000));
+    console.log('[UPGRADE] Calling /user/aadharpanVerify endpoint');
 
+    // Use ApiService directly with proper error handling
+    const result = await ApiService.apiCall('/user/aadharpanVerify', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        'Accept': 'application/json',
+      }
+    });
+
+    setLoading(false);
+    setUploadProgress({ aadhaar: false, pan: false });
+
+    console.log('[UPGRADE] KYC submission response:', {
+      success: result.success,
+      hasError: !!result.error,
+    });
+
+    if (result.success) {
+      console.log('[UPGRADE] KYC submission successful');
       Alert.alert(
         'Success',
         'KYC verification submitted successfully',
@@ -376,6 +484,7 @@ const ProfileUpgradeSection = ({ user, onRefresh, navigation }) => {
           {
             text: 'Continue',
             onPress: () => {
+              console.log('[UPGRADE] Moving to consultant step');
               setCurrentStep(2);
               setApplicationStatus('kyc_completed');
               scrollViewRef.current?.scrollTo({ y: 0, animated: true });
@@ -384,30 +493,55 @@ const ProfileUpgradeSection = ({ user, onRefresh, navigation }) => {
           }
         ]
       );
-    } catch (error) {
-      console.error('[UPGRADE] KYC submission error:', error);
-      Alert.alert('Error', 'Failed to submit KYC verification');
-    } finally {
-      setLoading(false);
-      setUploadProgress({ aadhaar: false, pan: false });
+    } else {
+      console.error('[UPGRADE] KYC submission failed:', result.error);
+      Alert.alert('Error', result.error || 'Failed to submit KYC verification');
     }
-  }, [kycData, validateKYC, onRefresh]);
+  } catch (error) {
+    console.error('[UPGRADE] KYC submission exception:', error);
+    setLoading(false);
+    setUploadProgress({ aadhaar: false, pan: false });
+    Alert.alert('Error', error.message || 'Failed to submit KYC verification');
+  }
+}, [kycData, validateKYC, onRefresh]);
 
   const handleConsultantApplication = useCallback(async () => {
-    Keyboard.dismiss();
-    
-    const validationErrors = validateConsultantData();
-    if (validationErrors.length > 0) {
-      Alert.alert('Validation Error', validationErrors.join('\n'));
-      return;
-    }
+  Keyboard.dismiss();
+  
+  console.log('[UPGRADE] Consultant application submission initiated');
+  
+  const validationErrors = validateConsultantData();
+  if (validationErrors.length > 0) {
+    console.log('[UPGRADE] Consultant validation errors:', validationErrors);
+    Alert.alert('Validation Error', validationErrors.join('\n'));
+    return;
+  }
 
-    try {
-      setLoading(true);
+  try {
+    setLoading(true);
 
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 2000));
+    console.log('[UPGRADE] Submitting consultant application with:', {
+      rate: consultantData.rate,
+      experience: consultantData.experience,
+      category: consultantData.category,
+      hasResume: !!consultantData.resume,
+      daysSelected: consultantData.days.length,
+      languagesCount: consultantData.languages.length,
+    });
 
+    // Import ApiService from your services
+    // This assumes ApiService is already imported in the file
+    const result = await ApiService.submitConsultantApplication(consultantData);
+
+    setLoading(false);
+
+    console.log('[UPGRADE] Application submission response:', {
+      success: result.success,
+      hasError: !!result.error,
+    });
+
+    if (result.success) {
+      console.log('[UPGRADE] Application submitted successfully');
       Alert.alert(
         'Success',
         'Your consultant application has been submitted successfully. It will be reviewed within 2-3 business days.',
@@ -415,19 +549,23 @@ const ProfileUpgradeSection = ({ user, onRefresh, navigation }) => {
           {
             text: 'OK',
             onPress: () => {
+              console.log('[UPGRADE] Application submitted, updating status');
               setApplicationStatus('pending');
               onRefresh && onRefresh();
             }
           }
         ]
       );
-    } catch (error) {
-      console.error('[UPGRADE] Consultant application error:', error);
-      Alert.alert('Error', 'Failed to submit consultant application');
-    } finally {
-      setLoading(false);
+    } else {
+      console.error('[UPGRADE] Application submission failed:', result.error);
+      Alert.alert('Error', result.error || 'Failed to submit consultant application');
     }
-  }, [consultantData, validateConsultantData, onRefresh]);
+  } catch (error) {
+    console.error('[UPGRADE] Application submission exception:', error);
+    setLoading(false);
+    Alert.alert('Error', error.message || 'Failed to submit consultant application');
+  }
+}, [consultantData, validateConsultantData, onRefresh]);
 
   // Language/Skill Management
   const addLanguage = useCallback(() => {

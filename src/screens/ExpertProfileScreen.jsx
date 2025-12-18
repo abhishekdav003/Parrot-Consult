@@ -249,7 +249,8 @@ const ExpertProfileScreen = ({ route, navigation }) => {
       <StatusBar backgroundColor="#FFFFFF" barStyle="dark-content" />
       
       {/* Fixed Header with SafeAreaView */}
-      <SafeAreaView style={styles.headerSafeArea} edges={['top']}>
+      
+        <SafeAreaView style={styles.headerSafeArea} edges={['top']}>
         <View style={styles.header}>
           <View style={styles.headerContent}>
             <TouchableOpacity 
@@ -260,17 +261,20 @@ const ExpertProfileScreen = ({ route, navigation }) => {
               <Icon name="arrow-back" size={rfs(24)} color="#1E293B" />
             </TouchableOpacity>
             
-            <Text style={styles.headerTitle} numberOfLines={1}>Expert Profile</Text>
+            <Text style={styles.headerTitle}>Expert Profile</Text>
             
             <View style={styles.headerBtn} />
           </View>
         </View>
       </SafeAreaView>
+      
 
       {/* Scrollable Content */}
       <ScrollView 
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={{
+          paddingTop: hp(8),
+          paddingBottom: hp(160),
+        }}
         showsVerticalScrollIndicator={false}
         onScroll={Animated.event(
           [{ nativeEvent: { contentOffset: { y: scrollY } } }],
@@ -612,23 +616,26 @@ const styles = StyleSheet.create({
   headerSafeArea: {
     backgroundColor: '#FFFFFF',
     zIndex: 10,
+    position: 'relative',
   },
   header: {
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
+    paddingBottom: hp(1), 
+    paddingTop: hp(16),
     borderBottomColor: '#E2E8F0',
-    elevation: 3,
+    elevation: 2,
     shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
   },
   headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: wp(20),
-    paddingVertical: hp(16),
+    paddingHorizontal: wp(16),
+    paddingVertical: hp(12),
   },
   headerBtn: {
     width: wp(40),
@@ -649,11 +656,8 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
   },
-  scrollContent: {
-    flexGrow: 1,
-    paddingTop: hp(16), // Space from header
-    paddingBottom: hp(180), // Space from bottom buttons (accounting for action container)
-  },
+
+
   profileCard: {
     backgroundColor: '#FFFFFF',
     marginHorizontal: wp(16),
@@ -852,6 +856,8 @@ const styles = StyleSheet.create({
   lastInfoRow: {
     borderBottomWidth: 0,
   },
+
+
   infoLeft: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -947,21 +953,18 @@ const styles = StyleSheet.create({
     color: '#94A3B8',
   },
   actionContainer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
-    paddingBottom: hp(16), // Added margin from bottom
-    elevation: 12,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    zIndex: 100,
-  },
+  position: 'absolute',
+  bottom: 0,
+  left: 0,
+  right: 0,
+  backgroundColor: '#FFFFFF',
+  paddingBottom: hp(24), // ⬅️ IMPORTANT
+  paddingTop: hp(12),
+  borderTopWidth: 1,
+  borderTopColor: '#E2E8F0',
+  elevation: 12,
+},
+
   actionButtons: {
     flexDirection: 'row',
     paddingHorizontal: wp(16),

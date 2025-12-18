@@ -407,10 +407,35 @@ class ApiService {
         }
 
         // Store user data
-        if (userData) {
-          await AsyncStorage.setItem('userData', JSON.stringify(userData));
-          console.log('[API] User data saved');
-        }
+        // 🔥 ALWAYS fetch fresh profile after login
+const profileResult = await this.getUserProfile();
+
+if (profileResult.success && profileResult.data) {
+  await AsyncStorage.setItem(
+    'userData',
+    JSON.stringify(profileResult.data)
+  );
+
+  return {
+    success: true,
+    data: {
+      user: profileResult.data,
+      accessToken: token,
+      refreshToken: refresh,
+    },
+  };
+}
+
+// fallback (very rare)
+return {
+  success: true,
+  data: {
+    user: userData,
+    accessToken: token,
+    refreshToken: refresh,
+  },
+};
+
 
         return {
           success: true,
@@ -445,6 +470,13 @@ class ApiService {
       };
     }
   }
+
+  async getUserProfile() {
+  return await this.apiCall('/user/getProfile', {
+    method: 'GET',
+  });
+}
+
 
   /**
    * Resend OTP (used when user didn't receive the code)
@@ -604,143 +636,185 @@ class ApiService {
 
   // FIXED: Profile update to match backend expectations exactly
   async updateProfile(profileData) {
-    console.log('[API] updateProfile called with:', profileData);
+  console.log('[API] updateProfile called with:', {
+    hasEmail: !!profileData.email,
+    hasConsultantData: !!(profileData.sessionFee || profileData.qualification),
+    hasProfileImage: !!profileData.profileImage,
+    hasResume: !!profileData.resume,
+  });
 
-    try {
-      const formData = new FormData();
+  try {
+    const formData = new FormData();
 
-      // Add basic fields that backend expects (matching website structure)
-      const basicFields = ['fullName', 'phone', 'email', 'location'];
-      basicFields.forEach(field => {
-        if (profileData[field] !== undefined && profileData[field] !== null && profileData[field] !== '') {
-          formData.append(field, profileData[field].toString());
-        }
-      });
-
-      // Handle KYC fields
-      const kycFields = ['aadharNumber', 'aadharURL', 'panNumber', 'panURL'];
-      kycFields.forEach(field => {
-        if (profileData[field] !== undefined && profileData[field] !== null && profileData[field] !== '') {
-          formData.append(field, profileData[field].toString());
-        }
-      });
-
-      // Handle consultant fields if it's a consultant profile
-      const isConsultant = profileData.role === 'consultant' || 
-                          profileData.sessionFee || 
-                          profileData.qualification;
-
-      if (isConsultant) {
-        // Add role field
-        formData.append('role', 'consultant');
-
-        // Add consultant-specific fields (matching backend field names exactly)
-        const consultantFields = {
-          sessionFee: profileData.sessionFee,
-          daysPerWeek: profileData.daysPerWeek,
-          days: profileData.days,
-          availableTimePerDay: profileData.availableTimePerDay,
-          qualification: profileData.qualification,
-          fieldOfStudy: profileData.fieldOfStudy,
-          university: profileData.university,
-          graduationYear: profileData.graduationYear,
-          keySkills: profileData.keySkills,
-          shortBio: profileData.shortBio,
-          languages: profileData.languages,
-          yearsOfExperience: profileData.yearsOfExperience,
-          category: profileData.category,
-          profileHealth: profileData.profileHealth || '0'
-        };
-
-        Object.entries(consultantFields).forEach(([key, value]) => {
-          if (value !== undefined && value !== null && value !== '') {
-            formData.append(key, value.toString());
-          }
-        });
+    // Add basic fields that are always needed
+    const basicFields = ['fullName', 'phone', 'email', 'location', 'role'];
+    basicFields.forEach(field => {
+      if (profileData[field] !== undefined && 
+          profileData[field] !== null && 
+          profileData[field] !== '') {
+        formData.append(field, profileData[field].toString());
       }
+    });
 
-      // Handle profile image file
-      if (profileData.profileImage && profileData.profileImage.uri) {
-        const profileImage = profileData.profileImage;
-        let fileUri = profileImage.uri;
-        
-        if (Platform.OS === 'android') {
-          if (profileImage.uri.startsWith('content://')) {
-            try {
-              const destPath = `${RNBlobUtil.fs.dirs.CacheDir}/${profileImage.name || `profile_${Date.now()}.jpg`}`;
-              await RNBlobUtil.fs.cp(profileImage.uri, destPath);
-              fileUri = `file://${destPath}`;
-            } catch (e) {
-              console.error('[API] Failed to copy profile image URI:', e);
-              throw new Error('Could not process profile image for upload');
-            }
-          } else if (!profileImage.uri.startsWith('file://')) {
-            fileUri = `file://${profileImage.uri}`;
-          }
+    console.log('[API] Added basic fields to FormData');
+
+    // Add KYC fields with proper handling
+    const kycFields = {
+      aadharNumber: profileData.aadharNumber,
+      panNumber: profileData.panNumber,
+      aadharURL: profileData.aadharURL,
+      panURL: profileData.panURL,
+    };
+
+    Object.entries(kycFields).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        if (Array.isArray(value)) {
+          // Send array as JSON string
+          formData.append(key, JSON.stringify(value));
+        } else {
+          formData.append(key, value.toString());
         }
-
-        const fileObj = {
-          uri: fileUri,
-          type: profileImage.type || 'image/jpeg',
-          name: profileImage.name || `profile_${Date.now()}.jpg`,
-        };
-
-        console.log('[API] Adding profile image:', fileObj);
-        formData.append('profileImage', fileObj);
       }
+    });
 
-      // Handle resume file (CRITICAL: Backend expects 'resume' field)
-      if (profileData.resume && profileData.resume.uri) {
-        const resume = profileData.resume;
-        let fileUri = resume.uri;
+    // Check if this is a consultant profile update
+    const isConsultant = profileData.role === 'consultant' || 
+                        profileData.sessionFee || 
+                        profileData.qualification;
 
-        if (Platform.OS === 'android') {
-          if (resume.uri.startsWith('content://')) {
-            try {
-              const destPath = `${RNBlobUtil.fs.dirs.CacheDir}/${resume.name || `resume_${Date.now()}.pdf`}`;
-              await RNBlobUtil.fs.cp(resume.uri, destPath);
-              fileUri = `file://${destPath}`;
-            } catch (e) {
-              console.error('[API] Failed to copy resume URI:', e);
-              throw new Error('Could not process resume for upload');
-            }
-          } else if (!resume.uri.startsWith('file://')) {
-            fileUri = `file://${resume.uri}`;
-          }
-        }
+    if (isConsultant) {
+      console.log('[API] Consultant profile detected, adding consultant fields');
+      formData.append('role', 'consultant');
 
-        const fileObj = {
-          uri: fileUri,
-          type: resume.type || 'application/pdf',
-          name: resume.name || `resume_${Date.now()}.pdf`,
-        };
-
-        console.log('[API] Adding resume file:', fileObj);
-        formData.append('resume', fileObj);
-      }
-
-      console.log('[API] FormData prepared, calling /user/updateProfile');
-
-      const result = await this.apiCall('/user/updateProfile', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (result.success && result.data) {
-        const updatedUser = result.data.user || result.data;
-        await AsyncStorage.setItem('userData', JSON.stringify(updatedUser));
-        console.log('[API] Profile update successful, user data updated');
-      }
-
-      return result;
-    } catch (error) {
-      console.error('[API] Error in updateProfile:', error);
-      return {
-        success: false,
-        error: error.message || 'Failed to update profile'
+      const consultantFields = {
+        sessionFee: profileData.sessionFee,
+        daysPerWeek: profileData.daysPerWeek,
+        days: profileData.days,
+        availableTimePerDay: profileData.availableTimePerDay,
+        qualification: profileData.qualification,
+        fieldOfStudy: profileData.fieldOfStudy,
+        university: profileData.university,
+        graduationYear: profileData.graduationYear,
+        keySkills: profileData.keySkills,
+        shortBio: profileData.shortBio,
+        languages: profileData.languages,
+        yearsOfExperience: profileData.yearsOfExperience,
+        category: profileData.category,
+        profileHealth: profileData.profileHealth || '0'
       };
+
+      Object.entries(consultantFields).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          formData.append(key, value.toString());
+        }
+      });
     }
+
+    // Handle profile image file upload
+    if (profileData.profileImage && profileData.profileImage.uri) {
+      const profileImage = profileData.profileImage;
+      let fileUri = profileImage.uri;
+      
+      if (Platform.OS === 'android') {
+        // Android file URI handling - CRITICAL for Android 10+
+        if (profileImage.uri.startsWith('content://')) {
+          try {
+            const fileName = profileImage.name || `profile_${Date.now()}.jpg`;
+            const destPath = `${RNBlobUtil.fs.dirs.CacheDir}/${fileName}`;
+            await RNBlobUtil.fs.cp(profileImage.uri, destPath);
+            fileUri = `file://${destPath}`;
+            console.log('[API] Copied content:// URI to cache for profile image');
+          } catch (e) {
+            console.error('[API] Failed to copy profile image content URI:', e);
+            // Continue with original URI
+          }
+        } else if (!profileImage.uri.startsWith('file://')) {
+          fileUri = `file://${profileImage.uri}`;
+        }
+      }
+
+      const fileObj = {
+        uri: fileUri,
+        type: profileImage.type || 'image/jpeg',
+        name: profileImage.name || `profile_${Date.now()}.jpg`,
+      };
+
+      console.log('[API] Adding profile image to FormData:', {
+        name: fileObj.name,
+        type: fileObj.type,
+      });
+      formData.append('profileImage', fileObj);
+    }
+
+    // Handle resume file upload
+    if (profileData.resume && profileData.resume.uri) {
+      const resume = profileData.resume;
+      let fileUri = resume.uri;
+
+      if (Platform.OS === 'android') {
+        // Android file URI handling for resume
+        if (resume.uri.startsWith('content://')) {
+          try {
+            const fileName = resume.name || `resume_${Date.now()}.pdf`;
+            const destPath = `${RNBlobUtil.fs.dirs.CacheDir}/${fileName}`;
+            await RNBlobUtil.fs.cp(resume.uri, destPath);
+            fileUri = `file://${destPath}`;
+            console.log('[API] Copied content:// URI to cache for resume');
+          } catch (e) {
+            console.error('[API] Failed to copy resume content URI:', e);
+          }
+        } else if (!resume.uri.startsWith('file://')) {
+          fileUri = `file://${resume.uri}`;
+        }
+      }
+
+      const fileObj = {
+        uri: fileUri,
+        type: resume.type || 'application/pdf',
+        name: resume.name || `resume_${Date.now()}.pdf`,
+      };
+
+      console.log('[API] Adding resume to FormData:', {
+        name: fileObj.name,
+        type: fileObj.type,
+      });
+      formData.append('resume', fileObj);
+    }
+
+    console.log('[API] FormData prepared, calling /user/updateProfile endpoint');
+
+    // Make the API call with FormData
+    const result = await this.apiCall('/user/updateProfile', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        'Accept': 'application/json',
+      }
+    });
+
+    console.log('[API] updateProfile response:', {
+      success: result.success,
+      hasError: !!result.error,
+      status: result.status,
+      messageLength: result.message?.length,
+    });
+
+    // Update local storage if successful
+    if (result.success && result.data) {
+      const updatedUser = result.data.user || result.data;
+      console.log('[API] Storing updated user data in AsyncStorage');
+      await AsyncStorage.setItem('userData', JSON.stringify(updatedUser));
+    }
+
+    return result;
+  } catch (error) {
+    console.error('[API] Error in updateProfile:', error.message);
+    return {
+      success: false,
+      error: error.message || 'Failed to update profile'
+    };
   }
+}
 
   // Get all users
   async getAllUsers() {
@@ -838,117 +912,145 @@ async createBooking(bookingData) {
 
   // FIXED: Consultant Application to match backend expectations
   async submitConsultantApplication(applicationData) {
-    console.log('[API] Submitting consultant application:', applicationData);
-    
-    try {
-      const formData = new FormData();
+  console.log('[API] Submitting consultant application:', {
+    rate: applicationData.rate,
+    experience: applicationData.experience,
+    hasResume: !!applicationData.resume,
+    languagesCount: Array.isArray(applicationData.languages) ? applicationData.languages.length : 0,
+  });
+  
+  try {
+    const formData = new FormData();
 
-      // Map frontend field names to backend field names (CRITICAL)
-      const fieldMapping = {
-        rate: 'rate',                    // sessionFee -> rate
-        daysPerWeek: 'daysPerWeek',
-        qualification: 'qualification',
-        field: 'field',                  // fieldOfStudy -> field  
-        university: 'university',
-        graduationYear: 'graduationYear',
-        shortBio: 'shortBio',
-        experience: 'experience',        // yearsOfExperience -> experience
-        category: 'category'
+    // Map frontend field names to backend field names
+    const fieldMapping = {
+      rate: 'rate',
+      daysPerWeek: 'daysPerWeek',
+      qualification: 'qualification',
+      field: 'field',
+      university: 'university',
+      graduationYear: 'graduationYear',
+      shortBio: 'shortBio',
+      experience: 'experience',
+      category: 'category'
+    };
+
+    // Add mapped fields
+    Object.entries(fieldMapping).forEach(([backendKey, frontendKey]) => {
+      const value = applicationData[frontendKey] || applicationData[backendKey];
+      if (value !== null && value !== undefined && value !== '') {
+        formData.append(backendKey, value.toString());
+      }
+    });
+
+    console.log('[API] Added basic consultant fields');
+
+    // Handle languages array - backend expects multiple 'languages' fields or comma-separated
+    if (applicationData.languages) {
+      if (Array.isArray(applicationData.languages)) {
+        const languagesString = applicationData.languages.join(',');
+        formData.append('languages', languagesString);
+        console.log('[API] Added languages as array:', applicationData.languages);
+      } else if (typeof applicationData.languages === 'string') {
+        formData.append('languages', applicationData.languages);
+        console.log('[API] Added languages as string');
+      }
+    }
+
+    // Handle resume file - CRITICAL for consultant profile
+    if (applicationData.resume) {
+      const resume = applicationData.resume;
+
+      if (!resume.uri) {
+        throw new Error('Resume file URI is missing');
+      }
+
+      let fileUri = resume.uri;
+
+      if (Platform.OS === 'android') {
+        if (resume.uri.startsWith('content://')) {
+          try {
+            const fileName = resume.name || `resume_${Date.now()}.pdf`;
+            const destPath = `${RNBlobUtil.fs.dirs.CacheDir}/${fileName}`;
+            await RNBlobUtil.fs.cp(resume.uri, destPath);
+            fileUri = `file://${destPath}`;
+            console.log('[API] Copied content:// URI to cache for consultant resume');
+          } catch (e) {
+            console.error('[API] Failed to copy consultant resume content URI:', e);
+            throw new Error('Could not process resume for upload');
+          }
+        } else if (!resume.uri.startsWith('file://')) {
+          fileUri = `file://${resume.uri}`;
+        }
+      }
+
+      const fileObj = {
+        uri: fileUri,
+        type: resume.type || 'application/pdf',
+        name: resume.name || `resume_${Date.now()}.pdf`,
       };
 
-      // Add mapped fields
-      Object.entries(fieldMapping).forEach(([backendKey, frontendKey]) => {
-        const value = applicationData[frontendKey] || applicationData[backendKey];
-        if (value !== null && value !== undefined && value !== '') {
-          formData.append(backendKey, value.toString());
-        }
+      console.log('[API] Adding consultant resume:', {
+        name: fileObj.name,
+        type: fileObj.type,
       });
+      formData.append('resume', fileObj);
+    } else {
+      throw new Error('Resume is required for consultant application');
+    }
 
-      // Handle languages array - backend expects multiple 'languages' fields
-      if (applicationData.languages) {
-        if (Array.isArray(applicationData.languages)) {
-          applicationData.languages.forEach((language) => {
-            if (language && language.trim()) {
-              formData.append('languages', language.trim());
-            }
-          });
-        } else if (typeof applicationData.languages === 'string') {
-          const languagesArray = applicationData.languages.split(',').map(lang => lang.trim()).filter(lang => lang);
-          languagesArray.forEach(language => {
-            formData.append('languages', language);
-          });
-        }
+    console.log('[API] FormData prepared, calling /user/consultantApplication endpoint');
+    
+    // First attempt
+    let result = await this.apiCall('/user/consultantApplication', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        'Accept': 'application/json',
       }
+    });
 
-      // Handle resume file - CRITICAL: Backend expects exactly this structure
-      if (applicationData.resume) {
-        const resume = applicationData.resume;
+    console.log('[API] consultantApplication response:', {
+      success: result.success,
+      hasError: !!result.error,
+      status: result.status,
+    });
 
-        if (!resume.uri) {
-          throw new Error('Resume file URI is missing');
-        }
-
-        let fileUri = resume.uri;
-
-        if (Platform.OS === 'android') {
-          if (resume.uri.startsWith('content://')) {
-            try {
-              const destPath = `${RNBlobUtil.fs.dirs.CacheDir}/${resume.name || `resume_${Date.now()}.pdf`}`;
-              await RNBlobUtil.fs.cp(resume.uri, destPath);
-              fileUri = `file://${destPath}`;
-              console.log('[API] Copied content URI to cache:', fileUri);
-            } catch (e) {
-              console.error('[API] Failed to copy content URI:', e);
-              throw new Error('Could not process file for upload');
-            }
-          } else if (!resume.uri.startsWith('file://')) {
-            fileUri = `file://${resume.uri}`;
-          }
-        }
-
-        const fileObj = {
-          uri: fileUri,
-          type: resume.type || 'application/pdf',
-          name: resume.name || `resume_${Date.now()}.pdf`,
-        };
-
-        console.log('[API] Adding resume file:', fileObj);
-        formData.append('resume', fileObj);
-      }
-
-      console.log('[API] FormData prepared for consultant application');
+    // Retry once if network error
+    if (!result.success && result.error?.includes('Network')) {
+      console.log('[API] Network error detected, retrying consultant application...');
+      await new Promise(resolve => setTimeout(resolve, 2000));
       
-      let result = await this.apiCall('/user/consultantApplication', {
+      result = await this.apiCall('/user/consultantApplication', {
         method: 'POST',
         body: formData,
+        headers: {
+          'Accept': 'application/json',
+        }
       });
 
-      // Retry once if network error
-      if (!result.success && result.error?.includes('Network')) {
-        console.log('[API] Retrying consultant application due to network error...');
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        
-        result = await this.apiCall('/user/consultantApplication', {
-          method: 'POST',
-          body: formData,
-        });
-      }
-
-      if (result.success && result.data) {
-        const updatedUser = result.data.user || result.data;
-        await AsyncStorage.setItem('userData', JSON.stringify(updatedUser));
-        console.log('[API] Consultant application successful, user data updated');
-      }
-
-      return result;
-    } catch (error) {
-      console.error('[API] Error in submitConsultantApplication:', error);
-      return {
-        success: false,
-        error: error.message || 'Failed to submit consultant application'
-      };
+      console.log('[API] Retry result:', {
+        success: result.success,
+        hasError: !!result.error,
+      });
     }
+
+    // Update local storage on success
+    if (result.success && result.data) {
+      const updatedUser = result.data.user || result.data;
+      console.log('[API] Storing updated user data after consultant application');
+      await AsyncStorage.setItem('userData', JSON.stringify(updatedUser));
+    }
+
+    return result;
+  } catch (error) {
+    console.error('[API] Error in submitConsultantApplication:', error.message);
+    return {
+      success: false,
+      error: error.message || 'Failed to submit consultant application'
+    };
   }
+}
 
   // FIXED: KYC Verification to match backend expectations
   async submitAadharVerification(kycData) {
