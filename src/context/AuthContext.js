@@ -9,6 +9,18 @@ const AuthContext = createContext();
 // ==================== REDUCER ====================
 const authReducer = (state, action) => {
   switch (action.type) {
+    case 'SET_POST_LOGIN_INTENT':
+  return {
+    ...state,
+    postLoginIntent: action.payload,
+  };
+
+case 'CLEAR_POST_LOGIN_INTENT':
+  return {
+    ...state,
+    postLoginIntent: null,
+  };
+
     case 'SET_LOADING':
       return { ...state, loading: action.payload };
 
@@ -63,6 +75,7 @@ const initialState = {
   error: null,
   sessionId: null,
   sessionPhone: null,
+  postLoginIntent: null,
 };
 
 // ==================== AUTH PROVIDER ====================
@@ -72,6 +85,20 @@ export const AuthProvider = ({ children }) => {
   // ==================== CHECK AUTH STATUS ====================
   // Tries: 1) If access token + userData present -> use it
   //       2) If access token missing but refresh token present -> call refresh endpoint and recover
+
+  const setPostLoginIntent = useCallback((intent) => {
+  dispatch({
+    type: 'SET_POST_LOGIN_INTENT',
+    payload: intent,
+  });
+}, []);
+
+const clearPostLoginIntent = useCallback(() => {
+  dispatch({
+    type: 'CLEAR_POST_LOGIN_INTENT',
+  });
+}, []);
+
  const checkAuthStatus = useCallback(async () => {
   try {
     console.log('[AUTH] Checking auth status.');
@@ -371,6 +398,8 @@ export const AuthProvider = ({ children }) => {
     updateUserProfile,
     refreshUserData,
     submitAadharVerification,
+    setPostLoginIntent,
+    clearPostLoginIntent,
   }), [
     state,
     signUp,

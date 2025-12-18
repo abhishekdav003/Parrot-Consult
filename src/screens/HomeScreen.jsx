@@ -1,5 +1,7 @@
 // src/screens/HomeScreen.jsx
 import React, { useState, useMemo } from 'react';
+import { useRef, useEffect } from 'react';
+
 import { View, ScrollView, StyleSheet, Dimensions } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import HeroSection from '../components/HeroSection/HeroSection';
@@ -10,6 +12,10 @@ import GetStartedSection from '../components/GetStartedSection/GetStartedSection
 import CategorySection from '../components/Category/CategorySection';
 import UnifiedBookingModal from '../screens/UnifiedBookingModal';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAuth } from '../context/AuthContext';
+
+
+
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -21,7 +27,53 @@ const getNavbarHeight = (insets) => {
   return BASE_HEIGHT + insets.bottom;
 };
 
+
+
+
 const HomeScreen = () => {
+  useEffect(() => {
+  if (
+    isAuthenticated &&
+    postLoginIntent &&
+    postLoginIntent.type === 'BOOKING'
+  ) {
+    const {
+      expert,
+      selectedDate,
+      selectedTime,
+      consultationDetails,
+    } = postLoginIntent.payload;
+
+    // Restore expert
+    setSelectedExpert(expert);
+
+    // Open modal
+    setBookingModalVisible(true);
+
+    // Resume booking → payment
+    setTimeout(() => {
+      bookingModalRef.current?.resumeBooking({
+        selectedDate,
+        selectedTime,
+        consultationDetails,
+      });
+    }, 300);
+
+    // Prevent repeat execution
+    clearPostLoginIntent();
+  }
+}, [isAuthenticated, postLoginIntent, clearPostLoginIntent]);
+
+
+  const bookingModalRef = useRef(null);
+
+
+  const {
+  isAuthenticated,
+  postLoginIntent,
+  clearPostLoginIntent,
+} = useAuth();
+
   const navigation = useNavigation();
   const [bookingModalVisible, setBookingModalVisible] = useState(false);
   const [selectedExpert, setSelectedExpert] = useState(null);
@@ -82,10 +134,12 @@ const HomeScreen = () => {
         </ScrollView>
 
         <UnifiedBookingModal
-          visible={bookingModalVisible}
-          onClose={handleCloseBooking}
-          expert={selectedExpert}
-        />
+  ref={bookingModalRef}
+  visible={bookingModalVisible}
+  onClose={handleCloseBooking}
+  expert={selectedExpert}
+/>
+
       </View>
     </SafeAreaView>
   );

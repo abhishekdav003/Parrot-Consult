@@ -1,4 +1,10 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, {
+  useState,
+  useMemo,
+  useEffect,
+  useImperativeHandle,
+  forwardRef,
+} from 'react';
 import {
   View,
   Text,
@@ -19,9 +25,17 @@ import PaymentScreen from './PaymentScreen';
 import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
 
-const UnifiedBookingModal = ({ visible, onClose, expert }) => {
+
+
+const UnifiedBookingModal = forwardRef( ({ visible, onClose, expert }, ref) => {
+  
   const navigation = useNavigation();
-  const { isAuthenticated, user } = useAuth();
+  const {
+  isAuthenticated,
+  user,
+  setPostLoginIntent, // ✅ ADD
+} = useAuth();
+
   
   // Core booking states
   const [currentStep, setCurrentStep] = useState('duration');
@@ -109,6 +123,28 @@ const UnifiedBookingModal = ({ visible, onClose, expert }) => {
       setBookedSlots([]);
     }
   }, [visible]);
+
+  useImperativeHandle(ref, () => ({
+  resumeBooking({
+    selectedDate,
+    selectedTime,
+    consultationDetails,
+  }) {
+    if (!selectedDate || !selectedTime) return;
+
+    // Restore booking state
+    setCurrentStep('dateTime');
+    setSelectedDate(new Date(selectedDate));
+    setSelectedTime(selectedTime);
+    setConsultationDetails(consultationDetails || '');
+
+    // Move directly to booking → payment
+    setTimeout(() => {
+      handleCreateBooking();
+    }, 300);
+  },
+}));
+
 
   const fetchTimeSlots = async (date) => {
     try {
@@ -201,15 +237,38 @@ const UnifiedBookingModal = ({ visible, onClose, expert }) => {
   };
 
   const checkAuthentication = () => {
-    if (!isAuthenticated || !user) {
-      Alert.alert('Login Required', 'Please login to book a consultation.', [
+  if (!isAuthenticated || !user) {
+    // ✅ SAVE BOOKING INTENT
+    setPostLoginIntent({
+      type: 'BOOKING',
+      payload: {
+        expert,
+        selectedDate,
+        selectedTime,
+        consultationDetails,
+      },
+    });
+
+    Alert.alert(
+      'Login Required',
+      'Please login to continue booking.',
+      [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Login', onPress: () => { handleClose(); navigation.navigate('Login'); }}
-      ]);
-      return false;
-    }
-    return true;
-  };
+        {
+          text: 'Login',
+          onPress: () => {
+            handleClose();
+            navigation.navigate('Login');
+          },
+        },
+      ]
+    );
+
+    return false;
+  }
+  return true;
+};
+
 
   const goToNextStep = () => {
     if (currentStep === 'duration') {
@@ -707,7 +766,7 @@ const UnifiedBookingModal = ({ visible, onClose, expert }) => {
       )}
     </>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {
