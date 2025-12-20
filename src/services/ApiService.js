@@ -4,12 +4,12 @@ import { Platform } from 'react-native';
 import RNBlobUtil from 'react-native-blob-util';
 
 
-const BASE_URL = 'http://10.0.2.2:8011/api/v1';
+// const BASE_URL = 'http://10.0.2.2:8011/api/v1';
 
 
 
 
-// const BASE_URL = 'https://api.parrotconsult.com/api/v1';
+const BASE_URL = 'https://api.parrotconsult.com/api/v1';
 
 
 const toLocalDateOnly = (date) => {
@@ -2018,14 +2018,14 @@ async populateConsultantData(booking) {
 }
 
 // ==================== PUSH NOTIFICATION ====================
-async saveDeviceToken(token) {
-  if (!token) {
+async saveDeviceToken(fcmToken) {
+  if (!fcmToken) {
     return { success: false, error: 'FCM token missing' };
   }
 
   return await this.apiCall('/user/save-device-token', {
     method: 'POST',
-    body: JSON.stringify({ token }),
+    body: JSON.stringify({ token: fcmToken }),
     headers: {
       'Content-Type': 'application/json',
     },

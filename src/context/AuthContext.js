@@ -1,8 +1,12 @@
+
+
 // src/context/AuthContext.js
 // OTP-Only Authentication with persistent access + refresh token handling
 import React, { createContext, useContext, useReducer, useEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ApiService from '../services/ApiService'; // ensure this file exists and exports used functions
+import { requestNotificationPermission, getFCMToken } from '../utils/fcm';
+
 
 const AuthContext = createContext();
 
@@ -85,6 +89,35 @@ export const AuthProvider = ({ children }) => {
   // ==================== CHECK AUTH STATUS ====================
   // Tries: 1) If access token + userData present -> use it
   //       2) If access token missing but refresh token present -> call refresh endpoint and recover
+
+
+  const registerDeviceForNotifications = useCallback(async () => {
+  try {
+    const permissionGranted = await requestNotificationPermission();
+    if (!permissionGranted) {
+      console.log('[FCM] Notification permission not granted');
+      return;
+    }
+
+    const fcmToken = await getFCMToken();
+    if (!fcmToken) {
+      console.log('[FCM] No FCM token received');
+      return;
+    }
+
+    console.log('[FCM] Device token:', fcmToken);
+
+    const result = await ApiService.saveDeviceToken(fcmToken);
+    if (result.success) {
+      console.log('[FCM] Device token saved to backend');
+    } else {
+      console.log('[FCM] Failed to save token:', result.error);
+    }
+  } catch (error) {
+    console.error('[FCM] Token registration error:', error);
+  }
+}, []);
+
 
   const setPostLoginIntent = useCallback((intent) => {
   dispatch({
@@ -281,6 +314,8 @@ const clearPostLoginIntent = useCallback(() => {
 
   // 🔥 THIS IS THE FIX
   dispatch({ type: 'SET_USER', payload: userFromProfile });
+
+  registerDeviceForNotifications();
   await AsyncStorage.setItem(
     'userData',
     JSON.stringify(userFromProfile)

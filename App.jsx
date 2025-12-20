@@ -32,6 +32,8 @@ import ExpertListScreen from './src/screens/ExpertListScreen';
 import ChatBot from './src/screens/ChatBot';
 import VideoCallScreen from './src/screens/VideoCallScreen';
 import messaging from "@react-native-firebase/messaging";
+import NotificationService from './src/services/NotificationService';
+
 
 // Navigation components
 import Navbar from './src/components/Navbar/Navbar';
@@ -284,6 +286,15 @@ const getFullScreenModalOptions = () => ({
 // ==================== MAIN APP ====================
 
 const App = () => {
+
+  useEffect(() => {
+  NotificationService.init();
+
+  return () => {
+    NotificationService.cleanup();
+  };
+}, []);
+
 
 
 
