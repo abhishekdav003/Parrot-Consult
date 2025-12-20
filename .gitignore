@@ -76,4 +76,5 @@ yarn-error.log
 
 
 
-.google-services.json
+# Firebase (Android)
+android/app/google-services.json
