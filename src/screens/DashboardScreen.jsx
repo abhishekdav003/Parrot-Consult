@@ -51,10 +51,11 @@ const DashboardScreen = ({ navigation, route }) => {
 
   // Add this inside your DashboardScreen component, with other useCallback functions
 const handleStartApplication = useCallback(() => {
-  console.log('[DASHBOARD] Start Application clicked - navigating to upgrade section');
-  setActiveSection('upgrade');
+  handleSectionChange('upgrade'); // ✅ always validated
   setMenuVisible(false);
-}, []);
+}, [handleSectionChange]);
+
+
 
   // Memoize profile completion calculation
   const calculateProfileCompletion = useCallback((userData) => {
@@ -87,46 +88,45 @@ const handleStartApplication = useCallback(() => {
     };
   }, [calculateProfileCompletion]);
 
-  const handleSectionChange = useCallback((newSection) => {
-  console.log('[DASHBOARD] Section change requested:', newSection);
-  
-  // CRITICAL GATE: Prevent access to upgrade without email
-  if (newSection === 'upgrade') {
-    const hasValidEmail = user?.email && user.email.trim().length > 0;
-    
-    if (!hasValidEmail) {
-      console.log('[DASHBOARD] Email validation failed - showing alert');
-      Alert.alert(
-        'Email Required',
-        'An email address is required to become a consultant. Please update your profile with a valid email address first.',
-        [
-          {
-            text: 'Cancel',
-            style: 'cancel',
-            onPress: () => {
-              console.log('[DASHBOARD] User cancelled email requirement');
-            }
-          },
-          {
-            text: 'Go to Profile',
-            style: 'default',
-            onPress: () => {
-              console.log('[DASHBOARD] User redirected to profile section');
-              setActiveSection('profile');
-            },
-          },
-        ]
-      );
-      return; // Don't change section
-    }
-    
-    console.log('[DASHBOARD] Email validation passed, proceeding to upgrade');
-  }
+  const handleSectionChange = useCallback(
+  (newSection) => {
+    console.log('[DASHBOARD] Section change requested:', newSection);
 
-  // All other sections and email-verified upgrade can proceed
-  console.log('[DASHBOARD] Section changed to:', newSection);
-  setActiveSection(newSection);
-}, [user?.email]);
+    // 🚨 BLOCK upgrade if email missing
+    if (newSection === 'upgrade') {
+      const hasValidEmail =
+        user?.email &&
+        typeof user.email === 'string' &&
+        user.email.trim().length > 0;
+
+      if (!hasValidEmail) {
+        Alert.alert(
+          'Email Required',
+          'Please enter your email to continue upgrading your profile.',
+          [
+            {
+              text: 'Enter Email',
+              onPress: () => {
+                setActiveSection('profile'); // 👈 redirect ONLY after click
+              },
+            },
+            {
+              text: 'Cancel',
+              style: 'cancel',
+            },
+          ]
+        );
+
+        return; // ❌ stop upgrade navigation
+      }
+    }
+
+    setActiveSection(newSection);
+  },
+  [user?.email]
+);
+
+
 
   // Fetch dashboard data function
   const fetchDashboardData = useCallback(async (showLoading = true) => {
@@ -343,6 +343,18 @@ useEffect(() => {
   );
       case 'profile':
         return <ProfileSection {...commonProps} />;
+
+      case 'upgrade':
+  return (
+    <ProfileUpgradeSection
+      {...commonProps}
+      onGoToProfile={() => setActiveSection('profile')}
+      onGoToDashboard={() => setActiveSection('dashboard')}
+    />
+  );
+
+
+
       case 'mysessions':
         return (
           <MySessionsSection 
@@ -350,8 +362,8 @@ useEffect(() => {
             sessions={dashboardData.upcomingBookings}
           />
         );
-      case 'upgrade':
-        return <ProfileUpgradeSection {...commonProps} />;
+    
+
       case 'booked':
         return (
           <BookedSessionsSection 

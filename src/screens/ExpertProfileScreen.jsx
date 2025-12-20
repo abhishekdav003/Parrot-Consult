@@ -378,7 +378,8 @@ const ExpertProfileScreen = ({ route, navigation }) => {
         )}
 
         {/* Optimized Skills Section - Thin Pills */}
-        {skills.length > 0 && (
+        {/* Key Skills */}
+{skills.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <View style={styles.sectionIconBox}>
@@ -397,8 +398,9 @@ const ExpertProfileScreen = ({ route, navigation }) => {
           </View>
         )}
 
+
         {/* Specializations - Thin Pills */}
-        {specialized.length > 0 && (
+       {specialized.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <View style={styles.sectionIconBox}>
@@ -416,7 +418,6 @@ const ExpertProfileScreen = ({ route, navigation }) => {
             </View>
           </View>
         )}
-
         {/* Session Details */}
         {(sessionFee || availability || languages.length > 0 || profile.availableTimePerDay) && (
           <View style={styles.section}>
@@ -430,7 +431,7 @@ const ExpertProfileScreen = ({ route, navigation }) => {
             {sessionFee && (
               <View style={styles.infoRow}>
                 <View style={styles.infoLeft}>
-                  <Icon name="attach-money" size={rfs(18)} color="#64748B" />
+                  <Icon name="payments" size={rfs(18)} color="#64748B" />
                   <Text style={styles.infoLabel}>Fee</Text>
                 </View>
                 <Text style={styles.infoValue}>₹{sessionFee}/30 min</Text>
@@ -517,15 +518,7 @@ const ExpertProfileScreen = ({ route, navigation }) => {
             <Text style={styles.sectionTitle}>Contact</Text>
           </View>
           
-          {expert?.phone && (
-            <View style={styles.infoRow}>
-              <View style={styles.infoLeft}>
-                <Icon name="phone" size={rfs(18)} color="#64748B" />
-                <Text style={styles.infoLabel}>Phone</Text>
-              </View>
-              <Text style={styles.infoValue}>+91 {expert.phone}</Text>
-            </View>
-          )}
+          
 
           {expert?.email && (
             <View style={styles.infoRow}>
@@ -808,27 +801,46 @@ const styles = StyleSheet.create({
     lineHeight: rfs(22),
   },
   // Optimized Thin Pills for Skills
-  skillsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: wp(8),
-  },
-  skillPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F0FDF4',
-    borderWidth: 1,
-    borderColor: '#BBF7D0',
-    borderRadius: wp(20),
-    paddingHorizontal: wp(12),
-    paddingVertical: hp(6),
-    gap: wp(6),
-  },
-  skillText: {
-    fontSize: rfs(12),
-    color: '#059669',
-    fontWeight: '600',
-  },
+skillsContainer: {
+  flexDirection: 'row',
+  flexWrap: 'wrap',
+
+  alignItems: 'flex-start',     // item alignment
+  alignContent: 'flex-start',   // 🔥 KEY FIX (row alignment)
+
+  marginTop: hp(4),
+},
+
+skillPill: {
+  flexDirection: 'row',
+  alignItems: 'center',
+
+  backgroundColor: '#F0FDF4',
+  borderWidth: 1,
+  borderColor: '#BBF7D0',
+  borderRadius: wp(14),
+
+  paddingHorizontal: wp(8),
+  paddingVertical: hp(3),
+},
+
+skillIcon: {
+  marginRight: wp(4),         // ✅ precise spacing
+  lineHeight: rfs(12),        // ✅ kills extra height
+},
+
+skillText: {
+  fontSize: rfs(12),
+  fontWeight: '600',
+  color: '#059669',
+
+  lineHeight: rfs(14),
+  includeFontPadding: false,  // 🔥 ANDROID FIX (MOST IMPORTANT)
+  textAlignVertical: 'center',
+},
+
+
+
   specPill: {
     flexDirection: 'row',
     alignItems: 'center',

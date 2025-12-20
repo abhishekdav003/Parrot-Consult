@@ -10,7 +10,8 @@ import {
   Dimensions,
   PixelRatio,
   StyleSheet,
-  useWindowDimensions
+  useWindowDimensions,
+  PermissionsAndroid
 } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -30,6 +31,7 @@ import ExpertProfileScreen from './src/screens/ExpertProfileScreen';
 import ExpertListScreen from './src/screens/ExpertListScreen';
 import ChatBot from './src/screens/ChatBot';
 import VideoCallScreen from './src/screens/VideoCallScreen';
+import messaging from "@react-native-firebase/messaging";
 
 // Navigation components
 import Navbar from './src/components/Navbar/Navbar';
@@ -282,6 +284,50 @@ const getFullScreenModalOptions = () => ({
 // ==================== MAIN APP ====================
 
 const App = () => {
+
+
+
+
+
+  useEffect(() => {
+  const requestNotificationPermission = async () => {
+    try {
+      // Android 13+ requires runtime permission
+      if (Platform.OS === "android" && Platform.Version >= 33) {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+        );
+
+        console.log("🔔 Notification permission result:", granted);
+      } else {
+        // For Android < 13
+        const authStatus = await messaging().requestPermission();
+        console.log("🔔 Notification permission status:", authStatus);
+      }
+    } catch (error) {
+      console.log("❌ Notification permission error:", error);
+    }
+  };
+
+  requestNotificationPermission();
+}, []);
+
+
+ 
+
+
+  useEffect(() => {
+  const unsubscribe = messaging().onTokenRefresh(async token => {
+    try {
+      await ApiService.post("/user/save-device-token", { token });
+      console.log("🔄 FCM token refreshed");
+    } catch (e) {
+      console.log("Token refresh failed", e.message);
+    }
+  });
+
+  return unsubscribe;
+}, []);
   useEffect(() => {
     if (Platform.OS === 'android') {
       StatusBar.setBackgroundColor('#FFFFFF', true);
@@ -453,6 +499,8 @@ const App = () => {
               component={VideoCallScreen}
               options={getFullScreenModalOptions()}
             />
+
+
           </Stack.Navigator>
         </NavigationContainer>
       </AuthProvider>

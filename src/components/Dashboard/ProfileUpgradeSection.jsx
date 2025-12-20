@@ -28,7 +28,15 @@ const NAVBAR_HEIGHT = Platform.OS === 'ios' ? 90 : 70;
 const BOTTOM_PADDING = 100; // Extra padding for navbar
 const IS_SMALL_SCREEN = SCREEN_HEIGHT < 700;
 
-const ProfileUpgradeSection = ({ user, onRefresh, navigation }) => {
+const ProfileUpgradeSection = ({
+  user,
+  onRefresh,
+  navigation,
+  onGoToProfile,
+  onGoToDashboard,
+}) => {
+
+
   // Refs
   const scrollViewRef = useRef(null);
   
@@ -115,27 +123,25 @@ const ProfileUpgradeSection = ({ user, onRefresh, navigation }) => {
 
           <View style={styles.emailModalButtons}>
             <TouchableOpacity
-              style={styles.emailModalPrimaryButton}
-              onPress={() => {
-                if (navigation) {
-                  navigation.navigate('Dashboard', { initialSection: 'profile' });
-                }
-              }}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="create-outline" size={20} color="#fff" />
-              <Text style={styles.emailModalPrimaryButtonText}>Update Profile</Text>
-            </TouchableOpacity>
+  style={styles.emailModalPrimaryButton}
+  onPress={() => {
+    onGoToProfile && onGoToProfile();
+  }}
+  activeOpacity={0.8}
+>
+  <Ionicons name="create-outline" size={20} color="#fff" />
+  <Text style={styles.emailModalPrimaryButtonText}>
+    Update Profile
+  </Text>
+</TouchableOpacity>
+
 
             <TouchableOpacity
               style={styles.emailModalSecondaryButton}
               onPress={() => {
-                if (navigation) {
-                  navigation.goBack();
-                } else {
-                  setEmailVerified(true);
-                }
-              }}
+  onGoToDashboard && onGoToDashboard();
+}}
+
               activeOpacity={0.8}
             >
               <Text style={styles.emailModalSecondaryButtonText}>Go Back</Text>
