@@ -256,7 +256,8 @@ const ExpertListScreen = ({ route }) => {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <View style={styles.container}>
+
         <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
         
         <View style={styles.fixedHeader}>
@@ -271,7 +272,7 @@ const ExpertListScreen = ({ route }) => {
           <ActivityIndicator size="large" color="#10B981" />
           <Text style={styles.loadingText}>Loading experts...</Text>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
@@ -367,20 +368,23 @@ const styles = StyleSheet.create({
 
   // Header Styles
   fixedHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-    elevation: 2,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-  },
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  paddingHorizontal: 16,
+  paddingVertical: 10,
+
+  // ✅ SAME FIX AS CategoriesScreen
+  paddingTop: Platform.OS === 'android'
+    ? StatusBar.currentHeight + 0
+    : 20,
+
+  backgroundColor: '#FFFFFF',
+  borderBottomWidth: 1,
+  borderBottomColor: '#F3F4F6',
+  elevation: 2,
+},
+
   backButton: {
     width: 40,
     height: 40,

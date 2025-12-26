@@ -186,13 +186,14 @@ const ToggleMenu = ({
       )}
 
       <TouchableOpacity
-        style={styles.actionButton}
-        onPress={() => {
-          // Handle help action
-          onClose();
-        }}
-        activeOpacity={0.7}
-      >
+  style={styles.actionButton}
+  onPress={() => {
+   onItemPress('help_support');
+   onClose();
+  }}
+  activeOpacity={0.7}
+>
+
         <View style={[styles.actionIcon, { backgroundColor: '#10B981' }]}>
           <Ionicons name="help-circle" size={20} color="#ffffff" />
         </View>

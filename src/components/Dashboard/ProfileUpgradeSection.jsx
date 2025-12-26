@@ -17,7 +17,6 @@ import {
 import { pick, isCancel, types } from '@react-native-documents/picker';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import ApiService from '../../services/ApiService';
-import RNBlobUtil from 'react-native-blob-util';
 
 
 
@@ -40,21 +39,14 @@ const ProfileUpgradeSection = ({
   // Refs
   const scrollViewRef = useRef(null);
   
-  // State
-  const [currentStep, setCurrentStep] = useState(1);
+ 
   const [loading, setLoading] = useState(false);
   const [applicationStatus, setApplicationStatus] = useState('loading');
-  const [uploadProgress, setUploadProgress] = useState({ aadhaar: false, pan: false });
   const [showDaysModal, setShowDaysModal] = useState(false);
   const [emailVerified, setEmailVerified] = useState(false);
 
   // Step 1: KYC Data
-  const [kycData, setKycData] = useState({
-    aadharNumber: '',
-    panNumber: '',
-    aadhaarFile: null,
-    panFile: null,
-  });
+ 
 
   // Step 2: Consultant Application Data
   const [consultantData, setConsultantData] = useState({
@@ -167,28 +159,24 @@ const ProfileUpgradeSection = ({
     if (user.role === 'consultant' && user.consultantRequest?.status === 'approved') {
       console.log('[UPGRADE] Status: approved consultant');
       setApplicationStatus('approved');
-      setCurrentStep(2);
+      // setCurrentStep(2);
     } else if (user.consultantRequest?.status === 'pending') {
       console.log('[UPGRADE] Status: pending application');
       setApplicationStatus('pending');
-      setCurrentStep(2);
+      // setCurrentStep(2);
     } else if (user.consultantRequest?.status === 'rejected') {
       console.log('[UPGRADE] Status: rejected application');
       setApplicationStatus('rejected');
-      setCurrentStep(2);
-    } else if (user.aadharVerified) {
-      console.log('[UPGRADE] Status: KYC completed');
-      setApplicationStatus('kyc_completed');
-      setCurrentStep(2);
+      // setCurrentStep(2);
     } else {
       console.log('[UPGRADE] Status: not started');
       setApplicationStatus('not_started');
-      setCurrentStep(1);
+      // setCurrentStep(1);
     }
   } catch (err) {
     console.error('[UPGRADE] Error fetching status:', err);
     setApplicationStatus('not_started');
-    setCurrentStep(1);
+    // setCurrentStep(1);
   }
 }, [user]);
 
@@ -211,58 +199,7 @@ const ProfileUpgradeSection = ({
 
  
 
-  // File Pickers
-  const pickAadhaarFile = useCallback(async () => {
-    try {
-      const results = await pick({
-        type: [types.images, types.pdf],
-        allowMultiSelection: false,
-      });
-
-      if (results && results.length > 0) {
-        const file = results[0];
-        setKycData(prev => ({
-          ...prev,
-          aadhaarFile: {
-            uri: file.fileCopyUri || file.uri,
-            type: file.type,
-            name: file.name,
-          },
-        }));
-        Alert.alert('Success', 'Aadhaar document selected');
-      }
-    } catch (error) {
-      if (!isCancel(error)) {
-        Alert.alert('Error', 'Failed to select Aadhaar document');
-      }
-    }
-  }, []);
-
-  const pickPanFile = useCallback(async () => {
-    try {
-      const results = await pick({
-        type: [types.images, types.pdf],
-        allowMultiSelection: false,
-      });
-
-      if (results && results.length > 0) {
-        const file = results[0];
-        setKycData(prev => ({
-          ...prev,
-          panFile: {
-            uri: file.fileCopyUri || file.uri,
-            type: file.type,
-            name: file.name,
-          },
-        }));
-        Alert.alert('Success', 'PAN document selected');
-      }
-    } catch (error) {
-      if (!isCancel(error)) {
-        Alert.alert('Error', 'Failed to select PAN document');
-      }
-    }
-  }, []);
+ 
 
   const selectResume = useCallback(async () => {
     try {
@@ -305,36 +242,7 @@ const ProfileUpgradeSection = ({
     });
   }, []);
 
-  // Validation
-  const validateKYC = useCallback(() => {
-    const errors = [];
-
-    if (!kycData.aadharNumber || kycData.aadharNumber.length !== 12) {
-      errors.push('Please enter a valid 12-digit Aadhaar number');
-    }
-
-    if (!/^\d{12}$/.test(kycData.aadharNumber)) {
-      errors.push('Aadhaar number must contain only digits');
-    }
-
-    if (!kycData.panNumber || kycData.panNumber.length !== 10) {
-      errors.push('Please enter a valid 10-character PAN number');
-    }
-
-    if (!/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(kycData.panNumber)) {
-      errors.push('PAN format should be: ABCDE1234F');
-    }
-
-    if (!kycData.aadhaarFile) {
-      errors.push('Please upload Aadhaar document');
-    }
-
-    if (!kycData.panFile) {
-      errors.push('Please upload PAN document');
-    }
-
-    return errors;
-  }, [kycData]);
+ 
 
   const validateConsultantData = useCallback(() => {
     const errors = [];
@@ -388,128 +296,7 @@ const ProfileUpgradeSection = ({
     return errors;
   }, [consultantData]);
 
-  // Submit Handlers
-  const handleKYCSubmission = useCallback(async () => {
-  Keyboard.dismiss();
   
-  console.log('[UPGRADE] KYC submission initiated');
-  
-  const validationErrors = validateKYC();
-  if (validationErrors.length > 0) {
-    console.log('[UPGRADE] KYC validation errors:', validationErrors);
-    Alert.alert('Validation Error', validationErrors.join('\n'));
-    return;
-  }
-
-  try {
-    setLoading(true);
-    setUploadProgress({ aadhaar: true, pan: true });
-
-    console.log('[UPGRADE] Submitting KYC with:', {
-      aadharNumber: kycData.aadharNumber.slice(0, 4) + '****',
-      panNumber: kycData.panNumber.slice(0, 3) + '****',
-      hasAadhaarFile: !!kycData.aadhaarFile,
-      hasPanFile: !!kycData.panFile,
-    });
-
-    // Create FormData for file upload
-    const formData = new FormData();
-    
-    // Add files
-    if (kycData.aadhaarFile) {
-      let fileUri = kycData.aadhaarFile.uri;
-      
-      // Handle Android content:// URIs
-      if (Platform.OS === 'android' && kycData.aadhaarFile.uri.startsWith('content://')) {
-        try {
-          const destPath = `${RNBlobUtil.fs.dirs.CacheDir}/${kycData.aadhaarFile.name || 'aadhaar.pdf'}`;
-          await RNBlobUtil.fs.cp(kycData.aadhaarFile.uri, destPath);
-          fileUri = `file://${destPath}`;
-        } catch (e) {
-          console.error('[UPGRADE] Failed to process aadhaar file:', e);
-        }
-      }
-      
-      formData.append('aadhaarCard', {
-        uri: fileUri,
-        type: kycData.aadhaarFile.type || 'application/pdf',
-        name: kycData.aadhaarFile.name || 'aadhaar.pdf',
-      });
-    }
-    
-    if (kycData.panFile) {
-      let fileUri = kycData.panFile.uri;
-      
-      // Handle Android content:// URIs
-      if (Platform.OS === 'android' && kycData.panFile.uri.startsWith('content://')) {
-        try {
-          const destPath = `${RNBlobUtil.fs.dirs.CacheDir}/${kycData.panFile.name || 'pan.pdf'}`;
-          await RNBlobUtil.fs.cp(kycData.panFile.uri, destPath);
-          fileUri = `file://${destPath}`;
-        } catch (e) {
-          console.error('[UPGRADE] Failed to process pan file:', e);
-        }
-      }
-      
-      formData.append('panCard', {
-        uri: fileUri,
-        type: kycData.panFile.type || 'application/pdf',
-        name: kycData.panFile.name || 'pan.pdf',
-      });
-    }
-
-    // Add non-file data
-    formData.append('aadharNumber', kycData.aadharNumber);
-    formData.append('panNumber', kycData.panNumber);
-
-    console.log('[UPGRADE] Calling /user/aadharpanVerify endpoint');
-
-    // Use ApiService directly with proper error handling
-    const result = await ApiService.apiCall('/user/aadharpanVerify', {
-      method: 'POST',
-      body: formData,
-      headers: {
-        'Accept': 'application/json',
-      }
-    });
-
-    setLoading(false);
-    setUploadProgress({ aadhaar: false, pan: false });
-
-    console.log('[UPGRADE] KYC submission response:', {
-      success: result.success,
-      hasError: !!result.error,
-    });
-
-    if (result.success) {
-      console.log('[UPGRADE] KYC submission successful');
-      Alert.alert(
-        'Success',
-        'KYC verification submitted successfully',
-        [
-          {
-            text: 'Continue',
-            onPress: () => {
-              console.log('[UPGRADE] Moving to consultant step');
-              setCurrentStep(2);
-              setApplicationStatus('kyc_completed');
-              scrollViewRef.current?.scrollTo({ y: 0, animated: true });
-              onRefresh && onRefresh();
-            }
-          }
-        ]
-      );
-    } else {
-      console.error('[UPGRADE] KYC submission failed:', result.error);
-      Alert.alert('Error', result.error || 'Failed to submit KYC verification');
-    }
-  } catch (error) {
-    console.error('[UPGRADE] KYC submission exception:', error);
-    setLoading(false);
-    setUploadProgress({ aadhaar: false, pan: false });
-    Alert.alert('Error', error.message || 'Failed to submit KYC verification');
-  }
-}, [kycData, validateKYC, onRefresh]);
 
   const handleConsultantApplication = useCallback(async () => {
   Keyboard.dismiss();
@@ -720,127 +507,7 @@ const ProfileUpgradeSection = ({
     </Modal>
   );
 
-  // Render KYC Step
-  const renderKYCStep = () => (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.keyboardView}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 80 : 0}
-    >
-      <ScrollView
-        ref={scrollViewRef}
-        style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: BOTTOM_PADDING }]}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-      >
-        <View style={styles.stepContainer}>
-          <View style={styles.stepHeader}>
-            <View style={styles.stepBadge}>
-              <Text style={styles.stepBadgeText}>Step 1 of 2</Text>
-            </View>
-            <Text style={styles.stepTitle}>KYC Verification</Text>
-            <Text style={styles.stepSubtitle}>Verify your identity to continue</Text>
-          </View>
-
-          <View style={styles.formGroup}>
-            <Text style={styles.formLabel}>Aadhaar Number *</Text>
-            <TextInput
-              style={styles.formInput}
-              value={kycData.aadharNumber}
-              onChangeText={(text) => setKycData(prev => ({ ...prev, aadharNumber: text.replace(/\D/g, '') }))}
-              placeholder="Enter 12-digit Aadhaar number"
-              placeholderTextColor="#94A3B8"
-              keyboardType="numeric"
-              maxLength={12}
-              editable={!loading}
-              returnKeyType="next"
-            />
-          </View>
-
-          <View style={styles.formGroup}>
-            <Text style={styles.formLabel}>Aadhaar Document *</Text>
-            <TouchableOpacity
-              style={styles.uploadButton}
-              onPress={pickAadhaarFile}
-              disabled={loading}
-            >
-              <Ionicons name="cloud-upload-outline" size={20} color="#059669" />
-              <Text style={styles.uploadButtonText}>
-                {kycData.aadhaarFile ? 'Change Document' : 'Upload Document'}
-              </Text>
-            </TouchableOpacity>
-            {kycData.aadhaarFile && (
-              <View style={styles.fileInfo}>
-                <Ionicons name="document" size={16} color="#059669" />
-                <Text style={styles.fileName} numberOfLines={1}>
-                  {kycData.aadhaarFile.name}
-                </Text>
-                <TouchableOpacity onPress={() => setKycData(prev => ({ ...prev, aadhaarFile: null }))}>
-                  <Ionicons name="close-circle" size={20} color="#EF4444" />
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-
-          <View style={styles.formGroup}>
-            <Text style={styles.formLabel}>PAN Number *</Text>
-            <TextInput
-              style={styles.formInput}
-              value={kycData.panNumber}
-              onChangeText={(text) => setKycData(prev => ({ ...prev, panNumber: text.toUpperCase() }))}
-              placeholder="Enter PAN (e.g., ABCDE1234F)"
-              placeholderTextColor="#94A3B8"
-              maxLength={10}
-              autoCapitalize="characters"
-              editable={!loading}
-              returnKeyType="next"
-            />
-          </View>
-
-          <View style={styles.formGroup}>
-            <Text style={styles.formLabel}>PAN Document *</Text>
-            <TouchableOpacity
-              style={styles.uploadButton}
-              onPress={pickPanFile}
-              disabled={loading}
-            >
-              <Ionicons name="cloud-upload-outline" size={20} color="#059669" />
-              <Text style={styles.uploadButtonText}>
-                {kycData.panFile ? 'Change Document' : 'Upload Document'}
-              </Text>
-            </TouchableOpacity>
-            {kycData.panFile && (
-              <View style={styles.fileInfo}>
-                <Ionicons name="document" size={16} color="#059669" />
-                <Text style={styles.fileName} numberOfLines={1}>
-                  {kycData.panFile.name}
-                </Text>
-                <TouchableOpacity onPress={() => setKycData(prev => ({ ...prev, panFile: null }))}>
-                  <Ionicons name="close-circle" size={20} color="#EF4444" />
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-
-          <TouchableOpacity
-            style={[styles.primaryButton, loading && styles.disabledButton]}
-            onPress={handleKYCSubmission}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <>
-                <Text style={styles.primaryButtonText}>Verify & Continue</Text>
-                <Ionicons name="arrow-forward" size={20} color="#fff" />
-              </>
-            )}
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
-  );
+  
 
   // Render Consultant Step
   const renderConsultantStep = () => (
@@ -858,9 +525,7 @@ const ProfileUpgradeSection = ({
       >
         <View style={styles.stepContainer}>
           <View style={styles.stepHeader}>
-            <View style={styles.stepBadge}>
-              <Text style={styles.stepBadgeText}>Step 2 of 2</Text>
-            </View>
+            
             <Text style={styles.stepTitle}>Consultant Profile</Text>
             <Text style={styles.stepSubtitle}>Complete your consultant application</Text>
           </View>
@@ -1198,13 +863,14 @@ const ProfileUpgradeSection = ({
       </ScrollView>
     );
   }
-
-  return (
+   return (
     <View style={styles.container}>
-      {currentStep === 1 ? renderKYCStep() : renderConsultantStep()}
+      {renderConsultantStep()}
       {renderDaysModal()}
     </View>
   );
+
+  
 };
 
 const styles = StyleSheet.create({
@@ -1339,13 +1005,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 24,
   },
-  stepBadge: {
-    backgroundColor: '#F0FDF4',
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderRadius: 20,
-    marginBottom: 12,
-  },
+  
   stepBadgeText: {
     fontSize: 12,
     fontWeight: '600',

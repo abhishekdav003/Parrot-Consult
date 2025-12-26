@@ -198,11 +198,7 @@ const BookedSessionsSection = ({ user, onRefresh, onAuthError }) => {
           <Text style={styles.title}>Sessions Booked With You</Text>
           <Text style={styles.subtitle}>Clients who have booked your consultation</Text>
         </View>
-        {bookings.length > 0 && (
-          <View style={styles.headerBadge}>
-            <Text style={styles.headerBadgeText}>{bookings.length}</Text>
-          </View>
-        )}
+        
       </View>
 
       {/* Enhanced Filter Section */}
@@ -304,34 +300,7 @@ const BookedSessionsSection = ({ user, onRefresh, onAuthError }) => {
         )}
       </ScrollView>
 
-      {/* Bottom Summary Stats */}
-      {bookings.length > 0 && (
-        <View style={styles.bottomStats}>
-          <View style={styles.statCard}>
-            <View style={[styles.statIconContainer, { backgroundColor: '#F0FDF4' }]}>
-              <Ionicons name="calendar-outline" size={20} color="#059669" />
-            </View>
-            <Text style={styles.statNumber}>{filterCounts.all}</Text>
-            <Text style={styles.statLabel}>Total Bookings</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statCard}>
-            <View style={[styles.statIconContainer, { backgroundColor: '#FFF4E6' }]}>
-              <Ionicons name="time-outline" size={20} color="#FF9500" />
-            </View>
-            <Text style={styles.statNumber}>{filterCounts.upcoming}</Text>
-            <Text style={styles.statLabel}>Upcoming</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statCard}>
-            <View style={[styles.statIconContainer, { backgroundColor: '#F0FDF4' }]}>
-              <Ionicons name="checkmark-circle-outline" size={20} color="#059669" />
-            </View>
-            <Text style={styles.statNumber}>{filterCounts.completed}</Text>
-            <Text style={styles.statLabel}>Completed</Text>
-          </View>
-        </View>
-      )}
+      
     </View>
   );
 };

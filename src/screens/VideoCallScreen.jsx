@@ -30,9 +30,21 @@ import {
   RenderModeType,
 } from 'react-native-agora';
 
+import { io } from 'socket.io-client';
+
+// const CHAT_SERVER = 'https://api.parrotconsult.com';
+const CHAT_SERVER = 'http://10.0.2.2:8011';
+
+
+
+
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 const VideoCallScreen = ({ route, navigation }) => {
+  const chatIdRef = useRef(null);
+  const socketRef = useRef(null);
+
+
   const { bookingId } = route.params;
   const { user } = useAuth();
 
@@ -102,6 +114,50 @@ const VideoCallScreen = ({ route, navigation }) => {
     }
     return true;
   }, [navigation]);
+
+  useEffect(() => {
+  if (!bookingDetails || !user) return;
+
+  const otherUserId =
+    user._id === bookingDetails.user._id
+      ? bookingDetails.consultant._id
+      : bookingDetails.user._id;
+
+  const socket = io(CHAT_SERVER, {
+    transports: ['websocket'],
+    reconnection: true,
+  });
+
+  socketRef.current = socket;
+
+  socket.on('connect', () => {
+    socket.emit('join-chat', {
+      chatId: bookingDetails._id,
+      userId: user._id,
+      consultantId: otherUserId,
+    });
+  });
+
+  socket.on('new-message', ({ message }) => {
+  setChatMessages(prev => [
+    ...prev,
+    {
+      _id: message._id,
+      text: message.content,
+      sender: message.sender === user._id ? 'You' : 'Other',
+      isMe: message.sender === user._id,
+      timestamp: new Date(message.createdAt),
+    },
+  ]);
+});
+
+
+
+  return () => {
+    socket.disconnect();
+  };
+}, [bookingDetails, user]);
+
 
   // Load booking details - FIXED VERSION
   useEffect(() => {
@@ -197,6 +253,8 @@ const VideoCallScreen = ({ route, navigation }) => {
         };
 
         setBookingDetails(processedBooking);
+        chatIdRef.current = processedBooking._id; 
+
         const channel = processedBooking.meetingLink;
         setChannelName(channel);
         
@@ -522,20 +580,24 @@ const VideoCallScreen = ({ route, navigation }) => {
 
   // Send chat message (placeholder - implement with backend)
   const sendChatMessage = useCallback(() => {
-    if (chatInput.trim()) {
-      const newMessage = {
-        id: Date.now().toString(),
-        text: chatInput.trim(),
-        sender: user?.fullName || 'You',
-        timestamp: new Date(),
-        isMe: true
-      };
-      
-      setChatMessages(prev => [...prev, newMessage]);
-      setChatInput('');
-      console.log('[VIDEO_CALL] Chat message sent');
-    }
-  }, [chatInput, user]);
+  if (!chatInput.trim() || !socketRef.current) return;
+
+  const otherUserId =
+    user._id === bookingDetails.user._id
+      ? bookingDetails.consultant._id
+      : bookingDetails.user._id;
+
+  socketRef.current.emit('send-message', {
+    chatId: bookingDetails._id,
+    fromId: user._id,
+    toId: otherUserId,
+    content: chatInput.trim(),
+    type: 'text',
+  });
+
+  setChatInput('');
+}, [chatInput, bookingDetails, user]);
+
 
   // Cleanup call resources
   const cleanupCall = useCallback(async () => {

@@ -165,7 +165,8 @@ const CategoriesScreen = () => {
   );
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
+
       <StatusBar backgroundColor="#ffffff" barStyle="dark-content" />
       
       {/* Header */}
@@ -269,7 +270,7 @@ const CategoriesScreen = () => {
 
         <View style={styles.bottomPadding} />
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 };
 
@@ -281,16 +282,23 @@ const styles = StyleSheet.create({
 
   // Header Styles
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: '#ffffff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
+  flexDirection: 'row',
+  alignItems: 'center',
+  paddingHorizontal: 20,
+  paddingVertical: 10,
+
+  // ✅ KEY FIX — aligns exactly like MySessionsSection
+  paddingTop: Platform.OS === 'android'
+    ? StatusBar.currentHeight + 0
+    : 20,
+
+  backgroundColor: '#ffffff',
+  borderBottomWidth: 1,
+  borderBottomColor: '#E5E7EB',
+},
+
   backButton: {
-    padding: 8,
+    padding: 4,
   },
   headerTitle: {
     flex: 1,

@@ -270,10 +270,22 @@ useEffect(() => {
 
   // Handle menu item press
   const handleMenuItemPress = useCallback((section) => {
-    console.log('[DASHBOARD] Menu item pressed:', section);
-    setActiveSection(section);
+  console.log('[DASHBOARD] Menu item pressed:', section);
+
+  // ✅ Handle Help & Support → AI Chatbot
+  if (section === 'help_support') {
     setMenuVisible(false);
-  }, []);
+    navigation.navigate('ChatBot', {
+      query: 'I need help and support',
+    });
+    return;
+  }
+
+  // Default dashboard section handling
+  setActiveSection(section);
+  setMenuVisible(false);
+}, [navigation]);
+
 
   // Handle profile update
   const handleProfileUpdate = useCallback(async () => {
