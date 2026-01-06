@@ -31,8 +31,8 @@ import ExpertProfileScreen from './src/screens/ExpertProfileScreen';
 import ExpertListScreen from './src/screens/ExpertListScreen';
 import ChatBot from './src/screens/ChatBot';
 import VideoCallScreen from './src/screens/VideoCallScreen';
-import messaging from "@react-native-firebase/messaging";
-// import NotificationService from './src/services/NotificationService';
+// import messaging from "@react-native-firebase/messaging";
+import { initNotificationBootstrap } from './src/services/notificationBootstrap';
 
 
 // Navigation components
@@ -287,58 +287,59 @@ const getFullScreenModalOptions = () => ({
 
 const App = () => {
 
-//   useEffect(() => {
-//   NotificationService.init();
+useEffect(() => {
+  const cleanupNotifications = initNotificationBootstrap();
 
-//   return () => {
-//     NotificationService.cleanup();
-//   };
-// }, []);
-
-
-
-
-
-
-  useEffect(() => {
-  const requestNotificationPermission = async () => {
-    try {
-      // Android 13+ requires runtime permission
-      if (Platform.OS === "android" && Platform.Version >= 33) {
-        const granted = await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
-        );
-
-        console.log("🔔 Notification permission result:", granted);
-      } else {
-        // For Android < 13
-        const authStatus = await messaging().requestPermission();
-        console.log("🔔 Notification permission status:", authStatus);
-      }
-    } catch (error) {
-      console.log("❌ Notification permission error:", error);
-    }
+  return () => {
+    cleanupNotifications?.();
   };
-
-  requestNotificationPermission();
 }, []);
+
+
+
+
+
+
+
+//   useEffect(() => {
+//   const requestNotificationPermission = async () => {
+//     try {
+//       // Android 13+ requires runtime permission
+//       if (Platform.OS === "android" && Platform.Version >= 33) {
+//         const granted = await PermissionsAndroid.request(
+//           PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+//         );
+
+//         console.log("🔔 Notification permission result:", granted);
+//       } else {
+//         // For Android < 13
+//         const authStatus = await messaging().requestPermission();
+//         console.log("🔔 Notification permission status:", authStatus);
+//       }
+//     } catch (error) {
+//       console.log("❌ Notification permission error:", error);
+//     }
+//   };
+
+//   requestNotificationPermission();
+// }, []);
 
 
  
 
 
-  useEffect(() => {
-  const unsubscribe = messaging().onTokenRefresh(async token => {
-    try {
-      await ApiService.post("/user/save-device-token", { token });
-      console.log("🔄 FCM token refreshed");
-    } catch (e) {
-      console.log("Token refresh failed", e.message);
-    }
-  });
+//   useEffect(() => {
+//   const unsubscribe = messaging().onTokenRefresh(async token => {
+//     try {
+//       await ApiService.post("/user/save-device-token", { token });
+//       console.log("🔄 FCM token refreshed");
+//     } catch (e) {
+//       console.log("Token refresh failed", e.message);
+//     }
+//   });
 
-  return unsubscribe;
-}, []);
+//   return unsubscribe;
+// }, []);
   useEffect(() => {
     if (Platform.OS === 'android') {
       StatusBar.setBackgroundColor('#FFFFFF', true);

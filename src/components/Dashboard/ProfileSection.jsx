@@ -9,7 +9,6 @@ import {
   Alert,
   ActivityIndicator,
   Platform,
-  PermissionsAndroid,
   Image,
   Keyboard,
   Modal,
@@ -18,6 +17,8 @@ import {
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useAuth } from '../../context/AuthContext';
 import { pick, isCancel, types } from '@react-native-documents/picker';
+import { launchImageLibrary } from 'react-native-image-picker';
+
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -327,126 +328,77 @@ const ProfileSection = ({ user, onRefresh, onAuthError }) => {
   }, [tempStartHour, tempStartMinute, tempStartPeriod, tempEndHour, tempEndMinute, tempEndPeriod, formatTime, handleFieldChange]);
 
   // ===== PERMISSIONS & FILE HANDLING =====
-  const requestPermissions = useCallback(async () => {
-    if (Platform.OS !== 'android') return true;
-
-    try {
-      const apiLevel = Platform.Version;
-      let permissionsToCheck = [];
-      
-      if (apiLevel >= 33) {
-        permissionsToCheck = [
-          PermissionsAndroid.PERMISSIONS.READ_MEDIA_IMAGES,
-          PermissionsAndroid.PERMISSIONS.READ_MEDIA_VIDEO,
-          PermissionsAndroid.PERMISSIONS.READ_MEDIA_AUDIO,
-        ];
-      } else {
-        permissionsToCheck = [
-          PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE,
-          PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
-        ];
-      }
-
-      const currentPermissions = {};
-      for (const permission of permissionsToCheck) {
-        try {
-          const hasPermission = await PermissionsAndroid.check(permission);
-          currentPermissions[permission] = hasPermission ? 
-            PermissionsAndroid.RESULTS.GRANTED : 
-            PermissionsAndroid.RESULTS.DENIED;
-        } catch (error) {
-          currentPermissions[permission] = PermissionsAndroid.RESULTS.DENIED;
-        }
-      }
-
-      const allGranted = Object.values(currentPermissions).every(
-        result => result === PermissionsAndroid.RESULTS.GRANTED
-      );
-
-      if (allGranted) return true;
-
-      const results = await PermissionsAndroid.requestMultiple(permissionsToCheck);
-      const allNowGranted = Object.values(results).every(
-        result => result === PermissionsAndroid.RESULTS.GRANTED
-      );
-
-      if (!allNowGranted) {
-        Alert.alert(
-          'Permissions Required',
-          'Storage permissions are required to select files.',
-          [{ text: 'OK', style: 'default' }]
-        );
-        return false;
-      }
-
-      return true;
-    } catch (error) {
-      console.error('[PROFILE] Permission request error:', error);
-      Alert.alert('Error', 'Failed to request permissions.');
-      return false;
-    }
-  }, []);
-
+  
   const pickProfileImage = useCallback(async () => {
-    try {
-      const hasPermission = await requestPermissions();
-      if (!hasPermission) return;
+  try {
+    setLoading(true);
 
-      setLoading(true);
-      
-      const result = await pick({
-        type: [types.images],
-        allowMultiSelection: false,
-      });
+    const result = await launchImageLibrary({
+      mediaType: 'photo',
+      selectionLimit: 1,
+      quality: 0.8,
+    });
 
-      if (result && result.length > 0) {
-        const file = result[0];
-        setSelectedProfileImage(file);
-        Alert.alert('Success', `Profile image selected: ${file.name}`);
-      }
-    } catch (error) {
-      if (!isCancel(error)) {
-        console.error('[PROFILE] Profile image picker error:', error);
-        Alert.alert('Error', 'Failed to select profile image');
-      }
-    } finally {
-      setLoading(false);
+    if (result.didCancel) return;
+
+    if (result.errorCode) {
+      Alert.alert('Error', result.errorMessage || 'Failed to select image');
+      return;
     }
-  }, [requestPermissions]);
+
+    const asset = result.assets?.[0];
+    if (!asset) return;
+
+    // Normalize to your existing backend format
+    const file = {
+      uri: asset.uri,
+      name: asset.fileName || `profile_${Date.now()}.jpg`,
+      type: asset.type || 'image/jpeg',
+    };
+
+    setSelectedProfileImage(file);
+    Alert.alert('Success', 'Profile image selected');
+  } catch (error) {
+    console.error('[PROFILE] Image picker error:', error);
+    Alert.alert('Error', 'Failed to select profile image');
+  } finally {
+    setLoading(false);
+  }
+}, []);
+
+  
 
   const pickResume = useCallback(async () => {
-    try {
-      const hasPermission = await requestPermissions();
-      if (!hasPermission) return;
+  try {
+    setLoading(true);
 
-      setLoading(true);
-      
-      const result = await pick({
-        type: [
-          types.pdf,
-          types.doc,
-          types.docx,
-          'application/pdf',
-          'application/msword',
-          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        ],
-        allowMultiSelection: false,
-      });
+    const result = await pick({
+      type: [
+        types.pdf,
+        types.doc,
+        types.docx,
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      ],
+      allowMultiSelection: false,
+    });
 
-      if (result && result.length > 0) {
-        const file = result[0];
-        setSelectedResume(file);
-        Alert.alert('Success', `Resume selected: ${file.name}`);
-      }
-    } catch (error) {
-      if (!isCancel(error)) {
-        console.error('[PROFILE] Resume picker error:', error);
-        Alert.alert('Error', 'Failed to select resume');
-      }
-    } finally {
-      setLoading(false);
+    if (result && result.length > 0) {
+      const file = result[0];
+      setSelectedResume(file);
+      Alert.alert('Success', `Resume selected: ${file.name}`);
     }
-  }, [requestPermissions]);
+  } catch (error) {
+    if (!isCancel(error)) {
+      console.error('[PROFILE] Resume picker error:', error);
+      Alert.alert('Error', 'Failed to select resume');
+    }
+  } finally {
+    setLoading(false);
+  }
+}, []);
+
 
   // ===== VALIDATION FUNCTIONS =====
   const isValidEmail = useCallback((email) => {

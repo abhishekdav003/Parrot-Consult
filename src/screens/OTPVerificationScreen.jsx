@@ -75,23 +75,36 @@ const OTPVerificationScreen = ({ navigation, route }) => {
   }, []);
 
   const handleAutoFillOTP = useCallback((autoOtp) => {
-    setOtp(autoOtp);
-    setOtpFilled(true);
-    
-    // Trigger pulse animation
-    Animated.sequence([
-      Animated.timing(pulseAnim, {
-        toValue: 1.1,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-      Animated.timing(pulseAnim, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [pulseAnim]);
+  if (!/^\d{6}$/.test(autoOtp)) return;
+
+  const otpArray = autoOtp.split('');
+  setOtp(autoOtp);
+  setOtpFilled(true);
+
+  // Force render + focus consistency
+  requestAnimationFrame(() => {
+    otpArray.forEach((digit, index) => {
+      otpInputRefs.current[index]?.setNativeProps({
+        text: digit,
+      });
+    });
+    otpInputRefs.current[5]?.blur();
+  });
+
+  Animated.sequence([
+    Animated.timing(pulseAnim, {
+      toValue: 1.1,
+      duration: 200,
+      useNativeDriver: true,
+    }),
+    Animated.timing(pulseAnim, {
+      toValue: 1,
+      duration: 200,
+      useNativeDriver: true,
+    }),
+  ]).start();
+}, [pulseAnim]);
+
 
   // ==================== TIMER LOGIC ====================
   useEffect(() => {
@@ -307,6 +320,7 @@ const OTPVerificationScreen = ({ navigation, route }) => {
               width: responsiveStyles.otpBoxSize,
               height: responsiveStyles.otpBoxSize,
               fontSize: rfs(20),
+lineHeight: responsiveStyles.otpBoxSize,
               borderColor:
                 focusedIndex === index ? '#059669' :
                 otp[index] ? '#10B981' :
@@ -328,6 +342,8 @@ const OTPVerificationScreen = ({ navigation, route }) => {
           editable={!loading}
           selectTextOnFocus
           textContentType="oneTimeCode"
+  autoComplete="sms-otp"
+  importantForAutofill="yes"
         />
       </Animated.View>
     );
@@ -612,12 +628,17 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   otpBox: {
-    borderRadius: wp(12),
-    textAlign: 'center',
-    fontWeight: '700',
-    color: '#1F2937',
-    letterSpacing: 2,
-  },
+  borderRadius: wp(12),
+  textAlign: 'center',
+  fontWeight: '700',
+  color: '#1F2937',
+  letterSpacing: 2,
+
+  // 🔥 CRITICAL FIXES
+  textAlignVertical: 'center',          // Android vertical centering
+  paddingVertical: 0,                   // Remove font push-up
+  includeFontPadding: false,             // Android font padding bug fix
+},
 
   // Button
   buttonContainer: {

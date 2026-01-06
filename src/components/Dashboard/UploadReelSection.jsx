@@ -33,7 +33,10 @@ const getResponsiveSizes = () => {
 const SIZES = getResponsiveSizes();
 
 // Video format validation
-const ALLOWED_VIDEO_FORMATS = ['video/mp4', 'video/quicktime', 'video/x-matroska', 'video/avi', 'video/x-msvideo'];
+const ALLOWED_VIDEO_FORMATS = [
+  'video/mp4',
+  'video/quicktime'
+];
 const MAX_VIDEO_SIZE = 50 * 1024 * 1024; // 50MB
 const MAX_VIDEO_DURATION = 60; // 60 seconds
 const MAX_DESCRIPTION_LENGTH = 500;
@@ -132,12 +135,13 @@ const UploadReelSection = ({ user, onRefresh }) => {
     }
 
     // Check format
-    if (video.type && !ALLOWED_VIDEO_FORMATS.includes(video.type.toLowerCase())) {
-      return { 
-        valid: false, 
-        error: 'Invalid video format. Use MP4, MOV, or AVI' 
-      };
-    }
+    if (video.type && !video.type.startsWith('video/')) {
+  return {
+    valid: false,
+    error: 'Invalid file type. Please select a video file.'
+  };
+}
+
 
     return { valid: true };
   };

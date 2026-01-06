@@ -158,6 +158,7 @@ const clearPostLoginIntent = useCallback(() => {
     if (userDataStr && authToken) {
       const parsedUser = JSON.parse(userDataStr);
       dispatch({ type: 'SET_USER', payload: parsedUser });
+      registerDeviceForNotifications();
       dispatch({ type: 'SET_LOADING', payload: false });
       return;
     }
@@ -315,7 +316,7 @@ const clearPostLoginIntent = useCallback(() => {
   // 🔥 THIS IS THE FIX
   dispatch({ type: 'SET_USER', payload: userFromProfile });
 
-  registerDeviceForNotifications();
+  // registerDeviceForNotifications();
   await AsyncStorage.setItem(
     'userData',
     JSON.stringify(userFromProfile)
@@ -333,7 +334,12 @@ const clearPostLoginIntent = useCallback(() => {
       dispatch({ type: 'SET_LOADING', payload: false });
       return { success: false, error: errorMsg };
     }
-  }, [state.sessionId, state.sessionPhone]);
+  }, [
+  state.sessionId,
+  state.sessionPhone,
+  registerDeviceForNotifications
+]);
+
 
   // ==================== LOGIN (DEPRECATED - OTP ONLY) ====================
   const login = useCallback(async (phone, password) => {

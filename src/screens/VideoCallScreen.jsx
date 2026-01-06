@@ -32,8 +32,8 @@ import {
 
 import { io } from 'socket.io-client';
 
-// const CHAT_SERVER = 'https://api.parrotconsult.com';
-const CHAT_SERVER = 'http://10.0.2.2:8011';
+const CHAT_SERVER = 'https://api.parrotconsult.com';
+// const CHAT_SERVER = 'http://10.0.2.2:8011';
 
 
 
@@ -115,48 +115,78 @@ const VideoCallScreen = ({ route, navigation }) => {
     return true;
   }, [navigation]);
 
-  useEffect(() => {
-  if (!bookingDetails || !user) return;
+  const initChat = useCallback(async () => {
+  if (!bookingDetails || !user) return null;
 
   const otherUserId =
     user._id === bookingDetails.user._id
       ? bookingDetails.consultant._id
       : bookingDetails.user._id;
 
-  const socket = io(CHAT_SERVER, {
-    transports: ['websocket'],
-    reconnection: true,
-  });
+  // 🔥 THIS MATCHES YOUR BACKEND EXACTLY
+  const res = await ApiService.apiCall(
+    `/chat/${user._id}/${otherUserId}/null`,
+    { method: 'GET' }
+  );
 
-  socketRef.current = socket;
+  if (!res.success || !res.data?.chat) {
+    console.error('[CHAT] Failed to init chat');
+    return null;
+  }
 
-  socket.on('connect', () => {
-    socket.emit('join-chat', {
-      chatId: bookingDetails._id,
-      userId: user._id,
-      consultantId: otherUserId,
+  chatIdRef.current = res.data.chat;
+  return res.data.chat;
+}, [bookingDetails, user]);
+
+
+  useEffect(() => {
+  if (!bookingDetails || !user) return;
+
+  let socket;
+
+  (async () => {
+    const chatId = await initChat();
+    if (!chatId) return;
+
+    const otherUserId =
+      user._id === bookingDetails.user._id
+        ? bookingDetails.consultant._id
+        : bookingDetails.user._id;
+
+    socket = io(CHAT_SERVER, {
+      transports: ['websocket'],
+      reconnection: true,
     });
-  });
 
-  socket.on('new-message', ({ message }) => {
-  setChatMessages(prev => [
-    ...prev,
-    {
-      _id: message._id,
-      text: message.content,
-      sender: message.sender === user._id ? 'You' : 'Other',
-      isMe: message.sender === user._id,
-      timestamp: new Date(message.createdAt),
-    },
-  ]);
-});
+    socketRef.current = socket;
 
+    socket.on('connect', () => {
+      socket.emit('join-chat', {
+        chatId,               // ✅ REAL chatId
+        userId: user._id,
+        consultantId: otherUserId,
+      });
+    });
 
+    socket.on('new-message', ({ message }) => {
+      setChatMessages(prev => [
+        ...prev,
+        {
+          _id: message._id,
+          text: message.content,
+          sender: message.sender === user._id ? 'You' : 'Other',
+          isMe: message.sender === user._id,
+          timestamp: new Date(message.createdAt),
+        },
+      ]);
+    });
+  })();
 
   return () => {
-    socket.disconnect();
+    if (socket) socket.disconnect();
   };
-}, [bookingDetails, user]);
+}, [bookingDetails, user, initChat]);
+
 
 
   // Load booking details - FIXED VERSION
@@ -580,7 +610,7 @@ const VideoCallScreen = ({ route, navigation }) => {
 
   // Send chat message (placeholder - implement with backend)
   const sendChatMessage = useCallback(() => {
-  if (!chatInput.trim() || !socketRef.current) return;
+  if (!chatInput.trim() || !socketRef.current || !chatIdRef.current) return;
 
   const otherUserId =
     user._id === bookingDetails.user._id
@@ -588,7 +618,7 @@ const VideoCallScreen = ({ route, navigation }) => {
       : bookingDetails.user._id;
 
   socketRef.current.emit('send-message', {
-    chatId: bookingDetails._id,
+    chatId: chatIdRef.current,   // ✅ REAL chatId
     fromId: user._id,
     toId: otherUserId,
     content: chatInput.trim(),
@@ -597,6 +627,7 @@ const VideoCallScreen = ({ route, navigation }) => {
 
   setChatInput('');
 }, [chatInput, bookingDetails, user]);
+
 
 
   // Cleanup call resources
